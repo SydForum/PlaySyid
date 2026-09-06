@@ -21,8 +21,8 @@ val localProperties = Properties().apply {
 }
 val googleApiKey = localProperties.getProperty("google.api.key") ?: ""
 val statsApiKey = localProperties.getProperty("stats.api.key") ?: ""
-val statsBaseUrl = localProperties.getProperty("stats.base.url") ?: ""
-val authBaseUrl = localProperties.getProperty("auth.api.base.url") ?: ""
+val statsBaseUrl = localProperties.getProperty("stats.base.url")?.takeIf { it.isNotBlank() } ?: ""
+val authBaseUrl = localProperties.getProperty("auth.api.base.url")?.takeIf { it.isNotBlank() } ?: ""
 
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
