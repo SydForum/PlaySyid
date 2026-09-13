@@ -145,71 +145,7 @@ fun AccountSettings(
             .ifBlank { "Friend" }
     }
 
-    fun linkGoogleAccount(name: String, email: String, photoUrl: String?) {
-        scope.launch {
-            try {
-                if (!nameManager.canUseGoogleEmail(email)) {
-                    val lockedEmail = nameManager.previousGoogleEmail.first().ifBlank { "your previous email" }
-                    Toast.makeText(context, nameManager.lockedEmailMessage(lockedEmail), Toast.LENGTH_LONG).show()
-                    return@launch
-                }
-
-                nameManager.saveUserName(name)
-                nameManager.rememberGoogleLoginEmail(email)
-                if (!photoUrl.isNullOrBlank()) {
-                    avatarManager.saveAvatarSelection(
-                        AvatarSelection.Custom(uri = photoUrl, cloudUrl = photoUrl)
-                    )
-                } else {
-                    avatarManager.saveAvatarSelection(
-                        AvatarSelection.DiceBear(generatedAvatarUrl(name, email))
-                    )
-                }
-                
-                val backupClient = com.darkxvenom.airbeats.utils.CloudBackupClient()
-                val backupExists = backupClient.checkBackupExists(email)
-                
-                if (backupExists) {
-                    Toast.makeText(context, "Restoring cloud backup...", Toast.LENGTH_SHORT).show()
-                    val result = backupViewModel.restoreFromDrive(context, email)
-                    if (result is com.darkxvenom.airbeats.utils.DriveResult.Success) {
-                        Toast.makeText(context, "Cloud backup restored!", Toast.LENGTH_SHORT).show()
-                        
-                        delay(1500)
-                        context.stopService(android.content.Intent(context, com.darkxvenom.airbeats.playback.MusicService::class.java))
-                        context.startActivity(android.content.Intent(context, com.darkxvenom.airbeats.MainActivity::class.java).apply {
-                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                        })
-                        Runtime.getRuntime().exit(0)
-                        return@launch
-                    } else {
-                        val errorException = (result as? com.darkxvenom.airbeats.utils.DriveResult.Error)?.exception
-                        val errMsg = errorException?.message
-                        Timber.tag("AccountSettings").e(errorException, "Failed to restore backup")
-                        Toast.makeText(context, if (!errMsg.isNullOrBlank()) "Failed to restore backup: $errMsg" else context.getString(R.string.restore_failed), Toast.LENGTH_LONG).show()
-                    }
-                } else {
-                    Toast.makeText(context, context.getString(R.string.creating_initial_cloud_backup), Toast.LENGTH_SHORT).show()
-                    val result = backupViewModel.backupToDrive(context, email, name)
-                    if (result is com.darkxvenom.airbeats.utils.DriveResult.Success) {
-                        Toast.makeText(context, context.getString(R.string.google_account_linked_backup_created), Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(context, context.getString(R.string.backup_create_failed_account_linked), Toast.LENGTH_LONG).show()
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(
-                    context,
-                    context.getString(
-                        R.string.google_account_linked_cloud_sync_failed,
-                        e.message.orEmpty()
-                    ),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-    }
+    // linkGoogleAccount removed
 
     val googleSignInClient = remember {
         com.darkxvenom.airbeats.utils.GoogleAuthManager(context).getSignInClient()
