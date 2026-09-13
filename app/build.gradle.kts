@@ -47,33 +47,9 @@ android {
         buildConfigField("String", "STATS_API_KEY", statsApiKey.asBuildConfigString())
         buildConfigField("String", "STATS_BASE_URL", statsBaseUrl.asBuildConfigString())
         buildConfigField("String", "AUTH_API_BASE_URL", authBaseUrl.asBuildConfigString())
-        
+
         // Strip out language resources from libraries that the app doesn't support
         resConfigs("en")
-    }
-
-    buildTypes {
-        create("nightly") {
-            initWith(getByName("release"))
-            buildConfigField("boolean", "IS_NIGHTLY", "true")
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        }
-        release {
-            buildConfigField("boolean", "IS_NIGHTLY", "false")
-            isMinifyEnabled = true
-            isShrinkResources = true
-            isCrunchPngs = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-        debug {
-            buildConfigField("boolean", "IS_NIGHTLY", "false")
-            applicationIdSuffix = ".debug"
-        }
     }
 
     signingConfigs {
@@ -86,12 +62,51 @@ android {
             }
         }
         getByName("debug") {
-            if (System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD") != null) {
+            if (!localSigningFile.isNullOrBlank() && file(localSigningFile).exists()) {
+                storeFile = file(localSigningFile)
+                storePassword = localSigningStorePassword
+                keyAlias = localSigningKeyAlias
+                keyPassword = localSigningKeyPassword
+            } else if (System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD") != null) {
                 storeFile = file(System.getenv("MUSIC_DEBUG_KEYSTORE_FILE"))
                 storePassword = System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD")
                 keyAlias = "debug"
                 keyPassword = System.getenv("MUSIC_DEBUG_SIGNING_KEY_PASSWORD")
             }
+        }
+    }
+
+    buildTypes {
+        create("nightly") {
+            initWith(getByName("release"))
+            buildConfigField("boolean", "IS_NIGHTLY", "true")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        release {
+            signingConfig = if (!localSigningFile.isNullOrBlank() && file(localSigningFile).exists()) {
+                signingConfigs.getByName("flappy")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+            buildConfigField("boolean", "IS_NIGHTLY", "false")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isCrunchPngs = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            signingConfig = if (!localSigningFile.isNullOrBlank() && file(localSigningFile).exists()) {
+                signingConfigs.getByName("flappy")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+            buildConfigField("boolean", "IS_NIGHTLY", "false")
+            applicationIdSuffix = ".debug"
         }
     }
 
