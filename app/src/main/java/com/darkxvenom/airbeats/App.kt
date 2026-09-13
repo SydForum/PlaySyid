@@ -143,21 +143,7 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                 }
                 val name = namePreferenceManager.userName.first().ifBlank { "AirBeats User" }
 
-                val automaticCloudBackupEnabled = getSharedPreferences("backup_settings", Context.MODE_PRIVATE)
-                    .getBoolean("enable_cloud_upload", true)
-
-                if (automaticCloudBackupEnabled && email.isNotBlank()) {
-                    Timber.i("App launch: Starting automatic cloud backup upload for $email")
-                    val backupViewModel = com.darkxvenom.airbeats.viewmodels.BackupRestoreViewModel(com.darkxvenom.airbeats.db.InternalDatabase.newInstance(this@App))
-                    val result = backupViewModel.backupToDrive(this@App, email, name)
-                    if (result is com.darkxvenom.airbeats.utils.DriveResult.Success) {
-                        dataStore.edit { preferences ->
-                            preferences[com.darkxvenom.airbeats.constants.LastBackupTimestampKey] = System.currentTimeMillis()
-                        }
-                        Timber.i("App launch: Cloud backup upload completed successfully for $email")
-                    } else {
-                        Timber.e("App launch: Cloud backup upload failed for $email")
-                    }
+                // Cloud backup upload removed
 
                     // Worker removed
                 }
