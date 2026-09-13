@@ -106,7 +106,7 @@ fun OnboardingScreen(
 
     // Input States
     // emailInput removed
-    var passwordInput by remember { mutableStateOf("") }
+    // passwordInput removed
     var nameInput by remember { mutableStateOf("") }
     var isEmailProcessing by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
