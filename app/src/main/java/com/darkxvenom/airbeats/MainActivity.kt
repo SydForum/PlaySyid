@@ -347,6 +347,11 @@ class MainActivity : ComponentActivity() {
             unbindService(serviceConnection)
             isServiceBound = false
         }
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                database.checkpoint()
+            }
+        }
         super.onStop()
     }
 
