@@ -13,7 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,7 +57,7 @@ val NeonDarkBg = Color(0xFF0F0F14)
 val NeonCardBg = Color(0xFF1C1C24)
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NeonHomeScreen(
     navController: NavController,
@@ -407,10 +407,12 @@ fun NeonHomeScreen(
             Spacer(modifier = Modifier.height(100.dp)) // space for mini player and bottom nav
         }
         
-        Indicator(
+        PullToRefreshDefaults.LoadingIndicator(
             modifier = Modifier.align(Alignment.TopCenter),
             isRefreshing = isRefreshing,
-            state = pullToRefreshState
+            state = pullToRefreshState,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
 }

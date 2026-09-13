@@ -53,11 +53,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
@@ -157,7 +159,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -829,21 +831,15 @@ fun HomeScreen(
                 }
 
                 if (isLoading) {
-                    item {
-                        ShimmerHost(
-                            modifier = Modifier.animateItem()
+                    item(key = "home_loading_indicator") {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp)
+                                .animateItem(),
                         ) {
-                            TextPlaceholder(
-                                height = 36.dp,
-                                modifier = Modifier
-                                    .padding(12.dp)
-                                    .width(250.dp),
-                            )
-                            LazyRow {
-                                items(4) {
-                                    GridItemPlaceHolder()
-                                }
-                            }
+                            LoadingIndicator()
                         }
                     }
                 }
@@ -993,9 +989,11 @@ fun HomeScreen(
                 }
             }
 
-            Indicator(
+            PullToRefreshDefaults.LoadingIndicator(
                 isRefreshing = isRefreshing,
                 state = pullRefreshState,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues()),

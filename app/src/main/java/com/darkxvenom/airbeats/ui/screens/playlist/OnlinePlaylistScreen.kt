@@ -135,7 +135,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.withContext
 
 @SuppressLint("RememberReturnType")
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun OnlinePlaylistScreen(
     navController: NavController,
@@ -1132,9 +1132,11 @@ fun OnlinePlaylistScreen(
             }
         )
 
-        PullToRefreshDefaults.Indicator(
+        PullToRefreshDefaults.LoadingIndicator(
             isRefreshing = isRefreshing,
             state = pullRefreshState,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues()),

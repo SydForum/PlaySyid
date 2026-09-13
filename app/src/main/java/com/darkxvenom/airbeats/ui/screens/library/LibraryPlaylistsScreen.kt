@@ -90,7 +90,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-@OptIn(ExperimentalFoundationApi::class)
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExperimentalMaterial3Api
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LibraryPlaylistsScreen(
     navController: NavController,
@@ -337,9 +340,11 @@ fun LibraryPlaylistsScreen(
             }
         }
 
-        PullToRefreshDefaults.Indicator(
+        PullToRefreshDefaults.LoadingIndicator(
             isRefreshing = isRefreshing,
             state = pullRefreshState,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues()),

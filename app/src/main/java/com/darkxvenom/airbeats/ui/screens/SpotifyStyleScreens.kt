@@ -38,7 +38,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
@@ -112,7 +113,11 @@ private val SpotifyCard @Composable get() = if (isAppInDarkTheme()) Color(0xFF18
 private val SpotifyPill @Composable get() = if (isAppInDarkTheme()) Color(0xFF2A2A2A) else Color(0xFFE5E5E5)
 private val SpotifyText @Composable get() = if (isAppInDarkTheme()) Color.White else Color.Black
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi::class)
+@OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi::class,
+    ExperimentalMaterial3ExpressiveApi::class
+)
 @Composable
 fun SpotifyHomeScreen(
     navController: NavController,
@@ -232,7 +237,7 @@ fun SpotifyHomeScreen(
                 }
             }
 
-            Indicator(
+            PullToRefreshDefaults.LoadingIndicator(
                 isRefreshing = isRefreshing,
                 state = pullRefreshState,
                 containerColor = Color(0xFFEAEAEA),

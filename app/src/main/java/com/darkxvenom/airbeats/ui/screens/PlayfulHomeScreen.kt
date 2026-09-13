@@ -56,10 +56,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.darkxvenom.airbeats.ui.component.BottomSheetState
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PlayfulHomeScreen(
     navController: NavController,
@@ -521,10 +522,12 @@ fun PlayfulHomeScreen(
                         }
                     }
                     
-                    Indicator(
+                    PullToRefreshDefaults.LoadingIndicator(
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = padding.calculateTopPadding()),
                         isRefreshing = isRefreshing,
-                        state = pullRefreshState
+                        state = pullRefreshState,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
             }
