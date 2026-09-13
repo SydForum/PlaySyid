@@ -1,8 +1,11 @@
 package com.darkxvenom.airbeats
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
+import com.darkxvenom.airbeats.utils.AutoBackupManager
 import android.widget.Toast
 import com.darkxvenom.airbeats.ui.component.LocaleAwareApplication
 import com.darkxvenom.airbeats.utils.dataStore
@@ -35,6 +38,7 @@ import com.darkxvenom.airbeats.constants.VisitorDataKey
 import com.darkxvenom.airbeats.db.MusicDatabase
 import com.darkxvenom.airbeats.extensions.toEnum
 import com.darkxvenom.airbeats.extensions.toInetSocketAddress
+import com.darkxvenom.airbeats.extensions.tryOrNull
 import com.darkxvenom.airbeats.ui.component.NamePreferenceManager
 import com.darkxvenom.airbeats.utils.AirBeatsStatsCloudSync
 import com.darkxvenom.airbeats.utils.dataStore
@@ -71,6 +75,31 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
             runCatching { dataStore.initializeCache() }
         }
         Timber.plant(com.darkxvenom.airbeats.utils.GlobalLogTree())
+
+        // Auto-restore Android OS unified backup file on open if present
+        AutoBackupManager.checkAndRestoreOnOpen(this)
+
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var startedActivities = 0
+            override fun onActivityStarted(activity: Activity) {
+                startedActivities++
+            }
+            override fun onActivityStopped(activity: Activity) {
+                startedActivities--
+                if (startedActivities <= 0) {
+                    GlobalScope.launch(Dispatchers.IO) {
+                        tryOrNull {
+                            AutoBackupManager.createAutoBackup(this@App, database, notifyBackupManager = true)
+                        }
+                    }
+                }
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
 
         try {
             Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -137,11 +166,10 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
         }
         GlobalScope.launch(Dispatchers.IO) {
             runCatching {
-                database.checkpoint()
-                android.app.backup.BackupManager(this@App).dataChanged()
-                Timber.i("App launch: Database checkpointed and Android BackupManager notified")
+                AutoBackupManager.createAutoBackup(this@App, database, notifyBackupManager = true)
+                Timber.i("App launch: AutoBackup created/updated and Android BackupManager notified")
             }.onFailure { e ->
-                Timber.w(e, "Failed to checkpoint database on app launch")
+                Timber.w(e, "Failed to create AutoBackup on app launch")
             }
         }
         GlobalScope.launch {
