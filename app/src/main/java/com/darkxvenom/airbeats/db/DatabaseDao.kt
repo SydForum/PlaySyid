@@ -1326,7 +1326,7 @@ interface DatabaseDao {
     fun raw(supportSQLiteQuery: SupportSQLiteQuery): Int
 
     fun checkpoint() {
-        raw("PRAGMA wal_checkpoint(FULL)".toSQLiteQuery())
+        raw("PRAGMA wal_checkpoint(PASSIVE)".toSQLiteQuery())
     }
 
     @Transaction
