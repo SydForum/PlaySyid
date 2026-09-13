@@ -36,71 +36,147 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
+import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import javax.inject.Inject
 import kotlin.system.exitProcess
 import timber.log.Timber
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import com.darkxvenom.airbeats.utils.AirBeatsStatsCloudSync
 
 @HiltViewModel
 class BackupRestoreViewModel @Inject constructor(
     val database: MusicDatabase,
 ) : ViewModel() {
-    fun backup(context: Context, uri: Uri) {
-        runCatching {
-            context.applicationContext.contentResolver.openOutputStream(uri)?.use {
-                it.buffered().zipOutputStream().use { outputStream ->
-                    (context.filesDir / "datastore" / SETTINGS_FILENAME).inputStream().buffered()
-                        .use { inputStream ->
-                            outputStream.putNextEntry(ZipEntry(SETTINGS_FILENAME))
-                            inputStream.copyTo(outputStream)
-                        }
 
-                    val namePrefsFile = context.filesDir / "datastore" / "user_name_preferences.preferences_pb"
-                    if (namePrefsFile.exists()) {
-                        namePrefsFile.inputStream().buffered().use { inputStream ->
-                            outputStream.putNextEntry(ZipEntry("user_name_preferences.preferences_pb"))
-                            inputStream.copyTo(outputStream)
-                        }
-                    }
 
-                    val accountEmail = runBlocking { NamePreferenceManager(context).accountEmail.first() }
-                    if (accountEmail.isNotBlank()) {
-                        outputStream.putNextEntry(ZipEntry(GOOGLE_ACCOUNT_FILENAME))
-                        outputStream.write(
-                            JSONObject()
-                                .put("email", accountEmail)
-                                .put("previouslyLoggedIn", true)
-                                .toString()
-                                .toByteArray()
-                        )
-                    }
+    private val _lastOsBackupTime = MutableStateFlow(0L)
+    val lastOsBackupTime: StateFlow<Long> = _lastOsBackupTime.asStateFlow()
 
-                    val parentFile = context.filesDir.parentFile
-                    if (parentFile != null) {
-                        val statsPrefsFile = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
-                        if (statsPrefsFile.exists()) {
-                            statsPrefsFile.inputStream().buffered().use { inputStream ->
-                                outputStream.putNextEntry(ZipEntry("airbeats_global_stats.xml"))
-                                inputStream.copyTo(outputStream)
-                            }
-                        }
-                    }
+    private val _isBackingUp = MutableStateFlow(false)
+    val isBackingUp: StateFlow<Boolean> = _isBackingUp.asStateFlow()
 
-                    runCatching {
-                        runBlocking(Dispatchers.IO) {
-                            database.checkpoint()
-                        }
+    private val _isRestoring = MutableStateFlow(false)
+    val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
+
+    private val _backupSizeString = MutableStateFlow("~0 KB")
+    val backupSizeString: StateFlow<String> = _backupSizeString.asStateFlow()
+
+    fun loadOsBackupState(context: Context) {
+        val prefs = context.getSharedPreferences(OS_BACKUP_PREFS, Context.MODE_PRIVATE)
+        _lastOsBackupTime.value = prefs.getLong(KEY_LAST_OS_BACKUP_TIME, 0L)
+        updateBackupSize(context)
+    }
+
+    fun updateBackupSize(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            var totalBytes = 0L
+            val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+            if (dbFile.exists()) totalBytes += dbFile.length()
+            val datastoreDir = context.filesDir / "datastore"
+            if (datastoreDir.exists()) {
+                datastoreDir.listFiles()?.forEach { totalBytes += it.length() }
+            }
+            val playlistImagesDir = context.filesDir / "playlist_images"
+            if (playlistImagesDir.exists()) {
+                playlistImagesDir.listFiles()?.forEach { totalBytes += it.length() }
+            }
+            val parentFile = context.filesDir.parentFile
+            if (parentFile != null) {
+                val stats = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
+                if (stats.exists()) totalBytes += stats.length()
+                val playlistImagesPrefs = parentFile / "shared_prefs" / "playlist_images.xml"
+                if (playlistImagesPrefs.exists()) totalBytes += playlistImagesPrefs.length()
+            }
+            val kb = totalBytes / 1024
+            _backupSizeString.value = if (kb > 1024) String.format(java.util.Locale.US, "%.1f MB", kb / 1024f) else "$kb KB"
+        }
+    }
+
+    fun createBackupZip(context: Context, rawStream: java.io.OutputStream) {
+        rawStream.buffered().zipOutputStream().use { outputStream ->
+            val settingsFile = context.filesDir / "datastore" / SETTINGS_FILENAME
+            if (settingsFile.exists()) {
+                settingsFile.inputStream().buffered().use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry(SETTINGS_FILENAME))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+
+            val namePrefsFile = context.filesDir / "datastore" / "user_name_preferences.preferences_pb"
+            if (namePrefsFile.exists()) {
+                namePrefsFile.inputStream().buffered().use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry("user_name_preferences.preferences_pb"))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+
+            val accountEmail = runBlocking { NamePreferenceManager(context).accountEmail.first() }
+            if (accountEmail.isNotBlank()) {
+                outputStream.putNextEntry(ZipEntry(GOOGLE_ACCOUNT_FILENAME))
+                outputStream.write(
+                    JSONObject()
+                        .put("email", accountEmail)
+                        .put("previouslyLoggedIn", true)
+                        .toString()
+                        .toByteArray()
+                )
+            }
+
+            val parentFile = context.filesDir.parentFile
+            if (parentFile != null) {
+                val statsPrefsFile = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
+                if (statsPrefsFile.exists()) {
+                    statsPrefsFile.inputStream().buffered().use { inputStream ->
+                        outputStream.putNextEntry(ZipEntry("airbeats_global_stats.xml"))
+                        inputStream.copyTo(outputStream)
                     }
-                    val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
-                    if (dbFile.exists()) {
-                        FileInputStream(dbFile).use { inputStream ->
-                            outputStream.putNextEntry(ZipEntry(InternalDatabase.DB_NAME))
+                }
+
+                val playlistImagesPrefs = parentFile / "shared_prefs" / "playlist_images.xml"
+                if (playlistImagesPrefs.exists()) {
+                    playlistImagesPrefs.inputStream().buffered().use { inputStream ->
+                        outputStream.putNextEntry(ZipEntry("playlist_images.xml"))
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+            }
+
+            val playlistImagesDir = context.filesDir / "playlist_images"
+            if (playlistImagesDir.exists() && playlistImagesDir.isDirectory) {
+                playlistImagesDir.listFiles()?.forEach { imgFile ->
+                    if (imgFile.isFile) {
+                        imgFile.inputStream().buffered().use { inputStream ->
+                            outputStream.putNextEntry(ZipEntry("playlist_images/${imgFile.name}"))
                             inputStream.copyTo(outputStream)
                         }
                     }
                 }
+            }
+
+            runCatching {
+                runBlocking(Dispatchers.IO) {
+                    database.checkpoint()
+                }
+            }
+            val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+            if (dbFile.exists()) {
+                FileInputStream(dbFile).use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry(InternalDatabase.DB_NAME))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        }
+    }
+
+    fun backup(context: Context, uri: Uri) {
+        runCatching {
+            context.applicationContext.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                createBackupZip(context, outputStream)
             }
         }.onSuccess {
             Toast.makeText(context, R.string.backup_create_success, Toast.LENGTH_SHORT).show()
@@ -108,6 +184,96 @@ class BackupRestoreViewModel @Inject constructor(
             reportException(it)
             Toast.makeText(context, R.string.backup_create_failed, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    fun backupNow(context: Context, onComplete: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isBackingUp.value = true
+            try {
+                database.checkpoint()
+
+                // Commit critical SharedPreferences to disk synchronously
+                context.getSharedPreferences(AirBeatsStatsCloudSync.PREFERENCES_NAME, Context.MODE_PRIVATE)
+                    .edit().commit()
+                context.getSharedPreferences("playlist_images", Context.MODE_PRIVATE)
+                    .edit().commit()
+                context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE)
+                    .edit().commit()
+
+                val osBackupFolder = File(context.filesDir, OS_BACKUP_DIR).apply { mkdirs() }
+                val snapshotFile = File(osBackupFolder, OS_BACKUP_FILENAME)
+                createBackupZip(context, snapshotFile.outputStream())
+
+                android.app.backup.BackupManager(context).dataChanged()
+
+                val now = System.currentTimeMillis()
+                context.getSharedPreferences(OS_BACKUP_PREFS, Context.MODE_PRIVATE)
+                    .edit().putLong(KEY_LAST_OS_BACKUP_TIME, now).commit()
+                _lastOsBackupTime.value = now
+                updateBackupSize(context)
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, R.string.backup_now_success, Toast.LENGTH_SHORT).show()
+                    onComplete?.invoke(true)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "backupNow failed")
+                reportException(e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, R.string.backup_create_failed, Toast.LENGTH_SHORT).show()
+                    onComplete?.invoke(false)
+                }
+            } finally {
+                _isBackingUp.value = false
+            }
+        }
+    }
+
+    fun restoreFromLatestBackup(context: Context) {
+        val snapshotFile = File(context.filesDir, "$OS_BACKUP_DIR/$OS_BACKUP_FILENAME")
+        if (snapshotFile.exists() && snapshotFile.length() > 0) {
+            restoreFromFile(context, snapshotFile)
+        } else {
+            Toast.makeText(context, R.string.backup_no_snapshot, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun deleteBackup(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val snapshotFile = File(context.filesDir, "$OS_BACKUP_DIR/$OS_BACKUP_FILENAME")
+                if (snapshotFile.exists()) {
+                    snapshotFile.delete()
+                }
+                context.getSharedPreferences(OS_BACKUP_PREFS, Context.MODE_PRIVATE)
+                    .edit().remove(KEY_LAST_OS_BACKUP_TIME).commit()
+                _lastOsBackupTime.value = 0L
+                android.app.backup.BackupManager(context).dataChanged()
+                updateBackupSize(context)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Backup snapshot deleted", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "deleteBackup failed")
+            }
+        }
+    }
+
+    fun openDeviceBackupSettings(context: Context) {
+        val intentList = listOf(
+            Intent("android.settings.BACKUP_SETTINGS"),
+            Intent("com.google.android.gms.BACKUP"),
+            Intent(android.provider.Settings.ACTION_PRIVACY_SETTINGS),
+            Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+        for (intent in intentList) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                return
+            } catch (_: Exception) {}
+        }
+        Toast.makeText(context, "Could not open system backup settings", Toast.LENGTH_SHORT).show()
     }
 
     fun restore(context: Context, uri: Uri) {
@@ -194,6 +360,30 @@ class BackupRestoreViewModel @Inject constructor(
                         context.getDatabasePath("${InternalDatabase.DB_NAME}-shm").delete()
                         FileOutputStream(dbFile).use { outputStream ->
                             inputStream.copyTo(outputStream)
+                        }
+                    }
+
+                    "playlist_images.xml" -> {
+                        val parentFile = context.filesDir.parentFile
+                        if (parentFile != null) {
+                            val destFile = parentFile / "shared_prefs" / "playlist_images.xml"
+                            destFile.parentFile?.mkdirs()
+                            destFile.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+                    }
+
+                    else -> {
+                        if (entry.name.startsWith("playlist_images/")) {
+                            val relName = entry.name.removePrefix("playlist_images/")
+                            if (relName.isNotBlank()) {
+                                val destFile = context.filesDir / "playlist_images" / relName
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { outputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            }
                         }
                     }
                 }
@@ -902,6 +1092,10 @@ class BackupRestoreViewModel @Inject constructor(
     companion object {
         const val SETTINGS_FILENAME = "settings.preferences_pb"
         const val GOOGLE_ACCOUNT_FILENAME = "google_account.json"
+        const val OS_BACKUP_PREFS = "os_backup_prefs"
+        const val KEY_LAST_OS_BACKUP_TIME = "last_android_os_backup_time"
+        const val OS_BACKUP_DIR = "os_backup"
+        const val OS_BACKUP_FILENAME = "latest.backup"
     }
 }
 
