@@ -1,0 +1,435 @@
+package com.darkxvenom.airbeats.utils
+
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import com.darkxvenom.airbeats.db.InternalDatabase
+import com.darkxvenom.airbeats.db.MusicDatabase
+import com.darkxvenom.airbeats.extensions.div
+import com.darkxvenom.airbeats.extensions.tryOrNull
+import com.darkxvenom.airbeats.extensions.zipInputStream
+import com.darkxvenom.airbeats.extensions.zipOutputStream
+import com.darkxvenom.airbeats.playback.MusicService
+import com.darkxvenom.airbeats.playback.MusicService.Companion.PERSISTENT_QUEUE_FILE
+import com.darkxvenom.airbeats.ui.component.NamePreferenceManager
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
+import timber.log.Timber
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.zip.ZipEntry
+import kotlin.system.exitProcess
+
+object AutoBackupManager {
+
+    const val BACKUP_FILENAME = "airbeats_backup.backup"
+    private const val PREFS_NAME = "auto_backup_state"
+    const val KEY_LAST_BACKUP_TIME = "last_android_os_backup_time"
+    private const val KEY_LAST_RESTORED_SIG = "last_restored_sig"
+    private const val KEY_RESTART_ATTEMPTS = "restart_attempts"
+
+    const val SETTINGS_FILENAME = "settings.preferences_pb"
+    const val USER_NAME_PREFS_FILENAME = "user_name_preferences.preferences_pb"
+    const val GOOGLE_ACCOUNT_FILENAME = "google_account.json"
+    const val GLOBAL_STATS_FILENAME = "airbeats_global_stats.xml"
+    const val PLAYLIST_IMAGES_PREFS_FILENAME = "playlist_images.xml"
+    const val PLAYLIST_IMAGES_DIR = "playlist_images"
+
+    fun getAutoBackupFile(context: Context): File = File(context.filesDir, BACKUP_FILENAME)
+
+    fun getBackupSize(context: Context): Long {
+        val file = getAutoBackupFile(context)
+        if (file.exists() && file.length() > 0) {
+            return file.length()
+        }
+        val legacyFile = File(context.filesDir, "os_backup/latest.backup")
+        if (legacyFile.exists() && legacyFile.length() > 0) {
+            return legacyFile.length()
+        }
+        var totalBytes = 0L
+        val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+        if (dbFile.exists()) totalBytes += dbFile.length()
+        val datastoreDir = context.filesDir / "datastore"
+        if (datastoreDir.exists()) {
+            datastoreDir.listFiles()?.forEach { totalBytes += it.length() }
+        }
+        val playlistImagesDir = context.filesDir / PLAYLIST_IMAGES_DIR
+        if (playlistImagesDir.exists()) {
+            playlistImagesDir.listFiles()?.forEach { totalBytes += it.length() }
+        }
+        val parentFile = context.filesDir.parentFile
+        if (parentFile != null) {
+            val stats = parentFile / "shared_prefs" / GLOBAL_STATS_FILENAME
+            if (stats.exists()) totalBytes += stats.length()
+        }
+        return totalBytes
+    }
+
+    fun getLastBackupTime(context: Context): Long {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getLong(KEY_LAST_BACKUP_TIME, 0L)
+    }
+
+    fun setLastBackupTime(context: Context, time: Long) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_LAST_BACKUP_TIME, time)
+            .commit()
+    }
+
+    fun createBackupZip(context: Context, database: MusicDatabase?, rawStream: OutputStream) {
+        // Ensure Room database WAL is fully flushed to song.db
+        runCatching {
+            database?.checkpoint()
+        }.onFailure { e ->
+            Timber.w(e, "Database checkpoint failed during backup creation")
+        }
+
+        // Synchronously commit relevant SharedPreferences to disk
+        runCatching {
+            context.getSharedPreferences("airbeats_global_stats", Context.MODE_PRIVATE).edit().commit()
+            context.getSharedPreferences("playlist_images", Context.MODE_PRIVATE).edit().commit()
+            context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE).edit().commit()
+        }
+
+        rawStream.buffered().zipOutputStream().use { outputStream ->
+            val settingsFile = context.filesDir / "datastore" / SETTINGS_FILENAME
+            if (settingsFile.exists()) {
+                settingsFile.inputStream().buffered().use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry(SETTINGS_FILENAME))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+
+            val namePrefsFile = context.filesDir / "datastore" / USER_NAME_PREFS_FILENAME
+            if (namePrefsFile.exists()) {
+                namePrefsFile.inputStream().buffered().use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry(USER_NAME_PREFS_FILENAME))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+
+            val accountEmail = runCatching {
+                runBlocking { NamePreferenceManager(context).accountEmail.first() }
+            }.getOrDefault("")
+            if (accountEmail.isNotBlank()) {
+                outputStream.putNextEntry(ZipEntry(GOOGLE_ACCOUNT_FILENAME))
+                outputStream.write(
+                    JSONObject()
+                        .put("email", accountEmail)
+                        .put("previouslyLoggedIn", true)
+                        .toString()
+                        .toByteArray()
+                )
+            }
+
+            val parentFile = context.filesDir.parentFile
+            if (parentFile != null) {
+                val statsPrefsFile = parentFile / "shared_prefs" / GLOBAL_STATS_FILENAME
+                if (statsPrefsFile.exists()) {
+                    statsPrefsFile.inputStream().buffered().use { inputStream ->
+                        outputStream.putNextEntry(ZipEntry(GLOBAL_STATS_FILENAME))
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+
+                val playlistImagesPrefs = parentFile / "shared_prefs" / PLAYLIST_IMAGES_PREFS_FILENAME
+                if (playlistImagesPrefs.exists()) {
+                    playlistImagesPrefs.inputStream().buffered().use { inputStream ->
+                        outputStream.putNextEntry(ZipEntry(PLAYLIST_IMAGES_PREFS_FILENAME))
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+            }
+
+            val playlistImagesDir = context.filesDir / PLAYLIST_IMAGES_DIR
+            if (playlistImagesDir.exists() && playlistImagesDir.isDirectory) {
+                playlistImagesDir.listFiles()?.forEach { imgFile ->
+                    if (imgFile.isFile) {
+                        imgFile.inputStream().buffered().use { inputStream ->
+                            outputStream.putNextEntry(ZipEntry("$PLAYLIST_IMAGES_DIR/${imgFile.name}"))
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                }
+            }
+
+            val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+            if (dbFile.exists()) {
+                FileInputStream(dbFile).use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry(InternalDatabase.DB_NAME))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        }
+    }
+
+    fun createAutoBackup(context: Context, database: MusicDatabase?, notifyBackupManager: Boolean = true): Boolean {
+        return try {
+            val targetFile = getAutoBackupFile(context)
+            val tmpFile = File(context.filesDir, "$BACKUP_FILENAME.tmp")
+
+            FileOutputStream(tmpFile).use { fos ->
+                createBackupZip(context, database, fos)
+            }
+
+            if (tmpFile.exists() && tmpFile.length() > 0) {
+                if (targetFile.exists()) {
+                    targetFile.delete()
+                }
+                tmpFile.renameTo(targetFile)
+
+                val now = System.currentTimeMillis()
+                val currentSig = "${targetFile.length()}_${targetFile.lastModified()}"
+
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putLong(KEY_LAST_BACKUP_TIME, now)
+                    .putString(KEY_LAST_RESTORED_SIG, currentSig)
+                    .commit()
+
+                if (notifyBackupManager) {
+                    runCatching {
+                        android.app.backup.BackupManager(context).dataChanged()
+                    }
+                }
+
+                Timber.i("AutoBackupManager: auto_backup created successfully (${targetFile.length()} bytes)")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: createAutoBackup failed")
+            false
+        }
+    }
+
+    fun restoreFromInputStream(context: Context, rawStream: InputStream, shouldRestart: Boolean = true): Boolean {
+        return try {
+            rawStream.zipInputStream().use { inputStream ->
+                var entry = tryOrNull { inputStream.nextEntry }
+                while (entry != null) {
+                    when (entry.name) {
+                        SETTINGS_FILENAME -> {
+                            val destFile = context.filesDir / "datastore" / SETTINGS_FILENAME
+                            destFile.parentFile?.mkdirs()
+                            destFile.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+
+                        USER_NAME_PREFS_FILENAME -> {
+                            val destFile = context.filesDir / "datastore" / USER_NAME_PREFS_FILENAME
+                            destFile.parentFile?.mkdirs()
+                            destFile.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+
+                        GLOBAL_STATS_FILENAME -> {
+                            val parentFile = context.filesDir.parentFile
+                            if (parentFile != null) {
+                                val destFile = parentFile / "shared_prefs" / GLOBAL_STATS_FILENAME
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { outputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            }
+                        }
+
+                        GOOGLE_ACCOUNT_FILENAME -> {
+                            val email = inputStream.readBytes()
+                                .toString(Charsets.UTF_8)
+                                .let { JSONObject(it).optString("email") }
+                                .trim()
+                            if (email.isNotBlank()) {
+                                runBlocking {
+                                    NamePreferenceManager(context).rememberGoogleLoginEmail(email)
+                                }
+                            }
+                        }
+
+                        InternalDatabase.DB_NAME -> {
+                            val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+                            dbFile.parentFile?.mkdirs()
+                            context.getDatabasePath("${InternalDatabase.DB_NAME}-wal").delete()
+                            context.getDatabasePath("${InternalDatabase.DB_NAME}-shm").delete()
+                            FileOutputStream(dbFile).use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+
+                        PLAYLIST_IMAGES_PREFS_FILENAME -> {
+                            val parentFile = context.filesDir.parentFile
+                            if (parentFile != null) {
+                                val destFile = parentFile / "shared_prefs" / PLAYLIST_IMAGES_PREFS_FILENAME
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { outputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            }
+                        }
+
+                        else -> {
+                            if (entry.name.startsWith("$PLAYLIST_IMAGES_DIR/")) {
+                                val relName = entry.name.removePrefix("$PLAYLIST_IMAGES_DIR/")
+                                if (relName.isNotBlank()) {
+                                    val destFile = context.filesDir / PLAYLIST_IMAGES_DIR / relName
+                                    destFile.parentFile?.mkdirs()
+                                    destFile.outputStream().use { outputStream ->
+                                        inputStream.copyTo(outputStream)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    entry = tryOrNull { inputStream.nextEntry }
+                }
+            }
+            context.filesDir.resolve(PERSISTENT_QUEUE_FILE).delete()
+
+            if (shouldRestart) {
+                restartApp(context)
+            }
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: restoreFromInputStream failed")
+            reportException(e)
+            false
+        }
+    }
+
+    fun restoreAutoBackup(context: Context, shouldRestart: Boolean = true): Boolean {
+        var file = getAutoBackupFile(context)
+        if (!file.exists() || file.length() == 0L) {
+            file = File(context.filesDir, "os_backup/latest.backup")
+        }
+        if (!file.exists() || file.length() == 0L) {
+            Timber.w("AutoBackupManager: No backup file available to restore")
+            return false
+        }
+        return FileInputStream(file).use { stream ->
+            restoreFromInputStream(context, stream, shouldRestart)
+        }
+    }
+
+    fun checkAndRestoreOnOpen(context: Context) {
+        try {
+            var backupFile = getAutoBackupFile(context)
+            if (!backupFile.exists() || backupFile.length() == 0L) {
+                val legacyFile = File(context.filesDir, "os_backup/latest.backup")
+                if (legacyFile.exists() && legacyFile.length() > 0L) {
+                    legacyFile.copyTo(backupFile, overwrite = true)
+                }
+            }
+
+            if (!backupFile.exists() || backupFile.length() == 0L) {
+                return
+            }
+
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val lastRestoredSig = prefs.getString(KEY_LAST_RESTORED_SIG, null)
+            val currentSig = "${backupFile.length()}_${backupFile.lastModified()}"
+
+            // Safeguard: Do not unpack if already restored
+            if (lastRestoredSig == currentSig) {
+                return
+            }
+
+            // Loop prevention: Max 2 restart attempts
+            val restartAttempts = prefs.getInt(KEY_RESTART_ATTEMPTS, 0)
+            if (restartAttempts >= 2) {
+                Timber.w("AutoBackupManager: Aborting auto-restore to prevent restart loop ($restartAttempts attempts)")
+                return
+            }
+
+            Timber.i("AutoBackupManager: Discovered un-restored backup file (${backupFile.length()} bytes). Restoring on app open...")
+            val success = FileInputStream(backupFile).use { stream ->
+                restoreFromInputStream(context, stream, shouldRestart = false)
+            }
+
+            if (success) {
+                prefs.edit()
+                    .putString(KEY_LAST_RESTORED_SIG, currentSig)
+                    .putInt(KEY_RESTART_ATTEMPTS, restartAttempts + 1)
+                    .putLong(KEY_LAST_BACKUP_TIME, backupFile.lastModified())
+                    .commit()
+
+                Timber.i("AutoBackupManager: Unpack on open succeeded. Restarting app with restored state...")
+                restartApp(context)
+            }
+        } catch (t: Throwable) {
+            Timber.e(t, "AutoBackupManager: checkAndRestoreOnOpen encountered error")
+        }
+    }
+
+    fun deleteBackup(context: Context): Boolean {
+        return try {
+            val file = getAutoBackupFile(context)
+            if (file.exists()) {
+                file.delete()
+            }
+            val legacyFile = File(context.filesDir, "os_backup/latest.backup")
+            if (legacyFile.exists()) {
+                legacyFile.delete()
+            }
+
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit()
+
+            runCatching {
+                android.app.backup.BackupManager(context).dataChanged()
+            }
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: deleteBackup failed")
+            false
+        }
+    }
+
+    fun restartApp(context: Context) {
+        try {
+            context.stopService(Intent(context, MusicService::class.java))
+        } catch (_: Exception) {}
+
+        val packageManager = context.packageManager
+        val intent = packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+
+        if (intent != null) {
+            try {
+                val pendingIntent = PendingIntent.getActivity(
+                    context,
+                    24601,
+                    intent,
+                    PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                alarmManager?.set(
+                    AlarmManager.RTC,
+                    System.currentTimeMillis() + 400,
+                    pendingIntent
+                )
+            } catch (_: Exception) {}
+            try {
+                context.startActivity(intent)
+            } catch (_: Exception) {}
+        }
+
+        try {
+            Thread.sleep(350)
+        } catch (_: InterruptedException) {}
+
+        android.os.Process.killProcess(android.os.Process.myPid())
+        exitProcess(0)
+    }
+}
