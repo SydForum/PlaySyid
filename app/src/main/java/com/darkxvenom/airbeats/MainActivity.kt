@@ -337,6 +337,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
                 database.checkpoint()
+                android.app.backup.BackupManager(this@MainActivity).dataChanged()
             }
         }
     }
@@ -350,6 +351,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
                 database.checkpoint()
+                android.app.backup.BackupManager(this@MainActivity).dataChanged()
             }
         }
         super.onStop()
@@ -479,10 +481,6 @@ class MainActivity : ComponentActivity() {
             val backupViewModel = com.darkxvenom.airbeats.ui.utils.safeHiltViewModel<com.darkxvenom.airbeats.viewmodels.BackupRestoreViewModel>()
             val context = androidx.compose.ui.platform.LocalContext.current
             val userName by namePreferenceManager.userName.collectAsState(initial = "AirBeats User")
-            
-            
-            }
-
             var showFullscreenLyrics by remember { mutableStateOf(false) }
 
             val playerScreenStyle by rememberEnumPreference<PlayerScreenStyle>(PlayerScreenStyleKey, defaultValue = PlayerScreenStyle.IOS_STYLED)
