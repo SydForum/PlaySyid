@@ -17,6 +17,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +73,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.annotation.ExperimentalCoilApi
@@ -123,6 +126,38 @@ fun BackupAndRestore(
     var showChoosePlaylistDialogOnline by remember { mutableStateOf(false) }
     var isProgressStarted by remember { mutableStateOf(false) }
     var progressPercentage by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadOsBackupState(context)
+    }
+
+    val lastOsBackupTime by viewModel.lastOsBackupTime.collectAsState()
+    val isBackingUp by viewModel.isBackingUp.collectAsState()
+    val isRestoring by viewModel.isRestoring.collectAsState()
+    val backupSizeString by viewModel.backupSizeString.collectAsState()
+
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+
+    val formattedLastBackup = remember(lastOsBackupTime) {
+        if (lastOsBackupTime <= 0L) {
+            null
+        } else {
+            val now = System.currentTimeMillis()
+            val diff = now - lastOsBackupTime
+            val instant = java.time.Instant.ofEpochMilli(lastOsBackupTime)
+            val zoneId = java.time.ZoneId.systemDefault()
+            val ldt = java.time.LocalDateTime.ofInstant(instant, zoneId)
+            val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
+            val dateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a")
+            when {
+                diff < 60_000L -> "Just now"
+                java.time.LocalDate.now().equals(ldt.toLocalDate()) -> "Today at " + ldt.format(timeFormatter)
+                java.time.LocalDate.now().minusDays(1).equals(ldt.toLocalDate()) -> "Yesterday at " + ldt.format(timeFormatter)
+                else -> ldt.format(dateFormatter)
+            }
+        }
+    }
 
 
     // Cache stats
@@ -199,6 +234,18 @@ fun BackupAndRestore(
         scrollBehavior = scrollBehavior,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 🔹 ANDROID OS CLOUD BACKUP CARD
+        AndroidOsBackupCard(
+            lastBackupTimeText = formattedLastBackup,
+            backupSizeText = backupSizeString,
+            isBackingUp = isBackingUp,
+            isRestoring = isRestoring,
+            onBackupNow = { viewModel.backupNow(context) },
+            onRestore = { showRestoreConfirmDialog = true },
+            onDelete = { showDeleteConfirmDialog = true },
+            onOpenSettings = { viewModel.openDeviceBackupSettings(context) }
+        )
+
         SettingsGeneralCategory(
             title = stringResource(R.string.backup_restore),
             items = listOf(
@@ -328,6 +375,63 @@ fun BackupAndRestore(
 
     if (isProgressStarted) {
         MinimalLoadingOverlay(progress = progressPercentage)
+    }
+
+    if (showRestoreConfirmDialog) {
+        MinimalConfirmDialog(
+            icon = painterResource(R.drawable.restore),
+            title = stringResource(R.string.backup_restore_confirm_title),
+            message = stringResource(R.string.backup_restore_confirm_desc),
+            confirmText = stringResource(R.string.backup_restore_action),
+            onConfirm = {
+                showRestoreConfirmDialog = false
+                viewModel.restoreFromLatestBackup(context)
+            },
+            onDismiss = { showRestoreConfirmDialog = false }
+        )
+    }
+
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.delete),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.backup_delete_confirm_title),
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.backup_delete_confirm_desc),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        viewModel.deleteBackup(context)
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(R.string.backup_delete_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 }
 
@@ -584,4 +688,332 @@ private fun MinimalConfirmDialog(
         shape = RoundedCornerShape(24.dp)
     )
 }
+
+@Composable
+private fun AndroidOsBackupCard(
+    lastBackupTimeText: String?,
+    backupSizeText: String,
+    isBackingUp: Boolean,
+    isRestoring: Boolean,
+    onBackupNow: () -> Unit,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Header Row: Cloud Icon + Title + Active Status Pill
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                RoundedCornerShape(12.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.backup),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = stringResource(R.string.android_os_backup_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = stringResource(R.string.android_os_backup_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Active Badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF10B981).copy(alpha = 0.15f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(Color(0xFF10B981), CircleShape)
+                        )
+                        Text(
+                            text = stringResource(R.string.backup_status_active),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF10B981)
+                        )
+                    }
+                }
+            }
+
+            // Info Box (Last Backup & Size)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.last_backup_prefix),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = lastBackupTimeText ?: stringResource(R.string.backup_not_yet),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (lastBackupTimeText != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Estimated Backup Size:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "$backupSizeText / 25 MB quota",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // Expandable "What is included" Checklist
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { isExpanded = !isExpanded },
+                color = Color.Transparent
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.backup_scope_title),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        painter = painterResource(if (isExpanded) R.drawable.expand_less else R.drawable.expand_more),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BackupScopeItem(title = stringResource(R.string.backup_item_playlists))
+                    BackupScopeItem(title = stringResource(R.string.backup_item_stats))
+                    BackupScopeItem(title = stringResource(R.string.backup_item_library))
+                    BackupScopeItem(title = stringResource(R.string.backup_item_profile))
+                    BackupScopeItem(title = stringResource(R.string.backup_item_covers))
+                    BackupScopeItem(title = stringResource(R.string.backup_item_settings))
+                }
+            }
+
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Backup Now Button
+                Button(
+                    onClick = onBackupNow,
+                    enabled = !isBackingUp && !isRestoring,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    if (isBackingUp) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.backup),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.backup_now_everything),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                // Restore Button
+                OutlinedButton(
+                    onClick = onRestore,
+                    enabled = !isBackingUp && !isRestoring,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isRestoring) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.restore),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.backup_restore_action),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
+            // Secondary Actions: Delete & Device Settings
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.delete),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = stringResource(R.string.backup_delete_action),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                TextButton(
+                    onClick = onOpenSettings,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.settings),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = stringResource(R.string.backup_device_settings),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupScopeItem(title: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.check_circle),
+            contentDescription = null,
+            tint = Color(0xFF10B981),
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            fontSize = 12.sp
+        )
+    }
+}
+
 
