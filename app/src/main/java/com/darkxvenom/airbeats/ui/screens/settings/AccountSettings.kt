@@ -215,51 +215,7 @@ fun AccountSettings(
         com.darkxvenom.airbeats.utils.GoogleAuthManager(context).getSignInClient()
     }
 
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        try {
-            val account = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                .getResult(ApiException::class.java)
-            val email = account.email.orEmpty()
-            if (email.isBlank()) {
-                Toast.makeText(context, context.getString(R.string.google_email_missing), Toast.LENGTH_SHORT).show()
-                return@rememberLauncherForActivityResult
-            }
-            val name = account.displayName
-                ?.takeIf { it.isNotBlank() }
-                ?: account.givenName
-                ?: displayNameFromEmail(email)
-
-            isGoogleSignInOpen = false
-            linkGoogleAccount(name, email, account.photoUrl?.toString())
-        } catch (e: ApiException) {
-            e.printStackTrace()
-            val message = when (e.statusCode) {
-                GoogleSignInStatusCodes.SIGN_IN_CANCELLED ->
-                    context.getString(R.string.google_sign_in_cancelled)
-                GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS ->
-                    context.getString(R.string.google_sign_in_in_progress)
-                GoogleSignInStatusCodes.SIGN_IN_FAILED ->
-                    context.getString(R.string.google_sign_in_failed_oauth)
-                else -> context.getString(
-                    R.string.google_sign_in_failed_with_status,
-                    e.statusCode,
-                    e.message.orEmpty()
-                )
-            }
-            isGoogleSignInOpen = false
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            isGoogleSignInOpen = false
-            Toast.makeText(
-                context,
-                context.getString(R.string.google_sign_in_failed_message, e.message.orEmpty()),
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
+    // googleSignInLauncher removed
 
     fun requestGoogleSignIn() {
         if (isGoogleSignInOpen) return
