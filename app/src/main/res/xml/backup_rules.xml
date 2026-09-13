@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <include domain="database" path="song.db" />
-    <include domain="database" path="song.db-wal" />
-    <include domain="database" path="song.db-shm" />
+    <include domain="database" path="." />
     <include domain="sharedpref" path="." />
     <include domain="file" path="datastore" />
     <include domain="file" path="playlist_images" />
+    <include domain="file" path="os_backup" />
 </full-backup-content>
