@@ -159,20 +159,7 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                         Timber.e("App launch: Cloud backup upload failed for $email")
                     }
 
-                    // Schedule periodic 24-hour backup worker
-                    val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.darkxvenom.airbeats.worker.DailyBackupWorker>(1, java.util.concurrent.TimeUnit.DAYS)
-                        .setConstraints(
-                            androidx.work.Constraints.Builder()
-                                .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-                                .build()
-                        )
-                        .build()
-
-                    androidx.work.WorkManager.getInstance(this@App).enqueueUniquePeriodicWork(
-                        "DailyBackupWorker",
-                        androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                        workRequest
-                    )
+                    // Worker removed
                 }
             }.onFailure { e ->
                 Timber.e(e, "App launch: Error during automatic cloud backup")
