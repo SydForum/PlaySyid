@@ -143,9 +143,7 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                 }
                 val name = namePreferenceManager.userName.first().ifBlank { "AirBeats User" }
 
-                // Cloud backup upload removed
-
-                    // Worker removed
+                database.checkpoint()
                 }
             }.onFailure { e ->
                 Timber.e(e, "App launch: Error during automatic cloud backup")
