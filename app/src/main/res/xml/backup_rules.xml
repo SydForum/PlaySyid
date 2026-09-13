@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <include domain="database" path="." />
-    <include domain="sharedpref" path="." />
-    <include domain="file" path="datastore" />
-    <include domain="file" path="playlist_images" />
-    <include domain="file" path="os_backup" />
+    <include domain="file" path="airbeats_backup.backup" />
 </full-backup-content>
