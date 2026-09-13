@@ -153,13 +153,7 @@ fun AccountSettings(
 
     // googleSignInLauncher removed
 
-    fun requestGoogleSignIn() {
-        if (isGoogleSignInOpen) return
-        isGoogleSignInOpen = true
-        googleSignInClient.revokeAccess().addOnCompleteListener {
-            googleSignInLauncher.launch(googleSignInClient.signInIntent)
-        }
-    }
+    // requestGoogleSignIn removed
 
     Box(modifier = Modifier.fillMaxSize()) {
         // 🎵 BLUR BACKGROUND
