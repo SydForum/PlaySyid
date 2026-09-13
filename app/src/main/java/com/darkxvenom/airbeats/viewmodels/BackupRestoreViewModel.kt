@@ -41,6 +41,7 @@ import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import javax.inject.Inject
 import kotlin.system.exitProcess
+import timber.log.Timber
 
 @HiltViewModel
 class BackupRestoreViewModel @Inject constructor(
@@ -87,12 +88,17 @@ class BackupRestoreViewModel @Inject constructor(
                         }
                     }
 
-                    runBlocking(Dispatchers.IO) {
-                        database.checkpoint()
+                    runCatching {
+                        runBlocking(Dispatchers.IO) {
+                            database.checkpoint()
+                        }
                     }
-                    FileInputStream(database.openHelper.writableDatabase.path).use { inputStream ->
-                        outputStream.putNextEntry(ZipEntry(InternalDatabase.DB_NAME))
-                        inputStream.copyTo(outputStream)
+                    val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+                    if (dbFile.exists()) {
+                        FileInputStream(dbFile).use { inputStream ->
+                            outputStream.putNextEntry(ZipEntry(InternalDatabase.DB_NAME))
+                            inputStream.copyTo(outputStream)
+                        }
                     }
                 }
             }
@@ -106,16 +112,19 @@ class BackupRestoreViewModel @Inject constructor(
 
     fun restore(context: Context, uri: Uri) {
         runCatching {
+            Timber.d("Starting local restore from Uri: $uri")
             context.applicationContext.contentResolver.openInputStream(uri)?.use {
                 it.zipInputStream().use { inputStream ->
                     var entry = tryOrNull { inputStream.nextEntry } // prevent ZipException
                     while (entry != null) {
+                        Timber.d("Local restore processing entry: ${entry.name}")
                         when (entry.name) {
                             SETTINGS_FILENAME -> {
-                                (context.filesDir / "datastore" / SETTINGS_FILENAME).outputStream()
-                                    .use { outputStream ->
-                                        inputStream.copyTo(outputStream)
-                                    }
+                                val destFile = context.filesDir / "datastore" / SETTINGS_FILENAME
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { outputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
                             }
 
                             "user_name_preferences.preferences_pb" -> {
@@ -150,11 +159,17 @@ class BackupRestoreViewModel @Inject constructor(
                             }
 
                             InternalDatabase.DB_NAME -> {
-                                runBlocking(Dispatchers.IO) {
-                                    database.checkpoint()
+                                runCatching {
+                                    runBlocking(Dispatchers.IO) {
+                                        database.checkpoint()
+                                    }
                                 }
                                 database.close()
-                                FileOutputStream(database.openHelper.writableDatabase.path).use { outputStream ->
+                                val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+                                dbFile.parentFile?.mkdirs()
+                                context.getDatabasePath("${InternalDatabase.DB_NAME}-wal").delete()
+                                context.getDatabasePath("${InternalDatabase.DB_NAME}-shm").delete()
+                                FileOutputStream(dbFile).use { outputStream ->
                                     inputStream.copyTo(outputStream)
                                 }
                             }
@@ -164,8 +179,10 @@ class BackupRestoreViewModel @Inject constructor(
                 }
             }
             context.filesDir.resolve(PERSISTENT_QUEUE_FILE).delete()
+            Timber.d("Local restore finished successfully, restarting app")
             restartApp(context)
         }.onFailure {
+            Timber.e(it, "Local restore failed")
             reportException(it)
             Toast.makeText(context, R.string.restore_failed, Toast.LENGTH_SHORT).show()
         }
@@ -173,6 +190,7 @@ class BackupRestoreViewModel @Inject constructor(
 
     suspend fun backupToDrive(context: Context, email: String, name: String = "AirBeats User"): com.darkxvenom.airbeats.utils.DriveResult<Boolean> {
         return try {
+            Timber.d("Starting backupToDrive for email: $email, name: $name")
             val tempFile = java.io.File(context.cacheDir, "temp_backup.zip")
             tempFile.outputStream().use { fileOut ->
                 fileOut.buffered().zipOutputStream().use { outputStream ->
@@ -209,12 +227,17 @@ class BackupRestoreViewModel @Inject constructor(
                         }
                     }
 
-                    kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
-                        database.checkpoint()
+                    runCatching {
+                        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                            database.checkpoint()
+                        }
                     }
-                    java.io.FileInputStream(database.openHelper.writableDatabase.path).use { inputStream ->
-                        outputStream.putNextEntry(java.util.zip.ZipEntry(com.darkxvenom.airbeats.db.InternalDatabase.DB_NAME))
-                        inputStream.copyTo(outputStream)
+                    val dbFile = context.getDatabasePath(com.darkxvenom.airbeats.db.InternalDatabase.DB_NAME)
+                    if (dbFile.exists()) {
+                        java.io.FileInputStream(dbFile).use { inputStream ->
+                            outputStream.putNextEntry(java.util.zip.ZipEntry(com.darkxvenom.airbeats.db.InternalDatabase.DB_NAME))
+                            inputStream.copyTo(outputStream)
+                        }
                     }
                 }
             }
@@ -229,11 +252,14 @@ class BackupRestoreViewModel @Inject constructor(
             )
 
             if (success) {
+                Timber.d("backupToDrive succeeded")
                 com.darkxvenom.airbeats.utils.DriveResult.Success(true)
             } else {
+                Timber.e("backupToDrive failed: uploadBackup returned false")
                 com.darkxvenom.airbeats.utils.DriveResult.Error(Exception("Cloud backup upload failed"))
             }
         } catch (e: Exception) {
+            Timber.e(e, "backupToDrive exception")
             e.printStackTrace()
             com.darkxvenom.airbeats.utils.DriveResult.Error(e)
         }
@@ -241,21 +267,31 @@ class BackupRestoreViewModel @Inject constructor(
 
     suspend fun restoreFromDrive(context: Context, email: String): com.darkxvenom.airbeats.utils.DriveResult<Boolean> {
         return try {
+            Timber.d("Starting restoreFromDrive for email: $email")
             val tempFile = java.io.File(context.cacheDir, "temp_restore.zip")
             val backupClient = com.darkxvenom.airbeats.utils.CloudBackupClient()
             
-            val success = backupClient.downloadBackup(email, tempFile)
-            if (!success) {
-                return com.darkxvenom.airbeats.utils.DriveResult.Error(Exception("Backup not found in cloud"))
+            val downloadResult = backupClient.downloadBackup(email, tempFile)
+            if (downloadResult.isFailure || downloadResult.getOrNull() != true) {
+                val err = downloadResult.exceptionOrNull()?.message ?: "Backup not found in cloud"
+                Timber.w("restoreFromDrive: downloadBackup failed: $err")
+                val ex = (downloadResult.exceptionOrNull() as? Exception) ?: Exception(err)
+                return com.darkxvenom.airbeats.utils.DriveResult.Error(ex)
             }
 
+            Timber.d("restoreFromDrive: downloadBackup succeeded (${tempFile.length()} bytes). Unpacking...")
             tempFile.inputStream().use { fileIn ->
                 fileIn.zipInputStream().use { inputStream ->
                     var entry = runCatching { inputStream.nextEntry }.getOrNull()
+                    var entryCount = 0
                     while (entry != null) {
-                        when (entry?.name) {
+                        entryCount++
+                        Timber.d("restoreFromDrive processing entry: ${entry.name}")
+                        when (entry.name) {
                             SETTINGS_FILENAME -> {
-                                (context.filesDir / "datastore" / SETTINGS_FILENAME).outputStream().use { outputStream ->
+                                val destFile = context.filesDir / "datastore" / SETTINGS_FILENAME
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { outputStream ->
                                     inputStream.copyTo(outputStream)
                                 }
                             }
@@ -288,21 +324,29 @@ class BackupRestoreViewModel @Inject constructor(
                                 }
                             }
                             com.darkxvenom.airbeats.db.InternalDatabase.DB_NAME -> {
-                                kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
-                                    database.checkpoint()
+                                runCatching {
+                                    kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                                        database.checkpoint()
+                                    }
                                 }
                                 database.close()
-                                java.io.FileOutputStream(database.openHelper.writableDatabase.path).use { outputStream ->
+                                val dbFile = context.getDatabasePath(com.darkxvenom.airbeats.db.InternalDatabase.DB_NAME)
+                                dbFile.parentFile?.mkdirs()
+                                context.getDatabasePath("${com.darkxvenom.airbeats.db.InternalDatabase.DB_NAME}-wal").delete()
+                                context.getDatabasePath("${com.darkxvenom.airbeats.db.InternalDatabase.DB_NAME}-shm").delete()
+                                java.io.FileOutputStream(dbFile).use { outputStream ->
                                     inputStream.copyTo(outputStream)
                                 }
                             }
                         }
                         entry = runCatching { inputStream.nextEntry }.getOrNull()
                     }
+                    Timber.d("restoreFromDrive finished processing $entryCount entries")
                 }
             }
             com.darkxvenom.airbeats.utils.DriveResult.Success(true)
         } catch (e: Exception) {
+            Timber.e(e, "restoreFromDrive exception")
             e.printStackTrace()
             com.darkxvenom.airbeats.utils.DriveResult.Error(e)
         }

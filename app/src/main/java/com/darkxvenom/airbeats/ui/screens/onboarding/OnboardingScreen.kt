@@ -173,7 +173,8 @@ fun OnboardingScreen(
                 val backupClient = com.darkxvenom.airbeats.utils.CloudBackupClient()
                 if (backupClient.checkBackupExists(email)) {
                     syncState = SyncState.RESTORING
-                    when (backupViewModel.restoreFromDrive(context, email)) {
+                    val restoreResult = backupViewModel.restoreFromDrive(context, email)
+                    when (restoreResult) {
                         is com.darkxvenom.airbeats.utils.DriveResult.Success -> {
                             syncState = SyncState.RESTORED
                             delay(1500)
@@ -185,11 +186,14 @@ fun OnboardingScreen(
                             )
                             Runtime.getRuntime().exit(0)
                         }
-                        else -> {
-                            Toast.makeText(context, "Cloud restore failed. Creating a fresh backup.", Toast.LENGTH_SHORT).show()
-                            syncState = SyncState.CREATING_BACKUP
-                            backupViewModel.backupToDrive(context, email, name)
-                            syncState = SyncState.NEW_USER
+                        is com.darkxvenom.airbeats.utils.DriveResult.Error -> {
+                            Timber.tag("Onboarding").e(restoreResult.exception, "Cloud restore failed")
+                            Toast.makeText(context, "Cloud restore failed: ${restoreResult.exception.message}", Toast.LENGTH_LONG).show()
+                            syncState = SyncState.IDLE
+                        }
+                        is com.darkxvenom.airbeats.utils.DriveResult.NeedsPermission -> {
+                            Timber.tag("Onboarding").w("Cloud restore needs permission")
+                            syncState = SyncState.IDLE
                         }
                     }
                 } else {

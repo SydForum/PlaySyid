@@ -53,6 +53,7 @@ import java.nio.charset.StandardCharsets
 import androidx.datastore.preferences.core.edit
 import com.darkxvenom.airbeats.utils.dataStore
 import kotlinx.coroutines.flow.map
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -182,7 +183,10 @@ fun AccountSettings(
                         Runtime.getRuntime().exit(0)
                         return@launch
                     } else {
-                        Toast.makeText(context, context.getString(R.string.restore_failed), Toast.LENGTH_SHORT).show()
+                        val errorException = (result as? com.darkxvenom.airbeats.utils.DriveResult.Error)?.exception
+                        val errMsg = errorException?.message
+                        Timber.tag("AccountSettings").e(errorException, "Failed to restore backup")
+                        Toast.makeText(context, if (!errMsg.isNullOrBlank()) "Failed to restore backup: $errMsg" else context.getString(R.string.restore_failed), Toast.LENGTH_LONG).show()
                     }
                 } else {
                     Toast.makeText(context, context.getString(R.string.creating_initial_cloud_backup), Toast.LENGTH_SHORT).show()

@@ -21,8 +21,8 @@ val localProperties = Properties().apply {
 }
 val googleApiKey = localProperties.getProperty("google.api.key") ?: ""
 val statsApiKey = localProperties.getProperty("stats.api.key") ?: ""
-val statsBaseUrl = localProperties.getProperty("stats.base.url")?.takeIf { it.isNotBlank() } ?: ""
-val authBaseUrl = localProperties.getProperty("auth.api.base.url")?.takeIf { it.isNotBlank() } ?: ""
+val statsBaseUrl = localProperties.getProperty("stats.base.url") ?: ""
+val authBaseUrl = localProperties.getProperty("auth.api.base.url") ?: ""
 
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
@@ -36,7 +36,7 @@ android {
         applicationId = "com.darkxvenom.airbeats"
         minSdk = 26
         targetSdk = 35
-        versionCode = 200
+        versionCode = 201
         versionName = "6.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GOOGLE_API_KEY", googleApiKey.asBuildConfigString())
