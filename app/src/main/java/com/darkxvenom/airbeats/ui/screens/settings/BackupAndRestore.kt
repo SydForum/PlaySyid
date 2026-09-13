@@ -765,15 +765,7 @@ private fun MinimalConfirmDialog(
 }
 
 @SuppressLint("LogNotTimber")
-fun copyToClipboard(context: Context, text: String) {
-    try {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Backup URL", text)
-        clipboard.setPrimaryClip(clip)
-    } catch (e: Exception) {
-        Log.e("BackupRestore", "Error copying to clipboard: ${e.message}")
-    }
-}
+// copyToClipboard removed
 
 sealed class UploadStatus {
     data object Uploading : UploadStatus()
