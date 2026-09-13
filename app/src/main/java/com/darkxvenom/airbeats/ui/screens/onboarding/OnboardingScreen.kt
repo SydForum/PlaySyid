@@ -81,9 +81,7 @@ enum class SyncState {
     NEW_USER
 }
 
-enum class AuthMode {
-    LOGIN, SIGNUP
-}
+// AuthMode removed
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
