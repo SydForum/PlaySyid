@@ -113,74 +113,9 @@ class BackupRestoreViewModel @Inject constructor(
     fun restore(context: Context, uri: Uri) {
         runCatching {
             Timber.d("Starting local restore from Uri: $uri")
-            context.applicationContext.contentResolver.openInputStream(uri)?.use {
-                it.zipInputStream().use { inputStream ->
-                    var entry = tryOrNull { inputStream.nextEntry } // prevent ZipException
-                    while (entry != null) {
-                        Timber.d("Local restore processing entry: ${entry.name}")
-                        when (entry.name) {
-                            SETTINGS_FILENAME -> {
-                                val destFile = context.filesDir / "datastore" / SETTINGS_FILENAME
-                                destFile.parentFile?.mkdirs()
-                                destFile.outputStream().use { outputStream ->
-                                    inputStream.copyTo(outputStream)
-                                }
-                            }
-
-                            "user_name_preferences.preferences_pb" -> {
-                                val destFile = context.filesDir / "datastore" / "user_name_preferences.preferences_pb"
-                                destFile.parentFile?.mkdirs()
-                                destFile.outputStream().use { outputStream ->
-                                    inputStream.copyTo(outputStream)
-                                }
-                            }
-
-                            "airbeats_global_stats.xml" -> {
-                                val parentFile = context.filesDir.parentFile
-                                if (parentFile != null) {
-                                    val destFile = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
-                                    destFile.parentFile?.mkdirs()
-                                    destFile.outputStream().use { outputStream ->
-                                        inputStream.copyTo(outputStream)
-                                    }
-                                }
-                            }
-
-                            GOOGLE_ACCOUNT_FILENAME -> {
-                                val email = inputStream.readBytes()
-                                    .toString(Charsets.UTF_8)
-                                    .let { JSONObject(it).optString("email") }
-                                    .trim()
-                                if (email.isNotBlank()) {
-                                    runBlocking {
-                                        NamePreferenceManager(context).rememberGoogleLoginEmail(email)
-                                    }
-                                }
-                            }
-
-                            InternalDatabase.DB_NAME -> {
-                                runCatching {
-                                    runBlocking(Dispatchers.IO) {
-                                        database.checkpoint()
-                                    }
-                                }
-                                database.close()
-                                val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
-                                dbFile.parentFile?.mkdirs()
-                                context.getDatabasePath("${InternalDatabase.DB_NAME}-wal").delete()
-                                context.getDatabasePath("${InternalDatabase.DB_NAME}-shm").delete()
-                                FileOutputStream(dbFile).use { outputStream ->
-                                    inputStream.copyTo(outputStream)
-                                }
-                            }
-                        }
-                        entry = tryOrNull { inputStream.nextEntry } // prevent ZipException
-                    }
-                }
+            context.applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+                restoreFromInputStream(context, stream)
             }
-            context.filesDir.resolve(PERSISTENT_QUEUE_FILE).delete()
-            Timber.d("Local restore finished successfully, restarting app")
-            restartApp(context)
         }.onFailure {
             Timber.e(it, "Local restore failed")
             reportException(it)
@@ -188,9 +123,88 @@ class BackupRestoreViewModel @Inject constructor(
         }
     }
 
-    // backupToDrive removed
+    fun restoreFromFile(context: Context, file: java.io.File) {
+        runCatching {
+            Timber.d("Starting restore from file: ${file.absolutePath}")
+            file.inputStream().buffered().use { stream ->
+                restoreFromInputStream(context, stream)
+            }
+        }.onFailure {
+            Timber.e(it, "File restore failed")
+            reportException(it)
+            Toast.makeText(context, R.string.restore_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
 
-    // restoreFromDrive removed
+    private fun restoreFromInputStream(context: Context, rawStream: java.io.InputStream) {
+        rawStream.zipInputStream().use { inputStream ->
+            var entry = tryOrNull { inputStream.nextEntry } // prevent ZipException
+            while (entry != null) {
+                Timber.d("Restore processing entry: ${entry.name}")
+                when (entry.name) {
+                    SETTINGS_FILENAME -> {
+                        val destFile = context.filesDir / "datastore" / SETTINGS_FILENAME
+                        destFile.parentFile?.mkdirs()
+                        destFile.outputStream().use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+
+                    "user_name_preferences.preferences_pb" -> {
+                        val destFile = context.filesDir / "datastore" / "user_name_preferences.preferences_pb"
+                        destFile.parentFile?.mkdirs()
+                        destFile.outputStream().use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+
+                    "airbeats_global_stats.xml" -> {
+                        val parentFile = context.filesDir.parentFile
+                        if (parentFile != null) {
+                            val destFile = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
+                            destFile.parentFile?.mkdirs()
+                            destFile.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+                    }
+
+                    GOOGLE_ACCOUNT_FILENAME -> {
+                        val email = inputStream.readBytes()
+                            .toString(Charsets.UTF_8)
+                            .let { JSONObject(it).optString("email") }
+                            .trim()
+                        if (email.isNotBlank()) {
+                            runBlocking {
+                                NamePreferenceManager(context).rememberGoogleLoginEmail(email)
+                            }
+                        }
+                    }
+
+                    InternalDatabase.DB_NAME -> {
+                        runCatching {
+                            runBlocking(Dispatchers.IO) {
+                                database.checkpoint()
+                            }
+                        }
+                        database.close()
+                        val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+                        dbFile.parentFile?.mkdirs()
+                        context.getDatabasePath("${InternalDatabase.DB_NAME}-wal").delete()
+                        context.getDatabasePath("${InternalDatabase.DB_NAME}-shm").delete()
+                        FileOutputStream(dbFile).use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                }
+                entry = tryOrNull { inputStream.nextEntry } // prevent ZipException
+            }
+        }
+        context.filesDir.resolve(PERSISTENT_QUEUE_FILE).delete()
+        Timber.d("Restore finished successfully, restarting app")
+        restartApp(context)
+    }
+
 
     fun importPlaylistFromCsv(context: Context, uri: Uri): ArrayList<Song> {
         val songs = arrayListOf<Song>()
