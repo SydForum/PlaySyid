@@ -154,26 +154,7 @@ fun BackupAndRestore(
             if (uri != null) {
                 viewModel.backup(context, uri)
 
-                // MODIFIED: Only upload to the cloud if the user has enabled it.
-                if (enableCloudUpload) {
-                    coroutineScope.launch {
-                        uploadStatus = UploadStatus.Uploading
-                        val nameManager = com.darkxvenom.airbeats.ui.component.NamePreferenceManager(context)
-                        val email = nameManager.accountEmail.first()
-                        val name = nameManager.userName.first()
-                        
-                        if (!email.isNullOrBlank()) {
-                            val result = viewModel.backupToDrive(context, email, name)
-                            uploadStatus = if (result is com.darkxvenom.airbeats.utils.DriveResult.Success) {
-                                UploadStatus.Success("Cloud Database")
-                            } else {
-                                UploadStatus.Failure
-                            }
-                        } else {
-                            uploadStatus = UploadStatus.Failure
-                        }
-                    }
-                }
+                // Cloud backup upload trigger removed
             }
         }
 
