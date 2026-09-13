@@ -7,6 +7,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -51,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -114,7 +116,6 @@ fun BackupAndRestore(
     val playerCache = LocalPlayerConnection.current?.service?.playerCache
 
     // Statuses
-    // uploadStatus removed
     var showVisitorDataDialog by remember { mutableStateOf(false) }
     var showVisitorDataResetDialog by remember { mutableStateOf(false) }
     var importedTitle by remember { mutableStateOf("") }
@@ -123,13 +124,6 @@ fun BackupAndRestore(
     var isProgressStarted by remember { mutableStateOf(false) }
     var progressPercentage by remember { mutableIntStateOf(0) }
 
-    // NEW: Status to control automatic upload to the cloud
-    var enableCloudUpload by remember {
-        mutableStateOf(
-            context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE)
-                .getBoolean("enable_cloud_upload", true)
-        )
-    }
 
     // Cache stats
     var playerCacheSize by remember { mutableLongStateOf(tryOrNull { playerCache?.cacheSpace } ?: 0L) }
@@ -153,8 +147,6 @@ fun BackupAndRestore(
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
             if (uri != null) {
                 viewModel.backup(context, uri)
-
-                // Cloud backup upload trigger removed
             }
         }
 
@@ -210,44 +202,10 @@ fun BackupAndRestore(
         SettingsGeneralCategory(
             title = stringResource(R.string.backup_restore),
             items = listOf(
-                {SwitchPreference(
-                    title = { Text(stringResource(R.string.cloud_upload_title)) },
-                    icon = { Icon(painterResource(R.drawable.cloud_lock), null) },
-                    checked = enableCloudUpload,
-                    description = stringResource(
-                        if (enableCloudUpload) {
-                            R.string.cloud_upload_enabled_description
-                        } else {
-                            R.string.cloud_upload_disabled_description
-                        }
-                    ),
-                    onCheckedChange = { isEnabled ->
-                        enableCloudUpload = isEnabled
-                        // Save preference
-                        context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE)
-                            .edit()
-                            .putBoolean("enable_cloud_upload", isEnabled)
-                            .apply()
-                            
-                        if (isEnabled) {
-                            val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.darkxvenom.airbeats.worker.DailyBackupWorker>(1, java.util.concurrent.TimeUnit.DAYS)
-                                .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
-                                .build()
-                            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                                "DailyBackupWorker",
-                                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                                workRequest
-                            )
-                        } else {
-                            androidx.work.WorkManager.getInstance(context).cancelUniqueWork("DailyBackupWorker")
-                        }
-                    }
-                )},
                 {PreferenceEntry(
                     title = { Text(stringResource(R.string.backup)) },
                     icon = { Icon(painterResource(R.drawable.backup), null) },
-                    description = stringResource(if (enableCloudUpload) R.string.backup_with_cloud else R.string.backup_description),
-                    isEnabled = uploadStatus !is UploadStatus.Uploading,
+                    description = stringResource(R.string.backup_description),
                     onClick = {
                         val formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
                         backupLauncher.launch(
@@ -261,7 +219,6 @@ fun BackupAndRestore(
                     title = { Text(stringResource(R.string.restore)) },
                     icon = { Icon(painterResource(R.drawable.restore), null) },
                     description = stringResource(R.string.restore_description),
-                    isEnabled = uploadStatus !is UploadStatus.Uploading,
                     onClick = {
                         restoreLauncher.launch(arrayOf("application/octet-stream"))
                     }
@@ -270,7 +227,6 @@ fun BackupAndRestore(
                     title = { Text(stringResource(R.string.backup_cached_songs)) },
                     icon = { Icon(painterResource(R.drawable.cached), null) },
                     description = stringResource(R.string.backup_cached_songs_desc),
-                    isEnabled = uploadStatus !is UploadStatus.Uploading,
                     onClick = {
                         val formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
                         backupCacheLauncher.launch(
@@ -282,18 +238,10 @@ fun BackupAndRestore(
                     title = { Text(stringResource(R.string.restore_cached_songs)) },
                     icon = { Icon(painterResource(R.drawable.restore), null) },
                     description = stringResource(R.string.restore_cached_songs_desc),
-                    isEnabled = uploadStatus !is UploadStatus.Uploading,
                     onClick = {
                         restoreCacheLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
                     }
-                )},
-                {AnimatedVisibility(
-                    visible = uploadStatus != null,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {MinimalUploadStatus(uploadStatus) {
-                    copyToClipboard(context, (uploadStatus as UploadStatus.Success).fileUrl)
-                }}}
+                )}
             )
         )
 
@@ -306,6 +254,7 @@ fun BackupAndRestore(
             onInfoClick = { showVisitorDataDialog = true }
         )
     }
+
 
     // Dialogs
     if (showVisitorDataDialog) {
@@ -519,8 +468,7 @@ private fun MinimalVisitorDataCard(
     }
 }
 
-// MinimalUploadStatus removed
-}
+
 
 @Composable
 private fun MinimalLoadingOverlay(progress: Int) {
@@ -637,7 +585,3 @@ private fun MinimalConfirmDialog(
     )
 }
 
-@SuppressLint("LogNotTimber")
-// copyToClipboard removed
-
-// UploadStatus removed
