@@ -767,8 +767,4 @@ private fun MinimalConfirmDialog(
 @SuppressLint("LogNotTimber")
 // copyToClipboard removed
 
-sealed class UploadStatus {
-    data object Uploading : UploadStatus()
-    data class Success(val fileUrl: String) : UploadStatus()
-    data object Failure : UploadStatus()
-}
+// UploadStatus removed
