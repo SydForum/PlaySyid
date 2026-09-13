@@ -27,19 +27,20 @@ import com.darkxvenom.airbeats.ui.component.IconButton
 import com.darkxvenom.airbeats.ui.utils.backToMain
 import com.darkxvenom.airbeats.utils.rememberPreference
 import com.darkxvenom.airbeats.utils.reportException
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val YOUTUBE_MUSIC_URL = "https://music.youtube.com/"
 private const val MAX_RETRY_ATTEMPTS = 3
 private const val RETRY_DELAY_MS = 1000L
 
 @SuppressLint("SetJavaScriptEnabled")
-@OptIn(ExperimentalMaterial3Api::class, DelicateCoroutinesApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun YouTubeLoginScreen(navController: NavController) {
+    val coroutineScope = rememberCoroutineScope()
     var visitorData by rememberPreference(VisitorDataKey, "")
     var innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
     var accountName by rememberPreference(AccountNameKey, "")
@@ -48,27 +49,37 @@ fun YouTubeLoginScreen(navController: NavController) {
 
     var webView: WebView? = null
     var isLoadingAccountInfo by remember { mutableStateOf(false) }
+    var isAccountHandled by remember { mutableStateOf(false) }
 
     suspend fun fetchAccountInfoWithRetry(retryCount: Int = 0) {
+        if (isAccountHandled) return
         try {
-            YouTube.accountInfo().onSuccess { accountInfo ->
+            val result = withContext(Dispatchers.IO) {
+                YouTube.accountInfo()
+            }
+            result.onSuccess { accountInfo ->
                 val name = accountInfo.name.takeIf { it.isNotBlank() } ?: ""
                 val email = accountInfo.email?.takeIf { it.isNotBlank() } ?: ""
                 val handle = accountInfo.channelHandle?.takeIf { it.isNotBlank() } ?: ""
 
-                if (name.isNotEmpty()) {
-                    accountName = name
-                    accountEmail = email
-                    accountChannelHandle = handle
-                    isLoadingAccountInfo = false
-                    navController.backToMain()
-                } else {
-                    if (retryCount < MAX_RETRY_ATTEMPTS) {
-                        delay(RETRY_DELAY_MS)
-                        fetchAccountInfoWithRetry(retryCount + 1)
-                    } else {
+                withContext(Dispatchers.Main) {
+                    if (isAccountHandled) return@withContext
+                    if (name.isNotEmpty()) {
+                        isAccountHandled = true
+                        accountName = name
+                        accountEmail = email
+                        accountChannelHandle = handle
                         isLoadingAccountInfo = false
                         navController.backToMain()
+                    } else {
+                        if (retryCount < MAX_RETRY_ATTEMPTS) {
+                            delay(RETRY_DELAY_MS)
+                            fetchAccountInfoWithRetry(retryCount + 1)
+                        } else {
+                            isAccountHandled = true
+                            isLoadingAccountInfo = false
+                            navController.backToMain()
+                        }
                     }
                 }
             }.onFailure { exception ->
@@ -77,14 +88,24 @@ fun YouTubeLoginScreen(navController: NavController) {
                     fetchAccountInfoWithRetry(retryCount + 1)
                 } else {
                     reportException(exception)
-                    isLoadingAccountInfo = false
-                    navController.backToMain()
+                    withContext(Dispatchers.Main) {
+                        if (!isAccountHandled) {
+                            isAccountHandled = true
+                            isLoadingAccountInfo = false
+                            navController.backToMain()
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
             reportException(e)
-            isLoadingAccountInfo = false
-            navController.backToMain()
+            withContext(Dispatchers.Main) {
+                if (!isAccountHandled) {
+                    isAccountHandled = true
+                    isLoadingAccountInfo = false
+                    navController.backToMain()
+                }
+            }
         }
     }
 
@@ -130,7 +151,7 @@ fun YouTubeLoginScreen(navController: NavController) {
                                     innerTubeCookie = youTubeCookieString
                                     isLoadingAccountInfo = true
 
-                                    GlobalScope.launch {
+                                    coroutineScope.launch(Dispatchers.Main) {
                                         delay(500)
                                         fetchAccountInfoWithRetry()
                                     }

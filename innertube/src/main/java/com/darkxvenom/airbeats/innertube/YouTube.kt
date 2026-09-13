@@ -1481,7 +1481,7 @@ object YouTube {
 
     suspend fun accountInfo(): Result<AccountInfo> = runCatching {
         val response = innerTube.accountMenu(WEB_REMIX).body<AccountMenuResponse>()
-        val accountInfo = response.actions.firstOrNull()
+        val accountInfo = response.actions?.firstOrNull()
             ?.openPopupAction?.popup?.multiPageMenuRenderer
             ?.header?.activeAccountHeaderRenderer
             ?.toAccountInfo()
