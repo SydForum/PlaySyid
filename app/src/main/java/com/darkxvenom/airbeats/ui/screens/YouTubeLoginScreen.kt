@@ -15,7 +15,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
-import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.AccountChannelHandleKey
 import com.darkxvenom.airbeats.constants.AccountEmailKey
@@ -89,34 +88,36 @@ fun YouTubeLoginScreen(navController: NavController) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
-                Text(
-                    if (isLoadingAccountInfo) {
-                        stringResource(R.string.login) + " - Loading..."
-                    } else {
-                        stringResource(R.string.login)
-                    }
-                )
-            },
-            navigationIcon = {
-                IconButton(
-                    onClick = navController::navigateUp,
-                    onLongClick = navController::backToMain,
-                ) {
-                    Icon(
-                        painterResource(R.drawable.arrow_back),
-                        contentDescription = null,
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        if (isLoadingAccountInfo) {
+                            stringResource(R.string.login) + " - Loading..."
+                        } else {
+                            stringResource(R.string.login)
+                        }
                     )
-                }
-            },
-        )
-
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = navController::navigateUp,
+                        onLongClick = navController::backToMain,
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.arrow_back),
+                            contentDescription = null,
+                        )
+                    }
+                },
+            )
+        },
+    ) { paddingValues ->
         AndroidView(
             modifier = Modifier
-                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .padding(paddingValues),
             factory = { context ->
                 WebView(context).apply {
                     webViewClient = object : WebViewClient() {
