@@ -23,6 +23,10 @@ val googleApiKey = localProperties.getProperty("google.api.key") ?: ""
 val statsApiKey = localProperties.getProperty("stats.api.key") ?: ""
 val statsBaseUrl = localProperties.getProperty("stats.base.url") ?: ""
 val authBaseUrl = localProperties.getProperty("auth.api.base.url") ?: ""
+val localSigningFile = localProperties.getProperty("signing.keystore.file")
+val localSigningStorePassword = localProperties.getProperty("signing.keystore.password")
+val localSigningKeyAlias = localProperties.getProperty("signing.key.alias")
+val localSigningKeyPassword = localProperties.getProperty("signing.key.password")
 
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
