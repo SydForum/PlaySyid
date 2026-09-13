@@ -28,6 +28,7 @@ val DynamicIslandLiquidGlassKey = booleanPreferencesKey("dynamicIslandLiquidGlas
 val UserNameKey = stringPreferencesKey("user_name")
 
 val PureBlackKey = booleanPreferencesKey("pureBlack")
+val ReduceAnimationsKey = booleanPreferencesKey("reduceAnimations")
 val DefaultOpenTabKey = stringPreferencesKey("defaultOpenTab")
 val SlimNavBarKey = booleanPreferencesKey("slimNavBar")
 val ShowGalaxySliderKey = booleanPreferencesKey("showGalaxySlider")

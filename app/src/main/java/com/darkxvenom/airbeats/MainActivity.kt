@@ -243,8 +243,9 @@ import com.darkxvenom.airbeats.ui.theme.DefaultThemeColor
 import com.darkxvenom.airbeats.ui.theme.AirBeatsTheme
 import com.darkxvenom.airbeats.ui.theme.extractThemeColor
 import com.darkxvenom.airbeats.ui.utils.appBarScrollBehavior
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
+import com.darkxvenom.airbeats.constants.ReduceAnimationsKey
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.snap
 import com.darkxvenom.airbeats.ui.utils.backToMain
 import com.darkxvenom.airbeats.ui.utils.resetHeightOffset
 import com.darkxvenom.airbeats.ui.component.UpdateAvailableDialog
@@ -641,6 +642,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             val (slimNav) = rememberPreference(SlimNavBarKey, defaultValue = false)
+                            val (reduceAnimations) = rememberPreference(ReduceAnimationsKey, defaultValue = false)
                             val defaultOpenTab by rememberEnumPreference(
                                 DefaultOpenTabKey,
                                 defaultValue = NavigationTab.HOME,
@@ -659,6 +661,9 @@ class MainActivity : ComponentActivity() {
                                     Screens.Home.route,
                                     Screens.Explore.route,
                                     Screens.Library.route,
+                                    Screens.Search.route,
+                                    Screens.Stats.route,
+                                    "neon_search",
                                     "settings",
                                 )
 
@@ -717,7 +722,7 @@ class MainActivity : ComponentActivity() {
 
                             val navigationBarHeight by animateDpAsState(
                                 targetValue = if (shouldShowNavigationBar) NavigationBarHeight else 0.dp,
-                                animationSpec = NavigationBarAnimationSpec,
+                                animationSpec = if (reduceAnimations) snap() else NavigationBarAnimationSpec,
                                 label = "",
                             )
 
@@ -1531,60 +1536,64 @@ class MainActivity : ComponentActivity() {
                                         }.route,
 
                                         enterTransition = {
-                                            if (initialState.destination.route in topLevelScreens &&
+                                            if (reduceAnimations) {
+                                                fadeIn(tween(0))
+                                            } else if (initialState.destination.route in topLevelScreens &&
                                                 targetState.destination.route in topLevelScreens
                                             ) {
-                                                fadeIn(spring(dampingRatio = Spring.DampingRatioNoBouncy))
+                                                fadeIn(tween(250))
                                             } else {
-                                                fadeIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) +
-                                                        slideInHorizontally(
-                                                            initialOffsetX = { it },
-                                                            animationSpec = spring(stiffness = Spring.StiffnessLow)
-                                                        )
+                                                fadeIn(tween(250)) + slideInHorizontally(
+                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                    initialOffsetX = { it / 2 }
+                                                )
                                             }
                                         },
 
                                         exitTransition = {
-                                            if (initialState.destination.route in topLevelScreens &&
+                                            if (reduceAnimations) {
+                                                fadeOut(tween(0))
+                                            } else if (initialState.destination.route in topLevelScreens &&
                                                 targetState.destination.route in topLevelScreens
                                             ) {
-                                                fadeOut(spring(dampingRatio = Spring.DampingRatioNoBouncy))
+                                                fadeOut(tween(200))
                                             } else {
-                                                fadeOut(spring(dampingRatio = Spring.DampingRatioLowBouncy)) +
-                                                        slideOutHorizontally(
-                                                            targetOffsetX = { -it / 5 },
-                                                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                                                        )
+                                                fadeOut(tween(200)) + slideOutHorizontally(
+                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                    targetOffsetX = { -it / 2 }
+                                                )
                                             }
                                         },
 
                                         popEnterTransition = {
-                                            if ((initialState.destination.route in topLevelScreens ||
+                                            if (reduceAnimations) {
+                                                fadeIn(tween(0))
+                                            } else if ((initialState.destination.route in topLevelScreens ||
                                                         initialState.destination.route?.startsWith("search/") == true) &&
                                                 targetState.destination.route in topLevelScreens
                                             ) {
-                                                fadeIn(spring(dampingRatio = Spring.DampingRatioNoBouncy))
+                                                fadeIn(tween(250))
                                             } else {
-                                                fadeIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) +
-                                                        slideInHorizontally(
-                                                            initialOffsetX = { -it },
-                                                            animationSpec = spring(stiffness = Spring.StiffnessLow)
-                                                        )
+                                                fadeIn(tween(250)) + slideInHorizontally(
+                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                    initialOffsetX = { -it / 2 }
+                                                )
                                             }
                                         },
 
                                         popExitTransition = {
-                                            if ((initialState.destination.route in topLevelScreens ||
+                                            if (reduceAnimations) {
+                                                fadeOut(tween(0))
+                                            } else if ((initialState.destination.route in topLevelScreens ||
                                                         initialState.destination.route?.startsWith("search/") == true) &&
                                                 targetState.destination.route in topLevelScreens
                                             ) {
-                                                fadeOut(spring(dampingRatio = Spring.DampingRatioNoBouncy))
+                                                fadeOut(tween(200))
                                             } else {
-                                                fadeOut(spring(dampingRatio = Spring.DampingRatioLowBouncy)) +
-                                                        slideOutHorizontally(
-                                                            targetOffsetX = { it },
-                                                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                                                        )
+                                                fadeOut(tween(200)) + slideOutHorizontally(
+                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                    targetOffsetX = { it / 2 }
+                                                )
                                             }
                                         },
 

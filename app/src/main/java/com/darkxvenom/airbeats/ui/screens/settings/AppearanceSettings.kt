@@ -125,6 +125,10 @@ fun AppearanceSettings(
         GridItemsSizeKey,
         defaultValue = GridItemSize.BIG
     )
+    val (reduceAnimations, onReduceAnimationsChange) = rememberPreference(
+        ReduceAnimationsKey,
+        defaultValue = false
+    )
 
 
     val (rotateBackground, onRotateBackgroundChange) = rememberPreference(
@@ -950,6 +954,14 @@ fun AppearanceSettings(
                                     GridItemSize.BIG -> stringResource(R.string.big)
                                 }
                             },
+                        )},
+
+                        {SwitchPreference(
+                            title = { Text(stringResource(R.string.reduce_animations)) },
+                            description = stringResource(R.string.reduce_animations_desc),
+                            icon = { Icon(painterResource(R.drawable.animation), null) },
+                            checked = reduceAnimations,
+                            onCheckedChange = onReduceAnimationsChange
                         )},
                     )
                 )

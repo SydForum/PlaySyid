@@ -910,5 +910,9 @@
     <string name="backup_restore_confirm_title">Restore from Backup?</string>
     <string name="backup_restore_confirm_desc">This will restore all playlists, stats, history, and settings from your latest backup. The app will restart to apply changes.</string>
     <string name="backup_no_snapshot">No backup snapshot found. Please tap Backup Now first.</string>
+
+    <!-- Animation Preferences -->
+    <string name="reduce_animations">Reduce animations</string>
+    <string name="reduce_animations_desc">Disable most transitions and motion effects for faster performance</string>
 </resources>
 
