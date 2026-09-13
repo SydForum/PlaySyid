@@ -24,32 +24,17 @@ import com.darkxvenom.airbeats.utils.rememberPreference
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import android.widget.Toast
-import android.app.Activity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.darkxvenom.airbeats.viewmodels.BackupRestoreViewModel
-import androidx.compose.ui.draw.blur
+import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
+import com.darkxvenom.airbeats.LocalPlayerConnection
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
-import coil.compose.AsyncImage
-import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
-import com.darkxvenom.airbeats.LocalPlayerConnection
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
-import com.google.android.gms.common.api.ApiException
-import kotlinx.coroutines.flow.first
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import androidx.datastore.preferences.core.edit
 import com.darkxvenom.airbeats.utils.dataStore
 import kotlinx.coroutines.flow.map
@@ -66,13 +51,8 @@ fun AccountSettings(
 
     val nameManager = remember { NamePreferenceManager(context) }
     val currentDisplayName by nameManager.userName.collectAsState(initial = "")
-    val currentGoogleEmail by nameManager.accountEmail.collectAsState(initial = "")
-    
-    val backupViewModel: BackupRestoreViewModel = hiltViewModel()
     val avatarManager = remember { AvatarPreferenceManager(context) }
-
     var showEditNameDialog by remember { mutableStateOf(false) }
-    var isGoogleSignInOpen by remember { mutableStateOf(false) }
 
     val (accountName, onAccountNameChange) = rememberPreference(AccountNameKey, "")
     val (accountEmail, onAccountEmailChange) = rememberPreference(AccountEmailKey, "")
@@ -123,37 +103,7 @@ fun AccountSettings(
     val mediaMetadata by playerConnection?.mediaMetadata?.collectAsState()
         ?: remember { mutableStateOf(null) }
 
-    fun generatedAvatarUrl(name: String, email: String): String {
-        val seed = name.takeIf { it.isNotBlank() } ?: email
-        val encodedSeed = URLEncoder.encode(seed, StandardCharsets.UTF_8.toString())
-        return "https://api.dicebear.com/9.x/initials/svg?seed=$encodedSeed&backgroundType=gradientLinear"
-    }
 
-    fun displayNameFromEmail(email: String): String {
-        return email
-            .substringBefore("@")
-            .replace('.', ' ')
-            .replace('_', ' ')
-            .replace('-', ' ')
-            .split(' ')
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { part ->
-                part.replaceFirstChar { char ->
-                    if (char.isLowerCase()) char.titlecase() else char.toString()
-                }
-            }
-            .ifBlank { "Friend" }
-    }
-
-    // linkGoogleAccount removed
-
-    val googleSignInClient = remember {
-        com.darkxvenom.airbeats.utils.GoogleAuthManager(context).getSignInClient()
-    }
-
-    // googleSignInLauncher removed
-
-    // requestGoogleSignIn removed
 
     Box(modifier = Modifier.fillMaxSize()) {
         // 🎵 BLUR BACKGROUND
@@ -325,6 +275,8 @@ fun AccountSettings(
                                 }
                             )
                         },
+
+
 
                         // 🔹 ADVANCED LOGIN
                         {
