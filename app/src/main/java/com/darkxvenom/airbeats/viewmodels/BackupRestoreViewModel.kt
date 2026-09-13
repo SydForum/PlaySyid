@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.darkxvenom.airbeats.utils.AirBeatsStatsCloudSync
+import com.darkxvenom.airbeats.utils.AutoBackupManager
 
 @HiltViewModel
 class BackupRestoreViewModel @Inject constructor(
@@ -67,31 +68,13 @@ class BackupRestoreViewModel @Inject constructor(
     val backupSizeString: StateFlow<String> = _backupSizeString.asStateFlow()
 
     fun loadOsBackupState(context: Context) {
-        val prefs = context.getSharedPreferences(OS_BACKUP_PREFS, Context.MODE_PRIVATE)
-        _lastOsBackupTime.value = prefs.getLong(KEY_LAST_OS_BACKUP_TIME, 0L)
+        _lastOsBackupTime.value = AutoBackupManager.getLastBackupTime(context)
         updateBackupSize(context)
     }
 
     fun updateBackupSize(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
-            var totalBytes = 0L
-            val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
-            if (dbFile.exists()) totalBytes += dbFile.length()
-            val datastoreDir = context.filesDir / "datastore"
-            if (datastoreDir.exists()) {
-                datastoreDir.listFiles()?.forEach { totalBytes += it.length() }
-            }
-            val playlistImagesDir = context.filesDir / "playlist_images"
-            if (playlistImagesDir.exists()) {
-                playlistImagesDir.listFiles()?.forEach { totalBytes += it.length() }
-            }
-            val parentFile = context.filesDir.parentFile
-            if (parentFile != null) {
-                val stats = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
-                if (stats.exists()) totalBytes += stats.length()
-                val playlistImagesPrefs = parentFile / "shared_prefs" / "playlist_images.xml"
-                if (playlistImagesPrefs.exists()) totalBytes += playlistImagesPrefs.length()
-            }
+            val totalBytes = AutoBackupManager.getBackupSize(context)
             val kb = totalBytes / 1024
             _backupSizeString.value = if (kb > 1024) String.format(java.util.Locale.US, "%.1f MB", kb / 1024f) else "$kb KB"
         }
@@ -190,31 +173,20 @@ class BackupRestoreViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _isBackingUp.value = true
             try {
-                database.checkpoint()
-
-                // Commit critical SharedPreferences to disk synchronously
-                context.getSharedPreferences(AirBeatsStatsCloudSync.PREFERENCES_NAME, Context.MODE_PRIVATE)
-                    .edit().commit()
-                context.getSharedPreferences("playlist_images", Context.MODE_PRIVATE)
-                    .edit().commit()
-                context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE)
-                    .edit().commit()
-
-                val osBackupFolder = File(context.filesDir, OS_BACKUP_DIR).apply { mkdirs() }
-                val snapshotFile = File(osBackupFolder, OS_BACKUP_FILENAME)
-                createBackupZip(context, snapshotFile.outputStream())
-
-                android.app.backup.BackupManager(context).dataChanged()
-
-                val now = System.currentTimeMillis()
-                context.getSharedPreferences(OS_BACKUP_PREFS, Context.MODE_PRIVATE)
-                    .edit().putLong(KEY_LAST_OS_BACKUP_TIME, now).commit()
-                _lastOsBackupTime.value = now
-                updateBackupSize(context)
-
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, R.string.backup_now_success, Toast.LENGTH_SHORT).show()
-                    onComplete?.invoke(true)
+                val success = AutoBackupManager.createAutoBackup(context, database, notifyBackupManager = true)
+                if (success) {
+                    val now = System.currentTimeMillis()
+                    _lastOsBackupTime.value = now
+                    updateBackupSize(context)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, R.string.backup_now_success, Toast.LENGTH_SHORT).show()
+                        onComplete?.invoke(true)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, R.string.backup_create_failed, Toast.LENGTH_SHORT).show()
+                        onComplete?.invoke(false)
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "backupNow failed")
@@ -230,28 +202,29 @@ class BackupRestoreViewModel @Inject constructor(
     }
 
     fun restoreFromLatestBackup(context: Context) {
-        val snapshotFile = File(context.filesDir, "$OS_BACKUP_DIR/$OS_BACKUP_FILENAME")
-        if (snapshotFile.exists() && snapshotFile.length() > 0) {
-            restoreFromFile(context, snapshotFile)
-        } else {
-            Toast.makeText(context, R.string.backup_no_snapshot, Toast.LENGTH_LONG).show()
+        viewModelScope.launch(Dispatchers.IO) {
+            _isRestoring.value = true
+            try {
+                val success = AutoBackupManager.restoreAutoBackup(context, shouldRestart = true)
+                if (!success) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, R.string.backup_no_snapshot, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } finally {
+                _isRestoring.value = false
+            }
         }
     }
 
     fun deleteBackup(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val snapshotFile = File(context.filesDir, "$OS_BACKUP_DIR/$OS_BACKUP_FILENAME")
-                if (snapshotFile.exists()) {
-                    snapshotFile.delete()
-                }
-                context.getSharedPreferences(OS_BACKUP_PREFS, Context.MODE_PRIVATE)
-                    .edit().remove(KEY_LAST_OS_BACKUP_TIME).commit()
+                AutoBackupManager.deleteBackup(context)
                 _lastOsBackupTime.value = 0L
-                android.app.backup.BackupManager(context).dataChanged()
                 updateBackupSize(context)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Backup snapshot deleted", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Android OS backup deleted", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Timber.e(e, "deleteBackup failed")
@@ -279,8 +252,14 @@ class BackupRestoreViewModel @Inject constructor(
     fun restore(context: Context, uri: Uri) {
         runCatching {
             Timber.d("Starting local restore from Uri: $uri")
+            val targetFile = AutoBackupManager.getAutoBackupFile(context)
             context.applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
-                restoreFromInputStream(context, stream)
+                FileOutputStream(targetFile).use { fos ->
+                    stream.copyTo(fos)
+                }
+            }
+            if (targetFile.exists() && targetFile.length() > 0) {
+                AutoBackupManager.restoreFromInputStream(context, FileInputStream(targetFile), shouldRestart = true)
             }
         }.onFailure {
             Timber.e(it, "Local restore failed")
