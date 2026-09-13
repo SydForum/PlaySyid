@@ -6,5 +6,6 @@
         <include domain="database" path="song.db-shm" />
         <include domain="sharedpref" path="." />
         <include domain="file" path="datastore" />
+        <include domain="file" path="playlist_images" />
     </cloud-backup>
 </data-extraction-rules>
