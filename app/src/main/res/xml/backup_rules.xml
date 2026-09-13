@@ -2,4 +2,5 @@
 <full-backup-content>
     <include domain="database" path="song.db" />
     <include domain="database" path="song.db-wal" />
+    <include domain="database" path="song.db-shm" />
 </full-backup-content>
