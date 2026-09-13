@@ -114,7 +114,7 @@ fun BackupAndRestore(
     val playerCache = LocalPlayerConnection.current?.service?.playerCache
 
     // Statuses
-    var uploadStatus by remember { mutableStateOf<UploadStatus?>(null) }
+    // uploadStatus removed
     var showVisitorDataDialog by remember { mutableStateOf(false) }
     var showVisitorDataResetDialog by remember { mutableStateOf(false) }
     var importedTitle by remember { mutableStateOf("") }
