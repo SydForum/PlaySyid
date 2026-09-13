@@ -135,21 +135,15 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                 namePreferenceManager = namePreferenceManager,
             )?.onFailure(::reportException)
         }
-
         GlobalScope.launch(Dispatchers.IO) {
             runCatching {
-                val email = namePreferenceManager.accountEmail.first().ifBlank {
-                    dataStore[AccountEmailKey] ?: ""
-                }
-                val name = namePreferenceManager.userName.first().ifBlank { "AirBeats User" }
-
                 database.checkpoint()
-                }
+                android.app.backup.BackupManager(this@App).dataChanged()
+                Timber.i("App launch: Database checkpointed and Android BackupManager notified")
             }.onFailure { e ->
-                Timber.e(e, "App launch: Error during automatic cloud backup")
+                Timber.w(e, "Failed to checkpoint database on app launch")
             }
         }
-
         GlobalScope.launch {
             dataStore.data
                 .map { it[VisitorDataKey] }
