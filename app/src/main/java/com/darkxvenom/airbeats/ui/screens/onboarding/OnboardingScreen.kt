@@ -72,14 +72,7 @@ import java.nio.charset.StandardCharsets
 private const val PRIMARY_VIDEO_URL = "https://database.airbeats.net/login_bg_video.mp4"
 private const val FALLBACK_VIDEO_URL = "https://raw.githubusercontent.com/d0x-dev/AirBeats/main/assets/login_bg_video.mp4"
 
-enum class SyncState {
-    IDLE,
-    CHECKING,
-    RESTORING,
-    RESTORED,
-    CREATING_BACKUP,
-    NEW_USER
-}
+// SyncState removed
 
 // AuthMode removed
 
