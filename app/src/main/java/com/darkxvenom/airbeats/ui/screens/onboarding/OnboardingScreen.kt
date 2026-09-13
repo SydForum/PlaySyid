@@ -105,7 +105,7 @@ fun OnboardingScreen(
     var isGoogleSignInOpen by remember { mutableStateOf(false) }
 
     // Input States
-    var emailInput by remember { mutableStateOf("") }
+    // emailInput removed
     var passwordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
     var isEmailProcessing by remember { mutableStateOf(false) }
