@@ -334,6 +334,11 @@ class MainActivity : ComponentActivity() {
             )
             isServiceBound = true
         }
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                database.checkpoint()
+            }
+        }
     }
 
     override fun onStop() {
