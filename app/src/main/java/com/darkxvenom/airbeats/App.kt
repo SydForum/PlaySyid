@@ -44,6 +44,7 @@ import com.darkxvenom.airbeats.utils.AirBeatsStatsCloudSync
 import com.darkxvenom.airbeats.utils.dataStore
 import com.darkxvenom.airbeats.utils.get
 import com.darkxvenom.airbeats.utils.reportException
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -105,9 +106,27 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
             override fun onActivityDestroyed(activity: Activity) {}
         })
 
+        // Initialize Firebase Crashlytics
+        try {
+            val crashlytics = FirebaseCrashlytics.getInstance()
+            crashlytics.isCrashlyticsCollectionEnabled = true
+            val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "unknown"
+            crashlytics.setUserId(deviceId)
+            crashlytics.setCustomKey("device_id", deviceId)
+            crashlytics.setCustomKey("version_name", BuildConfig.VERSION_NAME)
+            crashlytics.setCustomKey("version_code", BuildConfig.VERSION_CODE)
+        } catch (_: Exception) {}
+
         try {
             Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
                 try {
+                    // Record uncaught crash immediately to Firebase Crashlytics
+                    try {
+                        val crashlytics = FirebaseCrashlytics.getInstance()
+                        crashlytics.recordException(throwable)
+                        crashlytics.sendUnsentReports()
+                    } catch (_: Exception) {}
+
                     val sw = java.io.StringWriter()
                     val pw = java.io.PrintWriter(sw)
                     throwable.printStackTrace(pw)
@@ -118,7 +137,7 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     }
                     startActivity(intent)
-                    try { Thread.sleep(100) } catch (_: InterruptedException) {}
+                    try { Thread.sleep(500) } catch (_: InterruptedException) {}
                 } catch (e: Exception) {
                     reportException(e)
                 } finally {
