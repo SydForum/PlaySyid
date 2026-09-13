@@ -12,6 +12,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
+import com.darkxvenom.airbeats.utils.AutoBackupManager
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -466,9 +468,28 @@ class MainActivity : ComponentActivity() {
 
             val isNameSet by namePreferenceManager.isNameSet.collectAsState(initial = null)
             var showSplash by remember { mutableStateOf(true) }
+            var splashStatusText by remember { mutableStateOf<String?>(null) }
+            var hasCheckedCloudRestore by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
             LaunchedEffect(isNameSet) {
-                if (isNameSet != null) {
+                if (isNameSet == false) {
+                    if (!hasCheckedCloudRestore) {
+                        hasCheckedCloudRestore = true
+                        splashStatusText = "Restoring cloud backup..."
+                        val restored = withContext(Dispatchers.IO) {
+                            AutoBackupManager.checkAndRestoreDeviceCloudBackup(this@MainActivity)
+                        }
+                        if (!restored) {
+                            splashStatusText = null
+                            delay(500)
+                            showSplash = false
+                        }
+                    } else {
+                        delay(500)
+                        showSplash = false
+                    }
+                } else if (isNameSet == true) {
+                    AutoBackupManager.resetRestartAttempts(this@MainActivity)
                     delay(1500)
                     showSplash = false
                 }
@@ -586,7 +607,7 @@ class MainActivity : ComponentActivity() {
                 val backdrop = rememberBackdrop()
 
                 if (showSplash) {
-                    HeadphoneSplashScreen()
+                    HeadphoneSplashScreen(statusText = splashStatusText)
                 } else {
 
                     NameProvider(
@@ -2104,7 +2125,7 @@ fun ModernHomeTopBar(
 }
 
 @Composable
-fun HeadphoneSplashScreen() {
+fun HeadphoneSplashScreen(statusText: String? = null) {
 
     val infiniteTransition = rememberInfiniteTransition(label = "bg_anim")
 
@@ -2190,6 +2211,26 @@ fun HeadphoneSplashScreen() {
                     )
                 )
             )
+
+            if (!statusText.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = statusText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                    )
+                }
+            }
         }
     }
 }

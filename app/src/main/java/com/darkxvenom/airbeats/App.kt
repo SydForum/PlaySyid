@@ -89,7 +89,11 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                 if (startedActivities <= 0) {
                     GlobalScope.launch(Dispatchers.IO) {
                         tryOrNull {
-                            AutoBackupManager.createAutoBackup(this@App, database, notifyBackupManager = true)
+                            val success = AutoBackupManager.createAutoBackup(this@App, database, notifyBackupManager = true)
+                            if (success) {
+                                val file = AutoBackupManager.getAutoBackupFile(this@App)
+                                AutoBackupManager.uploadToCloud(this@App, file)
+                            }
                         }
                     }
                 }

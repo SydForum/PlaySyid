@@ -175,11 +175,18 @@ class BackupRestoreViewModel @Inject constructor(
             try {
                 val success = AutoBackupManager.createAutoBackup(context, database, notifyBackupManager = true)
                 if (success) {
+                    val backupFile = AutoBackupManager.getAutoBackupFile(context)
+                    val cloudSuccess = AutoBackupManager.uploadToCloud(context, backupFile)
                     val now = System.currentTimeMillis()
                     _lastOsBackupTime.value = now
                     updateBackupSize(context)
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, R.string.backup_now_success, Toast.LENGTH_SHORT).show()
+                        val message = if (cloudSuccess) {
+                            "Cloud backup saved successfully!"
+                        } else {
+                            context.getString(R.string.backup_now_success)
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                         onComplete?.invoke(true)
                     }
                 } else {
@@ -205,7 +212,11 @@ class BackupRestoreViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _isRestoring.value = true
             try {
-                val success = AutoBackupManager.restoreAutoBackup(context, shouldRestart = true)
+                var success = AutoBackupManager.restoreAutoBackup(context, shouldRestart = true)
+                if (!success) {
+                    // Try fetching device cloud backup from server
+                    success = AutoBackupManager.checkAndRestoreDeviceCloudBackup(context)
+                }
                 if (!success) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, R.string.backup_no_snapshot, Toast.LENGTH_LONG).show()
@@ -221,10 +232,11 @@ class BackupRestoreViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 AutoBackupManager.deleteBackup(context)
+                AutoBackupManager.deleteFromCloud(context)
                 _lastOsBackupTime.value = 0L
                 updateBackupSize(context)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Android OS backup deleted", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Cloud and device backup deleted", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Timber.e(e, "deleteBackup failed")
@@ -239,10 +251,10 @@ class BackupRestoreViewModel @Inject constructor(
             Intent(android.provider.Settings.ACTION_PRIVACY_SETTINGS),
             Intent(android.provider.Settings.ACTION_SETTINGS)
         )
-        for (intent in intentList) {
+        for (intentListEntry in intentList) {
             try {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
+                intentListEntry.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intentListEntry)
                 return
             } catch (_: Exception) {}
         }
@@ -250,21 +262,29 @@ class BackupRestoreViewModel @Inject constructor(
     }
 
     fun restore(context: Context, uri: Uri) {
-        runCatching {
-            Timber.d("Starting local restore from Uri: $uri")
-            val targetFile = AutoBackupManager.getAutoBackupFile(context)
-            context.applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
-                FileOutputStream(targetFile).use { fos ->
-                    stream.copyTo(fos)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                Timber.d("Starting local restore from Uri: $uri")
+                val targetFile = AutoBackupManager.getAutoBackupFile(context)
+                context.applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+                    FileOutputStream(targetFile).use { fos ->
+                        stream.copyTo(fos)
+                    }
+                }
+                if (targetFile.exists() && targetFile.length() > 0) {
+                    // Promote manually restored backup to cloud device backup immediately
+                    launch(Dispatchers.IO) {
+                        AutoBackupManager.uploadToCloud(context, targetFile)
+                    }
+                    AutoBackupManager.restoreFromInputStream(context, FileInputStream(targetFile), shouldRestart = true)
+                }
+            }.onFailure {
+                Timber.e(it, "Local restore failed")
+                reportException(it)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, R.string.restore_failed, Toast.LENGTH_SHORT).show()
                 }
             }
-            if (targetFile.exists() && targetFile.length() > 0) {
-                AutoBackupManager.restoreFromInputStream(context, FileInputStream(targetFile), shouldRestart = true)
-            }
-        }.onFailure {
-            Timber.e(it, "Local restore failed")
-            reportException(it)
-            Toast.makeText(context, R.string.restore_failed, Toast.LENGTH_SHORT).show()
         }
     }
 

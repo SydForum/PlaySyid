@@ -33,6 +33,9 @@ import com.darkxvenom.airbeats.ui.component.NamePreferenceManager
 import com.darkxvenom.airbeats.ui.component.AvatarSelector
 import com.darkxvenom.airbeats.R
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.darkxvenom.airbeats.utils.AutoBackupManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +43,7 @@ fun GuestProfileSetupScreen(navController: NavController) {
     val context = LocalContext.current
     val namePrefManager = remember { NamePreferenceManager(context) }
     var name by remember { mutableStateOf("") }
+    var isRestoringCloudBackup by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -222,7 +226,7 @@ fun GuestProfileSetupScreen(navController: NavController) {
                                 }
                             }
                         },
-                        enabled = isNameValid,
+                        enabled = isNameValid && !isRestoringCloudBackup,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = primaryColor,
                             contentColor = Color.White,
@@ -243,6 +247,58 @@ fun GuestProfileSetupScreen(navController: NavController) {
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    TextButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                isRestoringCloudBackup = true
+                                val restored = withContext(Dispatchers.IO) {
+                                    AutoBackupManager.checkAndRestoreDeviceCloudBackup(context)
+                                }
+                                if (!restored) {
+                                    isRestoringCloudBackup = false
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "No existing cloud backup found for this device",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = !isRestoringCloudBackup,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isRestoringCloudBackup) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = primaryColor
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Restoring cloud backup...",
+                                color = primaryColor,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.restore),
+                                contentDescription = null,
+                                tint = primaryColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Restore Existing Backup",
+                                color = primaryColor,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

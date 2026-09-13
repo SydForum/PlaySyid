@@ -4,6 +4,8 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
+import com.darkxvenom.airbeats.BuildConfig
 import com.darkxvenom.airbeats.db.InternalDatabase
 import com.darkxvenom.airbeats.db.MusicDatabase
 import com.darkxvenom.airbeats.extensions.div
@@ -13,8 +15,15 @@ import com.darkxvenom.airbeats.extensions.zipOutputStream
 import com.darkxvenom.airbeats.playback.MusicService
 import com.darkxvenom.airbeats.playback.MusicService.Companion.PERSISTENT_QUEUE_FILE
 import com.darkxvenom.airbeats.ui.component.NamePreferenceManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import timber.log.Timber
 import java.io.File
@@ -22,6 +31,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
 import kotlin.system.exitProcess
 
@@ -39,6 +50,28 @@ object AutoBackupManager {
     const val GLOBAL_STATS_FILENAME = "airbeats_global_stats.xml"
     const val PLAYLIST_IMAGES_PREFS_FILENAME = "playlist_images.xml"
     const val PLAYLIST_IMAGES_DIR = "playlist_images"
+
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    fun getDeviceId(context: Context): String {
+        return runCatching {
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "unknown_device"
+    }
+
+    fun getDeviceCloudFilePath(context: Context): String {
+        val deviceId = getDeviceId(context)
+        return "airbeats/devices/$deviceId/$BACKUP_FILENAME"
+    }
 
     fun getAutoBackupFile(context: Context): File = File(context.filesDir, BACKUP_FILENAME)
 
@@ -82,10 +115,18 @@ object AutoBackupManager {
             .commit()
     }
 
+    fun resetRestartAttempts(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_RESTART_ATTEMPTS, 0)
+            .apply()
+    }
+
     fun createBackupZip(context: Context, database: MusicDatabase?, rawStream: OutputStream) {
         // Ensure Room database WAL is fully flushed to song.db
         runCatching {
-            database?.checkpoint()
+            val db = database ?: runCatching { com.darkxvenom.airbeats.App.instance.database }.getOrNull()
+            db?.checkpoint()
         }.onFailure { e ->
             Timber.w(e, "Database checkpoint failed during backup creation")
         }
@@ -95,9 +136,24 @@ object AutoBackupManager {
             context.getSharedPreferences("airbeats_global_stats", Context.MODE_PRIVATE).edit().commit()
             context.getSharedPreferences("playlist_images", Context.MODE_PRIVATE).edit().commit()
             context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE).edit().commit()
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().commit()
         }
 
         rawStream.buffered().zipOutputStream().use { outputStream ->
+            // 1. Comprehensive datastore backup: all preferences (name, settings, avatar, ranks, etc.)
+            val datastoreDir = context.filesDir / "datastore"
+            if (datastoreDir.exists() && datastoreDir.isDirectory) {
+                datastoreDir.listFiles()?.forEach { dsFile ->
+                    if (dsFile.isFile) {
+                        dsFile.inputStream().buffered().use { inputStream ->
+                            outputStream.putNextEntry(ZipEntry("datastore/${dsFile.name}"))
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                }
+            }
+
+            // Legacy standalone entries for maximum backwards compatibility
             val settingsFile = context.filesDir / "datastore" / SETTINGS_FILENAME
             if (settingsFile.exists()) {
                 settingsFile.inputStream().buffered().use { inputStream ->
@@ -215,8 +271,19 @@ object AutoBackupManager {
             rawStream.zipInputStream().use { inputStream ->
                 var entry = tryOrNull { inputStream.nextEntry }
                 while (entry != null) {
-                    when (entry.name) {
-                        SETTINGS_FILENAME -> {
+                    when {
+                        entry.name.startsWith("datastore/") -> {
+                            val relName = entry.name.removePrefix("datastore/")
+                            if (relName.isNotBlank()) {
+                                val destFile = context.filesDir / "datastore" / relName
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { outputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            }
+                        }
+
+                        entry.name == SETTINGS_FILENAME -> {
                             val destFile = context.filesDir / "datastore" / SETTINGS_FILENAME
                             destFile.parentFile?.mkdirs()
                             destFile.outputStream().use { outputStream ->
@@ -224,7 +291,7 @@ object AutoBackupManager {
                             }
                         }
 
-                        USER_NAME_PREFS_FILENAME -> {
+                        entry.name == USER_NAME_PREFS_FILENAME -> {
                             val destFile = context.filesDir / "datastore" / USER_NAME_PREFS_FILENAME
                             destFile.parentFile?.mkdirs()
                             destFile.outputStream().use { outputStream ->
@@ -232,7 +299,7 @@ object AutoBackupManager {
                             }
                         }
 
-                        GLOBAL_STATS_FILENAME -> {
+                        entry.name == GLOBAL_STATS_FILENAME -> {
                             val parentFile = context.filesDir.parentFile
                             if (parentFile != null) {
                                 val destFile = parentFile / "shared_prefs" / GLOBAL_STATS_FILENAME
@@ -243,7 +310,7 @@ object AutoBackupManager {
                             }
                         }
 
-                        GOOGLE_ACCOUNT_FILENAME -> {
+                        entry.name == GOOGLE_ACCOUNT_FILENAME -> {
                             val email = inputStream.readBytes()
                                 .toString(Charsets.UTF_8)
                                 .let { JSONObject(it).optString("email") }
@@ -255,7 +322,7 @@ object AutoBackupManager {
                             }
                         }
 
-                        InternalDatabase.DB_NAME -> {
+                        entry.name == InternalDatabase.DB_NAME -> {
                             val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
                             dbFile.parentFile?.mkdirs()
                             context.getDatabasePath("${InternalDatabase.DB_NAME}-wal").delete()
@@ -265,7 +332,7 @@ object AutoBackupManager {
                             }
                         }
 
-                        PLAYLIST_IMAGES_PREFS_FILENAME -> {
+                        entry.name == PLAYLIST_IMAGES_PREFS_FILENAME -> {
                             val parentFile = context.filesDir.parentFile
                             if (parentFile != null) {
                                 val destFile = parentFile / "shared_prefs" / PLAYLIST_IMAGES_PREFS_FILENAME
@@ -276,15 +343,13 @@ object AutoBackupManager {
                             }
                         }
 
-                        else -> {
-                            if (entry.name.startsWith("$PLAYLIST_IMAGES_DIR/")) {
-                                val relName = entry.name.removePrefix("$PLAYLIST_IMAGES_DIR/")
-                                if (relName.isNotBlank()) {
-                                    val destFile = context.filesDir / PLAYLIST_IMAGES_DIR / relName
-                                    destFile.parentFile?.mkdirs()
-                                    destFile.outputStream().use { outputStream ->
-                                        inputStream.copyTo(outputStream)
-                                    }
+                        entry.name.startsWith("$PLAYLIST_IMAGES_DIR/") -> {
+                            val relName = entry.name.removePrefix("$PLAYLIST_IMAGES_DIR/")
+                            if (relName.isNotBlank()) {
+                                val destFile = context.filesDir / PLAYLIST_IMAGES_DIR / relName
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { outputStream ->
+                                    inputStream.copyTo(outputStream)
                                 }
                             }
                         }
@@ -369,6 +434,135 @@ object AutoBackupManager {
         }
     }
 
+    suspend fun uploadToCloud(context: Context, backupFile: File): Boolean = withContext(Dispatchers.IO) {
+        if (!backupFile.exists() || backupFile.length() == 0L) {
+            Timber.w("AutoBackupManager: Cannot upload non-existent or empty backup file")
+            return@withContext false
+        }
+        return@withContext try {
+            val cloudFile = getDeviceCloudFilePath(context)
+            val url = "${BuildConfig.STATS_BASE_URL}/upload?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
+            val mediaType = "application/octet-stream".toMediaTypeOrNull()
+            val requestBody = backupFile.asRequestBody(mediaType)
+            val request = Request.Builder()
+                .url(url)
+                .header("X-API-Key", BuildConfig.STATS_API_KEY)
+                .post(requestBody)
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val isSuccess = response.isSuccessful
+                Timber.i("AutoBackupManager: Cloud upload response code=${response.code}, success=$isSuccess")
+                isSuccess
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: Cloud upload failed")
+            false
+        }
+    }
+
+    suspend fun downloadFromCloud(context: Context, destinationFile: File): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val cloudFile = getDeviceCloudFilePath(context)
+            val url = "${BuildConfig.STATS_BASE_URL}/download?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
+            val request = Request.Builder()
+                .url(url)
+                .header("X-API-Key", BuildConfig.STATS_API_KEY)
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                if (response.code == 404) {
+                    Timber.i("AutoBackupManager: No cloud backup found for this device on server (404)")
+                    return@use false
+                }
+                if (!response.isSuccessful) {
+                    Timber.w("AutoBackupManager: Cloud download failed with code=${response.code}")
+                    return@use false
+                }
+                val body = response.body
+                val tmpFile = File(destinationFile.parentFile ?: context.filesDir, "${destinationFile.name}.download")
+                tmpFile.outputStream().use { fos ->
+                    body.byteStream().copyTo(fos)
+                }
+                if (tmpFile.length() > 0L) {
+                    if (destinationFile.exists()) destinationFile.delete()
+                    tmpFile.renameTo(destinationFile)
+                    Timber.i("AutoBackupManager: Cloud backup downloaded successfully (${destinationFile.length()} bytes)")
+                    true
+                } else {
+                    tmpFile.delete()
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: Cloud download failed")
+            false
+        }
+    }
+
+    suspend fun deleteFromCloud(context: Context): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val cloudFile = getDeviceCloudFilePath(context)
+            val url = "${BuildConfig.STATS_BASE_URL}/delete?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
+            val request = Request.Builder()
+                .url(url)
+                .header("X-API-Key", BuildConfig.STATS_API_KEY)
+                .post("".toRequestBody(null))
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                Timber.i("AutoBackupManager: Cloud delete response code=${response.code}")
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: Cloud delete failed")
+            false
+        }
+    }
+
+    suspend fun checkAndRestoreDeviceCloudBackup(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val restartAttempts = prefs.getInt(KEY_RESTART_ATTEMPTS, 0)
+        if (restartAttempts >= 2) {
+            Timber.w("AutoBackupManager: Aborting cloud restore to prevent restart loop ($restartAttempts attempts)")
+            return@withContext false
+        }
+
+        val targetFile = getAutoBackupFile(context)
+        val downloadSuccess = downloadFromCloud(context, targetFile)
+        if (!downloadSuccess || !targetFile.exists() || targetFile.length() == 0L) {
+            return@withContext false
+        }
+
+        val currentSig = "${targetFile.length()}_${targetFile.lastModified()}"
+        val lastRestoredSig = prefs.getString(KEY_LAST_RESTORED_SIG, null)
+        if (lastRestoredSig == currentSig) {
+            Timber.d("AutoBackupManager: Cloud backup already matches last restored signature, skipping duplicate unpack")
+            return@withContext false
+        }
+
+        Timber.i("AutoBackupManager: Cloud backup downloaded for device. Restoring local state...")
+        val success = FileInputStream(targetFile).use { stream ->
+            restoreFromInputStream(context, stream, shouldRestart = false)
+        }
+
+        if (success) {
+            prefs.edit()
+                .putString(KEY_LAST_RESTORED_SIG, currentSig)
+                .putInt(KEY_RESTART_ATTEMPTS, restartAttempts + 1)
+                .putLong(KEY_LAST_BACKUP_TIME, targetFile.lastModified())
+                .commit()
+
+            Timber.i("AutoBackupManager: Cloud backup unpacked successfully! Restarting app with full restored profile...")
+            withContext(Dispatchers.Main) {
+                restartApp(context)
+            }
+            return@withContext true
+        }
+        return@withContext false
+    }
+
     fun deleteBackup(context: Context): Boolean {
         return try {
             val file = getAutoBackupFile(context)
@@ -433,3 +627,4 @@ object AutoBackupManager {
         exitProcess(0)
     }
 }
+
