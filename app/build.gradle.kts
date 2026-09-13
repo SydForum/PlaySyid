@@ -77,6 +77,14 @@ android {
     }
 
     signingConfigs {
+        create("flappy") {
+            if (!localSigningFile.isNullOrBlank() && file(localSigningFile).exists()) {
+                storeFile = file(localSigningFile)
+                storePassword = localSigningStorePassword
+                keyAlias = localSigningKeyAlias
+                keyPassword = localSigningKeyPassword
+            }
+        }
         getByName("debug") {
             if (System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD") != null) {
                 storeFile = file(System.getenv("MUSIC_DEBUG_KEYSTORE_FILE"))
