@@ -134,7 +134,7 @@ ${CHANGELOG}
 🔗 <a href=\"https://github.com/d0x-dev/AirBeats/releases/tag/v${VERSION}-nightly\">GitHub Release Page</a>"
 
           echo "Uploading ${APK_FILE} to Telegram chat ${CHAT_ID}, topic ${THREAD_ID}..."
-          curl -s -f -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+          curl --retry 3 --max-time 300 -s -S -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             -F chat_id="${CHAT_ID}" \
             -F message_thread_id="${THREAD_ID}" \
             -F document=@"${APK_FILE}" \
