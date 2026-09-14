@@ -1,7 +1,109 @@
 import os
 import sys
+import json
 import html
 import requests
+
+def create_telegraph_page(title_prefix, changelog_text, release_type, version, release_url=""):
+    """
+    Creates an online Telegraph page containing the full detailed changelog.
+    Returns the public Telegraph URL (e.g. https://telegra.ph/AirBeats-v...) or None on error.
+    """
+    if not changelog_text:
+        changelog_text = "• Continuous optimization and routine bug fixes."
+
+    try:
+        # 1. Create an anonymous Telegraph account
+        account_res = requests.get(
+            "https://api.telegra.ph/createAccount",
+            params={
+                "short_name": "AirBeats",
+                "author_name": "AirBeats Team",
+                "author_url": "https://github.com/d0x-dev/AirBeats"
+            },
+            timeout=15
+        )
+        acc_data = account_res.json()
+        if not acc_data.get("ok"):
+            print("Warning: Failed to create Telegraph account:", acc_data)
+            return None
+        access_token = acc_data["result"]["access_token"]
+
+        # 2. Build structured nodes for the Telegraph page
+        nodes = []
+        nodes.append({"tag": "h3", "children": [f"AirBeats {release_type} v{version}"]})
+        
+        if release_url:
+            nodes.append({
+                "tag": "p",
+                "children": [
+                    "Build / Release Reference: ",
+                    {"tag": "a", "attrs": {"href": release_url}, "children": [release_url]}
+                ]
+            })
+
+        nodes.append({"tag": "hr"})
+        nodes.append({"tag": "h4", "children": ["📝 What's Changed"]})
+
+        lines = changelog_text.strip().split("\n")
+        current_list = None
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line:
+                current_list = None
+                continue
+
+            if line.startswith("# ") or line.startswith("## "):
+                current_list = None
+                nodes.append({"tag": "h3", "children": [line.lstrip("#").strip()]})
+            elif line.startswith("### "):
+                current_list = None
+                nodes.append({"tag": "h4", "children": [line.lstrip("#").strip()]})
+            elif line.startswith(("- ", "* ", "• ")):
+                item_text = line[2:].strip()
+                if not current_list:
+                    current_list = {"tag": "ul", "children": []}
+                    nodes.append(current_list)
+                current_list["children"].append({"tag": "li", "children": [item_text]})
+            else:
+                current_list = None
+                nodes.append({"tag": "p", "children": [line]})
+
+        nodes.append({"tag": "hr"})
+        nodes.append({
+            "tag": "p",
+            "children": [
+                "🎵 Download Official AirBeats APKs from ",
+                {"tag": "a", "attrs": {"href": "https://airbeats.org"}, "children": ["airbeats.org"]},
+                " or GitHub Releases."
+            ]
+        })
+
+        # 3. Create Page on Telegra.ph
+        page_title = f"AirBeats v{version} {release_type} Notes"
+        create_res = requests.post(
+            "https://api.telegra.ph/createPage",
+            data={
+                "access_token": access_token,
+                "title": page_title[:250],
+                "author_name": "AirBeats Releases",
+                "author_url": "https://github.com/d0x-dev/AirBeats",
+                "content": json.dumps(nodes),
+                "return_content": False
+            },
+            timeout=25
+        )
+        page_data = create_res.json()
+        if page_data.get("ok"):
+            telegraph_url = page_data["result"]["url"]
+            print(f"Telegra.ph page created successfully: {telegraph_url}")
+            return telegraph_url
+        else:
+            print("Warning: Telegraph createPage returned error:", page_data)
+            return None
+    except Exception as e:
+        print(f"Warning: Exception while creating Telegra.ph page: {e}")
+        return None
 
 def main():
     bot_token = os.environ.get("BOT_TOKEN")
@@ -23,35 +125,39 @@ def main():
 
     base_url = f"https://api.telegram.org/bot{bot_token}"
 
-    # Escape changelog for Telegram HTML format
-    escaped_changelog = html.escape(raw_changelog)
-    if not escaped_changelog:
-        escaped_changelog = "• Routine optimizations and bug fixes."
-
+    # Determine icon and apk description
     if "nightly" in release_type.lower():
         icon = "🌙"
+        apk_desc = "Nightly APK attached"
     elif "debug" in release_type.lower():
         icon = "🛠️"
+        apk_desc = "Debug APK attached"
     else:
         icon = "🚀"
-    header = f"{icon} <b>AirBeats {release_type} v{version}</b>\n\n"
-    apk_desc = "Debug APK attached" if "debug" in release_type.lower() else "Signed APK attached"
-    footer = f"\n\n📦 <i>{apk_desc}</i>"
+        apk_desc = "Signed Release APK attached"
+
+    # 1. Create Telegraph page with detailed changelog
+    print(f"Generating online Telegraph changelog for {release_type} v{version}...")
+    telegraph_url = create_telegraph_page(
+        title_prefix="AirBeats",
+        changelog_text=raw_changelog,
+        release_type=release_type,
+        version=version,
+        release_url=release_url
+    )
+
+    # 2. Build clean, basic caption
+    caption = f"{icon} <b>AirBeats {release_type} v{version}</b>\n📦 <i>{apk_desc}</i>"
+
+    # 3. Build inline buttons
+    inline_keyboard = []
+    if telegraph_url:
+        inline_keyboard.append([{"text": "📖 View Full Changelog", "url": telegraph_url}])
     if release_url:
-        footer += f"\n🔗 <a href=\"{release_url}\">View on GitHub</a>"
-
-    caption_candidate = f"{header}📝 <b>Changelog:</b>\n{escaped_changelog}{footer}"
-    send_separate_changelog = len(caption_candidate) > 950
-
-    if not send_separate_changelog:
-        caption = caption_candidate
-    else:
-        caption = f"{header}📦 <i>{apk_desc}</i>\n\n📝 <i>(Detailed changelog posted below 👇)</i>"
-        if release_url:
-            caption += f"\n🔗 <a href=\"{release_url}\">View on GitHub</a>"
+        inline_keyboard.append([{"text": "🔗 View on GitHub", "url": release_url}])
 
     print(f"Uploading {apk_file} ({os.path.getsize(apk_file)} bytes) to chat {chat_id}, topic {thread_id}...")
-    
+
     with open(apk_file, "rb") as f:
         data = {
             "chat_id": chat_id,
@@ -60,6 +166,8 @@ def main():
         }
         if thread_id:
             data["message_thread_id"] = thread_id
+        if inline_keyboard:
+            data["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})
 
         res = requests.post(
             f"{base_url}/sendDocument",
@@ -76,42 +184,26 @@ def main():
     apk_msg_id = res_json["result"]["message_id"]
     print(f"APK successfully uploaded! Telegram Message ID: {apk_msg_id}")
 
-    # If the changelog is too long for the document caption, send it as reply message(s)
-    if send_separate_changelog:
-        print("Changelog exceeds caption limit. Posting complete changelog as follow-up message...")
-        MAX_CHUNK = 3500
-        lines = escaped_changelog.split("\n")
-        chunks = []
-        curr = ""
-        for line in lines:
-            if len(curr) + len(line) + 1 > MAX_CHUNK:
-                chunks.append(curr)
-                curr = line + "\n"
-            else:
-                curr += line + "\n"
-        if curr.strip():
-            chunks.append(curr)
-
-        for idx, chunk in enumerate(chunks):
-            part_info = f" (Part {idx+1}/{len(chunks)})" if len(chunks) > 1 else ""
-            msg_text = f"📝 <b>AirBeats v{version} Changelog{part_info}:</b>\n\n{chunk}"
-            
-            payload = {
-                "chat_id": chat_id,
-                "reply_to_message_id": apk_msg_id,
-                "text": msg_text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True
-            }
-            if thread_id:
-                payload["message_thread_id"] = thread_id
-
-            c_res = requests.post(
-                f"{base_url}/sendMessage",
-                json=payload,
-                timeout=60
-            )
-            print(f"Changelog part {idx+1} response: {c_res.json().get('ok')}")
+    # 4. Pin the latest uploaded APK message in Telegram
+    try:
+        print(f"Pinning APK message {apk_msg_id} in chat {chat_id}...")
+        pin_payload = {
+            "chat_id": chat_id,
+            "message_id": apk_msg_id,
+            "disable_notification": False
+        }
+        pin_res = requests.post(
+            f"{base_url}/pinChatMessage",
+            json=pin_payload,
+            timeout=30
+        )
+        pin_json = pin_res.json()
+        if pin_json.get("ok"):
+            print("Successfully pinned latest APK message in Telegram!")
+        else:
+            print(f"Notice: pinChatMessage response: {pin_json}")
+    except Exception as pin_err:
+        print(f"Notice: Failed to pin message: {pin_err}")
 
     print("All Telegram notifications completed successfully!")
 

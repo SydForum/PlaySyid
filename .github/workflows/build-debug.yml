@@ -99,6 +99,7 @@ jobs:
           VERSION: ${{ env.VERSION_NAME }}
           APK_FILE: ${{ env.FINAL_APK_NAME }}
           RELEASE_TYPE: "Debug Build"
+          CHANGELOG: ${{ env.CHANGELOG }}
           RELEASE_URL: "https://github.com/d0x-dev/AirBeats/actions/runs/${{ github.run_id }}"
         run: |
           pip install requests
