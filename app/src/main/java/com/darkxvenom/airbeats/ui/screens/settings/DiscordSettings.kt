@@ -685,7 +685,7 @@ fun EnhancedRichPresence(
                         onClick = {
                             val intent = Intent(
                                 Intent.ACTION_VIEW,
-                                "https://play.airbeats.org/song?id=${song?.id}".toUri()
+                                com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(song?.id ?: "").toUri()
                             )
                             context.startActivity(intent)
                         },

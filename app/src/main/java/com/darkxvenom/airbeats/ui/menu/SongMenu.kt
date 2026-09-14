@@ -338,7 +338,7 @@ fun SongMenu(
                     val intent = Intent().apply {
                         action = Intent.ACTION_SEND
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, "https://play.airbeats.org/song?id=${song.id}")
+                        putExtra(Intent.EXTRA_TEXT, com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(song.id))
                     }
                     context.startActivity(Intent.createChooser(intent, null))
                 }

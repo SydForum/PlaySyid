@@ -72,6 +72,7 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        com.darkxvenom.airbeats.utils.RemoteConfigManager.initialize(this)
         kotlinx.coroutines.runBlocking {
             runCatching { dataStore.initializeCache() }
         }

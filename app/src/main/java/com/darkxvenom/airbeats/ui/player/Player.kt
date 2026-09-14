@@ -2484,7 +2484,7 @@ fun BottomSheetPlayer(
                             type = "text/plain"
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                "https://play.airbeats.org/song?id=${metadata.id}"
+                                com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(metadata.id)
                             )
                         }
                         context.startActivity(Intent.createChooser(intent, null))
@@ -2538,7 +2538,7 @@ fun BottomSheetPlayer(
                             type = "text/plain"
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                "https://play.airbeats.org/song?id=${metadata.id}"
+                                com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(metadata.id)
                             )
                         }
                         context.startActivity(Intent.createChooser(intent, null))
@@ -2602,7 +2602,7 @@ fun BottomSheetPlayer(
                             type = "text/plain"
                             putExtra(
                                 Intent.EXTRA_TEXT,
-                                "https://play.airbeats.org/song?id=${metadata.id}"
+                                com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(metadata.id)
                             )
                         }
                         context.startActivity(Intent.createChooser(intent, null))

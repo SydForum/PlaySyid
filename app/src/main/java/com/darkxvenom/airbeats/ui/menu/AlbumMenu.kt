@@ -394,7 +394,7 @@ fun AlbumMenu(
                     type = "text/plain"
                     putExtra(
                         Intent.EXTRA_TEXT,
-                        "https://play.airbeats.org/album?id=${album.album.id}"
+                        com.darkxvenom.airbeats.utils.RemoteConfigManager.getAlbumShareUrl(album.album.id)
                     )
                 }
             context.startActivity(Intent.createChooser(intent, null))

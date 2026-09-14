@@ -131,7 +131,7 @@ fun ArtistMenu(
                         type = "text/plain"
                         putExtra(
                             Intent.EXTRA_TEXT,
-                            "https://play.airbeats.org/artist?id=${artist.id}"
+                            com.darkxvenom.airbeats.utils.RemoteConfigManager.getArtistShareUrl(artist.id)
                         )
                     }
                 context.startActivity(Intent.createChooser(intent, null))

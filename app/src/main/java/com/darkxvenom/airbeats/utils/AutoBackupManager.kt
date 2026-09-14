@@ -441,12 +441,12 @@ object AutoBackupManager {
         }
         return@withContext try {
             val cloudFile = getDeviceCloudFilePath(context)
-            val url = "${BuildConfig.STATS_BASE_URL}/upload?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
+            val url = "${RemoteConfigManager.statsBaseUrl}/upload?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
             val mediaType = "application/octet-stream".toMediaTypeOrNull()
             val requestBody = backupFile.asRequestBody(mediaType)
             val request = Request.Builder()
                 .url(url)
-                .header("X-API-Key", BuildConfig.STATS_API_KEY)
+                .header("X-API-Key", RemoteConfigManager.statsApiKey)
                 .post(requestBody)
                 .build()
 
@@ -464,10 +464,10 @@ object AutoBackupManager {
     suspend fun downloadFromCloud(context: Context, destinationFile: File): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
             val cloudFile = getDeviceCloudFilePath(context)
-            val url = "${BuildConfig.STATS_BASE_URL}/download?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
+            val url = "${RemoteConfigManager.statsBaseUrl}/download?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
             val request = Request.Builder()
                 .url(url)
-                .header("X-API-Key", BuildConfig.STATS_API_KEY)
+                .header("X-API-Key", RemoteConfigManager.statsApiKey)
                 .get()
                 .build()
 
@@ -504,10 +504,10 @@ object AutoBackupManager {
     suspend fun deleteFromCloud(context: Context): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
             val cloudFile = getDeviceCloudFilePath(context)
-            val url = "${BuildConfig.STATS_BASE_URL}/delete?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
+            val url = "${RemoteConfigManager.statsBaseUrl}/delete?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
             val request = Request.Builder()
                 .url(url)
-                .header("X-API-Key", BuildConfig.STATS_API_KEY)
+                .header("X-API-Key", RemoteConfigManager.statsApiKey)
                 .post("".toRequestBody(null))
                 .build()
 

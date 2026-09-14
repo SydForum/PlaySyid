@@ -24,6 +24,8 @@ val googleApiKey = localProperties.getProperty("google.api.key") ?: ""
 val statsApiKey = localProperties.getProperty("stats.api.key") ?: ""
 val statsBaseUrl = localProperties.getProperty("stats.base.url") ?: ""
 val authBaseUrl = localProperties.getProperty("auth.api.base.url") ?: ""
+val firebaseConfigUrl = localProperties.getProperty("firebase.config.url") ?: ""
+val firebaseConfigKey = localProperties.getProperty("firebase.config.key") ?: ""
 val localSigningFile = localProperties.getProperty("signing.keystore.file")
 val localSigningStorePassword = localProperties.getProperty("signing.keystore.password")
 val localSigningKeyAlias = localProperties.getProperty("signing.key.alias")
@@ -48,6 +50,8 @@ android {
         buildConfigField("String", "STATS_API_KEY", statsApiKey.asBuildConfigString())
         buildConfigField("String", "STATS_BASE_URL", statsBaseUrl.asBuildConfigString())
         buildConfigField("String", "AUTH_API_BASE_URL", authBaseUrl.asBuildConfigString())
+        buildConfigField("String", "FIREBASE_CONFIG_URL", firebaseConfigUrl.asBuildConfigString())
+        buildConfigField("String", "FIREBASE_CONFIG_KEY", firebaseConfigKey.asBuildConfigString())
 
         // Strip out language resources from libraries that the app doesn't support
         resConfigs("en")
@@ -217,6 +221,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-config")
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)
 

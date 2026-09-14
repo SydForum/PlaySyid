@@ -1664,7 +1664,7 @@ private fun ShareLyricsDialog(
                                 action = Intent.ACTION_SEND
                                 type = "text/plain"
                                 val songLink =
-                                    "https://play.airbeats.org/song?id=${mediaMetadata?.id}"
+                                    com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(mediaMetadata?.id ?: "")
                                 putExtra(
                                     Intent.EXTRA_TEXT,
                                     "\"$lyricsText\"\n\n$songTitle - $artists\n$songLink"

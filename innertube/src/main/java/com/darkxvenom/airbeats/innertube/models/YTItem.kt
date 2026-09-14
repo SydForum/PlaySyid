@@ -16,6 +16,10 @@ sealed class YTItem {
     abstract val thumbnail: String?
     abstract val explicit: Boolean
     abstract val shareLink: String
+
+    companion object {
+        var shareDomainProvider: () -> String = { "https://play.airbeats.org" }
+    }
 }
 
 data class Artist(
@@ -58,7 +62,7 @@ data class SongItem(
     val setVideoId: String? = null,
 ) : YTItem() {
     override val shareLink: String
-        get() = "https://play.airbeats.org/song?id=$id"
+        get() = "${shareDomainProvider()}/song?id=$id"
 }
 
 data class AlbumItem(
@@ -73,7 +77,7 @@ data class AlbumItem(
     val releaseType: AlbumReleaseType = AlbumReleaseType.ALBUM,
 ) : YTItem() {
     override val shareLink: String
-        get() = "https://play.airbeats.org/playlist?id=$playlistId"
+        get() = "${shareDomainProvider()}/playlist?id=$playlistId"
 }
 
 data class PlaylistItem(
@@ -91,7 +95,7 @@ data class PlaylistItem(
     override val explicit: Boolean
         get() = false
     override val shareLink: String
-        get() = "https://play.airbeats.org/playlist?id=$id"
+        get() = "${shareDomainProvider()}/playlist?id=$id"
 }
 
 data class ArtistItem(
@@ -108,7 +112,7 @@ data class ArtistItem(
     override val explicit: Boolean
         get() = false
     override val shareLink: String
-        get() = "https://play.airbeats.org/artist?id=$id"
+        get() = "${shareDomainProvider()}/artist?id=$id"
 }
 
 fun <T : YTItem> List<T>.filterExplicit(enabled: Boolean = true) =

@@ -38,7 +38,7 @@ data class PlaylistEntity(
     val shareLink: String?
         get() {
             return if (browseId != null)
-                "https://play.airbeats.org/playlist?id=$browseId"
+                com.darkxvenom.airbeats.utils.RemoteConfigManager.getPlaylistShareUrl(browseId)
             else null
         }
 
