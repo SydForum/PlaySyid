@@ -79,28 +79,36 @@ async function handleGitHubWebhook(request, env) {
 
     switch (githubEvent) {
       case "push": {
-        // Ignore branch deletions or empty commits
         if (!payload.commits || payload.commits.length === 0) break;
 
-        const ref = payload.ref ? payload.ref.replace("refs/heads/", "") : "unknown";
+        const ref = payload.ref ? payload.ref.replace("refs/heads/", "") : "main";
         const sender = escapeHtml(payload.sender?.login || "Unknown");
-        const repoName = escapeHtml(payload.repository?.name || "AirBeats");
-        const compareUrl = payload.compare || payload.repository?.html_url;
+        const senderUrl = payload.sender?.html_url || "https://github.com";
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const branchUrl = `${repoUrl}/tree/${encodeURIComponent(ref)}`;
+        const commitCount = payload.commits.length;
 
         let commitList = "";
-        const maxCommits = Math.min(payload.commits.length, 5);
+        const maxCommits = Math.min(commitCount, 5);
         for (let i = 0; i < maxCommits; i++) {
           const c = payload.commits[i];
           const shortSha = c.id ? c.id.substring(0, 7) : "";
           const firstLine = escapeHtml(c.message ? c.message.split("\n")[0] : "Commit");
-          const url = c.url || compareUrl;
-          commitList += `\n• <a href="${url}"><code>${shortSha}</code></a> ${firstLine}`;
+          const commitUrl = c.url || `${repoUrl}/commit/${c.id}`;
+          const authorName = escapeHtml(c.author?.username || c.author?.name || sender);
+          const authorUrl = c.author?.username ? `https://github.com/${c.author.username}` : senderUrl;
+
+          commitList += `\n<a href="${commitUrl}"><code>${shortSha}</code></a> ${firstLine} — <a href="${authorUrl}">${authorName}</a>`;
         }
-        if (payload.commits.length > 5) {
-          commitList += `\n<i>...and ${payload.commits.length - 5} more commit(s)</i>`;
+        if (commitCount > 5) {
+          commitList += `\n<i>...and ${commitCount - 5} more commit(s)</i>`;
         }
 
-        message = `🔨 <b>[${repoName}:${ref}]</b> <b>${payload.commits.length} new commit(s)</b> by <b>${sender}</b>\n${commitList}\n\n👉 <a href="${compareUrl}">View Changes on GitHub</a>`;
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Push</b> 🔨\n` +
+                  `<a href="${senderUrl}"><b>${sender}</b></a> pushed ${commitCount} commit${commitCount === 1 ? "" : "s"}\n` +
+                  `Branch: <a href="${branchUrl}"><code>${ref}</code></a>\n` +
+                  `${commitList}`;
         break;
       }
 
@@ -108,42 +116,52 @@ async function handleGitHubWebhook(request, env) {
         const wf = payload.workflow_run;
         if (!wf) break;
 
-        const action = payload.action; // completed, requested, etc.
-        if (action !== "completed") break; // Notify on completion to avoid spam
+        const action = payload.action;
+        if (action !== "completed") break;
 
-        const name = escapeHtml(wf.name || "Build");
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const sender = escapeHtml(payload.sender?.login || "GitHub Actions");
+        const senderUrl = payload.sender?.html_url || repoUrl;
+        const name = escapeHtml(wf.name || "Workflow");
         const status = wf.conclusion; // success, failure, cancelled
         const branch = escapeHtml(wf.head_branch || "main");
+        const branchUrl = `${repoUrl}/tree/${encodeURIComponent(branch)}`;
+        const headSha = wf.head_sha ? wf.head_sha.substring(0, 7) : "";
+        const commitUrl = `${repoUrl}/commit/${wf.head_sha}`;
         const commitMsg = escapeHtml(wf.head_commit?.message?.split("\n")[0] || "Update");
         const runUrl = wf.html_url || "";
 
+        let statusDisplay = "";
         if (status === "success") {
-          message = `✅ <b>GitHub Action: Build Passed!</b>\n` +
-                    `📦 <b>Workflow:</b> ${name}\n` +
-                    `🌿 <b>Branch:</b> <code>${branch}</code>\n` +
-                    `📝 <b>Commit:</b> ${commitMsg}\n\n` +
-                    `🔗 <a href="${runUrl}">View Action Run</a>`;
+          statusDisplay = "Passed ✅";
         } else if (status === "failure") {
-          message = `❌ <b>GitHub Action: Build Failed!</b>\n` +
-                    `📦 <b>Workflow:</b> ${name}\n` +
-                    `🌿 <b>Branch:</b> <code>${branch}</code>\n` +
-                    `📝 <b>Commit:</b> ${commitMsg}\n\n` +
-                    `⚠️ <a href="${runUrl}">Inspect Failure Logs</a>`;
+          statusDisplay = "Failed ❌";
+        } else if (status === "cancelled") {
+          statusDisplay = "Cancelled ⚠️";
+        } else {
+          statusDisplay = status ? status.toUpperCase() : "Completed";
         }
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Action</b> ⚙️\n` +
+                  `<b>${name}</b>: <b>${statusDisplay}</b>\n` +
+                  `Branch: <a href="${branchUrl}"><code>${branch}</code></a> • Commit: <a href="${commitUrl}"><code>${headSha}</code></a> ${commitMsg}\n` +
+                  `🔗 <a href="${runUrl}">View Action Run</a>`;
         break;
       }
 
       case "watch":
       case "star": {
-        // Star event
         if (payload.action === "started" || payload.action === "created") {
           const user = escapeHtml(payload.sender?.login || "Someone");
-          const userUrl = payload.sender?.html_url || "";
+          const userUrl = payload.sender?.html_url || "https://github.com";
           const starsCount = payload.repository?.stargazers_count || "";
+          const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
           const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+          const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
 
-          message = `⭐ <b>New Star!</b>\n` +
-                    `<b><a href="${userUrl}">${user}</a></b> just starred <b>${repoName}</b>! 🎉\n` +
+          message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Star</b> ⭐\n` +
+                    `<a href="${userUrl}"><b>${user}</b></a> starred <a href="${repoUrl}"><b>${repoName}</b></a>\n` +
                     `🌟 Total Stars: <b>${starsCount}</b>`;
         }
         break;
@@ -151,13 +169,16 @@ async function handleGitHubWebhook(request, env) {
 
       case "fork": {
         const user = escapeHtml(payload.sender?.login || "Someone");
-        const userUrl = payload.sender?.html_url || "";
-        const forkUrl = payload.forkee?.html_url || "";
+        const userUrl = payload.sender?.html_url || "https://github.com";
+        const forkFullName = escapeHtml(payload.forkee?.full_name || "Fork");
+        const forkUrl = payload.forkee?.html_url || "https://github.com";
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
         const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
 
-        message = `🍴 <b>Repository Forked!</b>\n` +
-                  `<b><a href="${userUrl}">${user}</a></b> just forked <b>${repoName}</b>!\n` +
-                  `🔗 <a href="${forkUrl}">View Fork</a>`;
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Fork</b> 🍴\n` +
+                  `<a href="${userUrl}"><b>${user}</b></a> forked <a href="${repoUrl}"><b>${repoName}</b></a>\n` +
+                  `🔗 <a href="${forkUrl}"><b>${forkFullName}</b></a>`;
         break;
       }
 
@@ -167,19 +188,30 @@ async function handleGitHubWebhook(request, env) {
         if (!issue) break;
 
         const sender = escapeHtml(payload.sender?.login || "User");
+        const senderUrl = payload.sender?.html_url || "https://github.com";
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
         const number = issue.number;
         const title = escapeHtml(issue.title);
         const url = issue.html_url;
+        const author = escapeHtml(issue.user?.login || sender);
+        const authorUrl = issue.user?.html_url || senderUrl;
+        const state = (issue.state || "open").toUpperCase();
 
-        if (action === "opened") {
-          message = `🐛 <b>New Issue #${number} Opened</b>\n` +
-                    `<b>Title:</b> <a href="${url}">${title}</a>\n` +
-                    `<b>Reported by:</b> ${sender}`;
-        } else if (action === "closed") {
-          message = `✅ <b>Issue #${number} Closed</b>\n` +
-                    `<b>Title:</b> <a href="${url}">${title}</a>\n` +
-                    `<b>Closed by:</b> ${sender}`;
+        const actionLabel = action === "opened" ? "Opened" : action === "closed" ? "Closed" : action === "reopened" ? "Reopened" : action;
+        const stateEmoji = state === "CLOSED" ? "🟣" : "🟢";
+
+        let labelsText = "";
+        if (issue.labels && issue.labels.length > 0) {
+          const labelsList = issue.labels.map(l => escapeHtml(l.name.toUpperCase())).join(", ");
+          labelsText = `\nLabels: <b>${labelsList}</b>`;
         }
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Issue</b> 🐛\n` +
+                  `<a href="${senderUrl}"><b>${sender}</b></a> ${actionLabel} <a href="${url}"><b>${repoName}#${number} ${title}</b></a>\n` +
+                  `State: ${stateEmoji} <b>${state}</b> • Author: <a href="${authorUrl}">${author}</a>` +
+                  `${labelsText}`;
         break;
       }
 
@@ -189,23 +221,48 @@ async function handleGitHubWebhook(request, env) {
         if (!pr) break;
 
         const sender = escapeHtml(payload.sender?.login || "User");
+        const senderUrl = payload.sender?.html_url || "https://github.com";
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
         const number = pr.number;
         const title = escapeHtml(pr.title);
         const url = pr.html_url;
-        const isMerged = pr.merged;
+        const author = escapeHtml(pr.user?.login || sender);
+        const authorUrl = pr.user?.html_url || senderUrl;
+
+        let actionLabel = "Updated";
+        let stateStr = "OPEN";
+        let stateEmoji = "🟢";
 
         if (action === "opened") {
-          message = `🔀 <b>New Pull Request #${number}</b>\n` +
-                    `<b>Title:</b> <a href="${url}">${title}</a>\n` +
-                    `<b>Author:</b> ${sender}`;
-        } else if (action === "closed" && isMerged) {
-          message = `🎉 <b>Pull Request #${number} Merged!</b>\n` +
-                    `<b>Title:</b> <a href="${url}">${title}</a>\n` +
-                    `<b>Merged into main by:</b> ${sender}`;
+          actionLabel = "Opened";
+          stateStr = "OPEN";
+          stateEmoji = "🟢";
+        } else if (action === "closed" && pr.merged) {
+          actionLabel = "Merged 🎉";
+          stateStr = "MERGED";
+          stateEmoji = "🟣";
         } else if (action === "closed") {
-          message = `🚫 <b>Pull Request #${number} Closed</b>\n` +
-                    `<b>Title:</b> <a href="${url}">${title}</a>`;
+          actionLabel = "Closed 🚫";
+          stateStr = "CLOSED";
+          stateEmoji = "🔴";
+        } else if (action === "reopened") {
+          actionLabel = "Reopened";
+          stateStr = "OPEN";
+          stateEmoji = "🟢";
         }
+
+        let labelsText = "";
+        if (pr.labels && pr.labels.length > 0) {
+          const labelsList = pr.labels.map(l => escapeHtml(l.name.toUpperCase())).join(", ");
+          labelsText = `\nLabels: <b>${labelsList}</b>`;
+        }
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Pull Request</b> 🔀\n` +
+                  `<a href="${senderUrl}"><b>${sender}</b></a> ${actionLabel} <a href="${url}"><b>${repoName}#${number} ${title}</b></a>\n` +
+                  `State: ${stateEmoji} <b>${stateStr}</b> • Author: <a href="${authorUrl}">${author}</a>` +
+                  `${labelsText}`;
         break;
       }
 
@@ -215,6 +272,10 @@ async function handleGitHubWebhook(request, env) {
           const tagName = escapeHtml(rel.tag_name);
           const name = escapeHtml(rel.name || tagName);
           const url = rel.html_url;
+          const sender = escapeHtml(payload.sender?.login || "Release Bot");
+          const senderUrl = payload.sender?.html_url || "https://github.com";
+          const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+          const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
           const body = rel.body ? escapeHtml(rel.body) : "";
           const isNightly = rel.prerelease || tagName.toLowerCase().includes("nightly");
           const targetThreadId = isNightly ? 9 : 8;
@@ -224,9 +285,11 @@ async function handleGitHubWebhook(request, env) {
             changelogText = `\n\n📝 <b>Changelog:</b>\n${body.length > 2500 ? body.substring(0, 2500) + "\n<i>...(Changelog continued in release notes)</i>" : body}`;
           }
 
-          message = `🚀 <b>New AirBeats ${isNightly ? "Nightly Build" : "Official Release"}: ${name}!</b>\n\n` +
-                    `🏷️ <b>Tag:</b> <code>${tagName}</code>${changelogText}\n\n` +
-                    `📥 <a href="${url}">Download APK & View Release</a>`;
+          message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Release</b> 🚀\n` +
+                    `<a href="${senderUrl}"><b>${sender}</b></a> published <a href="${url}"><b>${name}</b></a>\n` +
+                    `Tag: <code>${tagName}</code> • Author: <a href="${senderUrl}">${sender}</a>` +
+                    `${changelogText}\n\n` +
+                    `📥 <a href="${url}">View GitHub Release & Download</a>`;
 
           await sendTelegramMessage(env, message, null, targetThreadId);
           message = null;
