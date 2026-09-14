@@ -367,6 +367,7 @@ fun AboutScreen(
     val context = LocalContext.current
     val shimmerBrush = shimmerEffect()
     var logoTapCount by remember { mutableIntStateOf(0) }
+    var versionTapCount by remember { mutableIntStateOf(0) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "")
     val logoScale by infiniteTransition.animateFloat(
@@ -573,6 +574,25 @@ fun AboutScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable {
+                                    versionTapCount++
+                                    if (versionTapCount in 1..4) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Tap ${5 - versionTapCount} more times to trigger test crash",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else if (versionTapCount >= 5) {
+                                        versionTapCount = 0
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Triggering test crash for Firebase Crashlytics...",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        throw RuntimeException("AirBeats Test Crash for Firebase Crashlytics & Telegram Topic 224")
+                                    }
+                                }
                                 .border(
                                     width = 1.dp,
                                     color = MaterialTheme.colorScheme.secondary,
