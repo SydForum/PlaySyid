@@ -89,26 +89,34 @@ async function handleGitHubWebhook(request, env) {
         const branchUrl = `${repoUrl}/tree/${encodeURIComponent(ref)}`;
         const commitCount = payload.commits.length;
 
-        let commitList = "";
-        const maxCommits = Math.min(commitCount, 5);
-        for (let i = 0; i < maxCommits; i++) {
-          const c = payload.commits[i];
+        if (commitCount === 1) {
+          const c = payload.commits[0];
           const shortSha = c.id ? c.id.substring(0, 7) : "";
           const firstLine = escapeHtml(c.message ? c.message.split("\n")[0] : "Commit");
           const commitUrl = c.url || `${repoUrl}/commit/${c.id}`;
           const authorName = escapeHtml(c.author?.username || c.author?.name || sender);
           const authorUrl = c.author?.username ? `https://github.com/${c.author.username}` : senderUrl;
 
-          commitList += `\n<a href="${commitUrl}"><code>${shortSha}</code></a> ${firstLine} — <a href="${authorUrl}">${authorName}</a>`;
-        }
-        if (commitCount > 5) {
-          commitList += `\n<i>...and ${commitCount - 5} more commit(s)</i>`;
-        }
+          message = `<a href="${commitUrl}"><code>${shortSha}</code></a> ${firstLine} — <a href="${authorUrl}">${authorName}</a>`;
+        } else {
+          let commitList = "";
+          const maxCommits = Math.min(commitCount, 10);
+          for (let i = 0; i < maxCommits; i++) {
+            const c = payload.commits[i];
+            const shortSha = c.id ? c.id.substring(0, 7) : "";
+            const firstLine = escapeHtml(c.message ? c.message.split("\n")[0] : "Commit");
+            const commitUrl = c.url || `${repoUrl}/commit/${c.id}`;
+            const authorName = escapeHtml(c.author?.username || c.author?.name || sender);
+            const authorUrl = c.author?.username ? `https://github.com/${c.author.username}` : senderUrl;
 
-        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Push</b> 🔨\n` +
-                  `<a href="${senderUrl}"><b>${sender}</b></a> pushed ${commitCount} commit${commitCount === 1 ? "" : "s"}\n` +
-                  `Branch: <a href="${branchUrl}"><code>${ref}</code></a>\n` +
-                  `${commitList}`;
+            commitList += `${i > 0 ? "\n" : ""}<a href="${commitUrl}"><code>${shortSha}</code></a> ${firstLine} — <a href="${authorUrl}">${authorName}</a>`;
+          }
+          if (commitCount > 10) {
+            commitList += `\n<i>...and ${commitCount - 10} more commit(s)</i>`;
+          }
+
+          message = `<a href="${repoUrl}">${repoFullName}</a> • <b>${commitCount} new commits</b> to <a href="${branchUrl}"><code>${ref}</code></a>\n\n${commitList}`;
+        }
         break;
       }
 
@@ -215,6 +223,146 @@ async function handleGitHubWebhook(request, env) {
         break;
       }
 
+      case "issue_comment": {
+        if (payload.action !== "created") break;
+        const issue = payload.issue;
+        const comment = payload.comment;
+        if (!issue || !comment) break;
+
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const commentAuthor = escapeHtml(comment.user?.login || payload.sender?.login || "Someone");
+        const commentAuthorUrl = comment.user?.html_url || payload.sender?.html_url || "https://github.com";
+        const isPR = Boolean(issue.pull_request);
+        const itemType = isPR ? "Pull Request" : "Issue";
+        const state = (issue.state || "open").toUpperCase();
+        const itemNumber = issue.number;
+        const itemTitle = escapeHtml(issue.title);
+        const commentUrl = comment.html_url || issue.html_url;
+        const body = escapeHtml(comment.body || "").trim();
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • Comment\n` +
+                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented <a href="${commentUrl}">${repoName}#${itemNumber} ${itemTitle}</a>\n` +
+                  `${itemType}: ${state}\n\n` +
+                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        break;
+      }
+
+      case "commit_comment": {
+        if (payload.action !== "created") break;
+        const comment = payload.comment;
+        if (!comment) break;
+
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const commentAuthor = escapeHtml(comment.user?.login || payload.sender?.login || "Someone");
+        const commentAuthorUrl = comment.user?.html_url || payload.sender?.html_url || "https://github.com";
+        const shortSha = comment.commit_id ? comment.commit_id.substring(0, 7) : "";
+        const commitUrl = `${repoUrl}/commit/${comment.commit_id}`;
+        const body = escapeHtml(comment.body || "").trim();
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • Comment\n` +
+                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented on commit <a href="${commitUrl}"><code>${shortSha}</code></a>\n\n` +
+                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        break;
+      }
+
+      case "pull_request_review_comment": {
+        if (payload.action !== "created") break;
+        const pr = payload.pull_request;
+        const comment = payload.comment;
+        if (!pr || !comment) break;
+
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const commentAuthor = escapeHtml(comment.user?.login || payload.sender?.login || "Someone");
+        const commentAuthorUrl = comment.user?.html_url || payload.sender?.html_url || "https://github.com";
+        const shortSha = comment.commit_id ? comment.commit_id.substring(0, 7) : "";
+        const commitUrl = `${repoUrl}/commit/${comment.commit_id}`;
+        const commentUrl = comment.html_url || pr.html_url;
+        const body = escapeHtml(comment.body || "").trim();
+        const filePath = comment.path ? ` on <code>${escapeHtml(comment.path)}</code>` : "";
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • PR Review Comment\n` +
+                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented on <a href="${commentUrl}">${repoName}#${pr.number} ${escapeHtml(pr.title)}</a>${filePath}\n` +
+                  `Commit: <a href="${commitUrl}"><code>${shortSha}</code></a>\n\n` +
+                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        break;
+      }
+
+      case "pull_request_review": {
+        if (payload.action !== "submitted") break;
+        const pr = payload.pull_request;
+        const review = payload.review;
+        if (!pr || !review) break;
+
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const reviewAuthor = escapeHtml(review.user?.login || payload.sender?.login || "Someone");
+        const reviewAuthorUrl = review.user?.html_url || payload.sender?.html_url || "https://github.com";
+        const reviewState = (review.state || "commented").toUpperCase();
+        const body = escapeHtml(review.body || "").trim();
+        const reviewUrl = review.html_url || pr.html_url;
+
+        let stateEmoji = "💬";
+        if (reviewState === "APPROVED") stateEmoji = "✅";
+        else if (reviewState === "CHANGES_REQUESTED") stateEmoji = "❌";
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • PR Review ${stateEmoji}\n` +
+                  `<a href="${reviewAuthorUrl}">${reviewAuthor}</a> submitted review for <a href="${reviewUrl}">${repoName}#${pr.number} ${escapeHtml(pr.title)}</a>: <b>${reviewState}</b>` +
+                  (body ? `\n\n${body.length > 2500 ? body.substring(0, 2500) + "..." : body}` : "");
+        break;
+      }
+
+      case "discussion": {
+        const action = payload.action;
+        const disc = payload.discussion;
+        if (!disc) break;
+
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const discAuthor = escapeHtml(payload.sender?.login || disc.user?.login || "Someone");
+        const discAuthorUrl = payload.sender?.html_url || disc.user?.html_url || "https://github.com";
+        const discNumber = disc.number;
+        const discTitle = escapeHtml(disc.title);
+        const discUrl = disc.html_url;
+        const category = escapeHtml(disc.category?.name || "General");
+        const categoryEmoji = disc.category?.emoji || "💡";
+        const body = escapeHtml(disc.body || "").trim();
+
+        let actionLabel = action === "created" ? "Started" : (action === "answered" ? "Answered" : action);
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Discussion</b> ${categoryEmoji}\n` +
+                  `<a href="${discAuthorUrl}">${discAuthor}</a> ${actionLabel} Discussion <a href="${discUrl}">#${discNumber} ${discTitle}</a>\n` +
+                  `Category: <b>${category}</b>` +
+                  (action === "created" && body ? `\n\n${body.length > 2500 ? body.substring(0, 2500) + "..." : body}` : "");
+        break;
+      }
+
+      case "discussion_comment": {
+        if (payload.action !== "created") break;
+        const disc = payload.discussion;
+        const comment = payload.comment;
+        if (!disc || !comment) break;
+
+        const repoFullName = escapeHtml(payload.repository?.full_name || "d0x-dev/AirBeats");
+        const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
+        const commentAuthor = escapeHtml(comment.user?.login || payload.sender?.login || "Someone");
+        const commentAuthorUrl = comment.user?.html_url || payload.sender?.html_url || "https://github.com";
+        const discNumber = disc.number;
+        const discTitle = escapeHtml(disc.title);
+        const commentUrl = comment.html_url || disc.html_url;
+        const body = escapeHtml(comment.body || "").trim();
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • Discussion Comment 💬\n` +
+                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented on <a href="${commentUrl}">#${discNumber} ${discTitle}</a>\n\n` +
+                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        break;
+      }
+
       case "pull_request": {
         const action = payload.action;
         const pr = payload.pull_request;
@@ -230,6 +378,8 @@ async function handleGitHubWebhook(request, env) {
         const url = pr.html_url;
         const author = escapeHtml(pr.user?.login || sender);
         const authorUrl = pr.user?.html_url || senderUrl;
+        const headSha = pr.head?.sha ? pr.head.sha.substring(0, 7) : "";
+        const commitUrl = `${repoUrl}/commit/${pr.head?.sha}`;
 
         let actionLabel = "Updated";
         let stateStr = "OPEN";
@@ -251,6 +401,10 @@ async function handleGitHubWebhook(request, env) {
           actionLabel = "Reopened";
           stateStr = "OPEN";
           stateEmoji = "🟢";
+        } else if (action === "synchronize") {
+          actionLabel = "Updated with new commit(s) 🔨";
+          stateStr = "OPEN";
+          stateEmoji = "🟢";
         }
 
         let labelsText = "";
@@ -259,9 +413,12 @@ async function handleGitHubWebhook(request, env) {
           labelsText = `\nLabels: <b>${labelsList}</b>`;
         }
 
+        const commitLine = headSha ? ` • Head Commit: <a href="${commitUrl}"><code>${headSha}</code></a>` : "";
+
         message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Pull Request</b> 🔀\n` +
                   `<a href="${senderUrl}"><b>${sender}</b></a> ${actionLabel} <a href="${url}"><b>${repoName}#${number} ${title}</b></a>\n` +
-                  `State: ${stateEmoji} <b>${stateStr}</b> • Author: <a href="${authorUrl}">${author}</a>` +
+                  `State: ${stateEmoji} <b>${stateStr}</b> • Author: <a href="${authorUrl}">${author}</a>\n` +
+                  `Branch: <code>${pr.base?.ref || "main"}</code> ⬅️ <code>${pr.head?.ref || "branch"}</code>${commitLine}` +
                   `${labelsText}`;
         break;
       }
