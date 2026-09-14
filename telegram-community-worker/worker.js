@@ -92,34 +92,25 @@ async function handleGitHubWebhook(request, env) {
         const branchUrl = `${repoUrl}/tree/${encodeURIComponent(ref)}`;
         const commitCount = payload.commits.length;
 
-        if (commitCount === 1) {
-          const c = payload.commits[0];
+        let commitList = "";
+        const maxCommits = Math.min(commitCount, 10);
+        for (let i = 0; i < maxCommits; i++) {
+          const c = payload.commits[i];
           const shortSha = c.id ? c.id.substring(0, 7) : "";
           const firstLine = escapeHtml(c.message ? c.message.split("\n")[0] : "Commit");
           const commitUrl = c.url || `${repoUrl}/commit/${c.id}`;
           const authorName = escapeHtml(c.author?.username || c.author?.name || sender);
           const authorUrl = c.author?.username ? `https://github.com/${c.author.username}` : senderUrl;
 
-          message = `<a href="${commitUrl}"><code>${shortSha}</code></a> ${firstLine} — <a href="${authorUrl}">${authorName}</a>`;
-        } else {
-          let commitList = "";
-          const maxCommits = Math.min(commitCount, 10);
-          for (let i = 0; i < maxCommits; i++) {
-            const c = payload.commits[i];
-            const shortSha = c.id ? c.id.substring(0, 7) : "";
-            const firstLine = escapeHtml(c.message ? c.message.split("\n")[0] : "Commit");
-            const commitUrl = c.url || `${repoUrl}/commit/${c.id}`;
-            const authorName = escapeHtml(c.author?.username || c.author?.name || sender);
-            const authorUrl = c.author?.username ? `https://github.com/${c.author.username}` : senderUrl;
-
-            commitList += `${i > 0 ? "\n" : ""}<a href="${commitUrl}"><code>${shortSha}</code></a> ${firstLine} — <a href="${authorUrl}">${authorName}</a>`;
-          }
-          if (commitCount > 10) {
-            commitList += `\n<i>...and ${commitCount - 10} more commit(s)</i>`;
-          }
-
-          message = `<a href="${repoUrl}">${repoFullName}</a> • <b>${commitCount} new commits</b> to <a href="${branchUrl}"><code>${ref}</code></a>\n\n${commitList}`;
+          commitList += `${i > 0 ? "\n" : ""}• <a href="${commitUrl}"><code>[${shortSha}]</code></a> <b>${firstLine}</b> — <a href="${authorUrl}">@${authorName}</a>`;
         }
+        if (commitCount > 10) {
+          commitList += `\n<i>...and ${commitCount - 10} more commit(s)</i>`;
+        }
+
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Push</b> 🔨\n` +
+                  `<a href="${senderUrl}"><b>${sender}</b></a> pushed <b>${commitCount} commit${commitCount === 1 ? "" : "s"}</b> to <a href="${branchUrl}"><code>${ref}</code></a>\n\n` +
+                  `${commitList}`;
         break;
       }
 
@@ -155,8 +146,8 @@ async function handleGitHubWebhook(request, env) {
         }
 
         message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Action</b> ⚙️\n` +
-                  `<b>${name}</b>: <b>${statusDisplay}</b>\n` +
-                  `Branch: <a href="${branchUrl}"><code>${branch}</code></a> • Commit: <a href="${commitUrl}"><code>${headSha}</code></a> ${commitMsg}\n` +
+                  `Workflow: <b>${name}</b> • Status: <b>${statusDisplay}</b>\n` +
+                  `Branch: <a href="${branchUrl}"><code>${branch}</code></a> • Commit: <a href="${commitUrl}"><code>[${headSha}]</code></a> <b>${commitMsg}</b>\n` +
                   `🔗 <a href="${runUrl}">View Action Run</a>`;
         break;
       }
@@ -172,7 +163,7 @@ async function handleGitHubWebhook(request, env) {
           const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
 
           message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Star</b> ⭐\n` +
-                    `<a href="${userUrl}"><b>${user}</b></a> starred <a href="${repoUrl}"><b>${repoName}</b></a>\n` +
+                    `<a href="${userUrl}"><b>@${user}</b></a> starred <a href="${repoUrl}"><b>${repoName}</b></a>\n` +
                     `🌟 Total Stars: <b>${starsCount}</b>`;
         }
         break;
@@ -188,7 +179,7 @@ async function handleGitHubWebhook(request, env) {
         const repoUrl = payload.repository?.html_url || "https://github.com/d0x-dev/AirBeats";
 
         message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Fork</b> 🍴\n` +
-                  `<a href="${userUrl}"><b>${user}</b></a> forked <a href="${repoUrl}"><b>${repoName}</b></a>\n` +
+                  `<a href="${userUrl}"><b>@${user}</b></a> forked <a href="${repoUrl}"><b>${repoName}</b></a>\n` +
                   `🔗 <a href="${forkUrl}"><b>${forkFullName}</b></a>`;
         break;
       }
@@ -220,8 +211,8 @@ async function handleGitHubWebhook(request, env) {
         }
 
         message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Issue</b> 🐛\n` +
-                  `<a href="${senderUrl}"><b>${sender}</b></a> ${actionLabel} <a href="${url}"><b>${repoName}#${number} ${title}</b></a>\n` +
-                  `State: ${stateEmoji} <b>${state}</b> • Author: <a href="${authorUrl}">${author}</a>` +
+                  `<a href="${senderUrl}"><b>@${sender}</b></a> ${actionLabel} <a href="${url}"><b>${repoName}#${number} ${title}</b></a>\n` +
+                  `State: ${stateEmoji} <b>${state}</b> • Author: <a href="${authorUrl}">@${author}</a>` +
                   `${labelsText}`;
         break;
       }
@@ -245,10 +236,10 @@ async function handleGitHubWebhook(request, env) {
         const commentUrl = comment.html_url || issue.html_url;
         const body = escapeHtml(comment.body || "").trim();
 
-        message = `<a href="${repoUrl}">${repoFullName}</a> • Comment\n` +
-                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented <a href="${commentUrl}">${repoName}#${itemNumber} ${itemTitle}</a>\n` +
-                  `${itemType}: ${state}\n\n` +
-                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Comment</b> 💬\n` +
+                  `<a href="${commentAuthorUrl}"><b>@${commentAuthor}</b></a> commented on <a href="${commentUrl}"><b>${repoName}#${itemNumber} ${itemTitle}</b></a>\n` +
+                  `${itemType} State: <b>${state}</b>\n\n` +
+                  `<blockquote>${body.length > 2500 ? body.substring(0, 2500) + "..." : body}</blockquote>`;
         break;
       }
 
@@ -265,9 +256,9 @@ async function handleGitHubWebhook(request, env) {
         const commitUrl = `${repoUrl}/commit/${comment.commit_id}`;
         const body = escapeHtml(comment.body || "").trim();
 
-        message = `<a href="${repoUrl}">${repoFullName}</a> • Comment\n` +
-                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented on commit <a href="${commitUrl}"><code>${shortSha}</code></a>\n\n` +
-                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Commit Comment</b> 💬\n` +
+                  `<a href="${commentAuthorUrl}"><b>@${commentAuthor}</b></a> commented on commit <a href="${commitUrl}"><code>[${shortSha}]</code></a>\n\n` +
+                  `<blockquote>${body.length > 2500 ? body.substring(0, 2500) + "..." : body}</blockquote>`;
         break;
       }
 
@@ -288,10 +279,10 @@ async function handleGitHubWebhook(request, env) {
         const body = escapeHtml(comment.body || "").trim();
         const filePath = comment.path ? ` on <code>${escapeHtml(comment.path)}</code>` : "";
 
-        message = `<a href="${repoUrl}">${repoFullName}</a> • PR Review Comment\n` +
-                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented on <a href="${commentUrl}">${repoName}#${pr.number} ${escapeHtml(pr.title)}</a>${filePath}\n` +
-                  `Commit: <a href="${commitUrl}"><code>${shortSha}</code></a>\n\n` +
-                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>PR Review Comment</b> 💬\n` +
+                  `<a href="${commentAuthorUrl}"><b>@${commentAuthor}</b></a> commented on <a href="${commentUrl}"><b>${repoName}#${pr.number} ${escapeHtml(pr.title)}</b></a>${filePath}\n` +
+                  `Commit: <a href="${commitUrl}"><code>[${shortSha}]</code></a>\n\n` +
+                  `<blockquote>${body.length > 2500 ? body.substring(0, 2500) + "..." : body}</blockquote>`;
         break;
       }
 
@@ -314,9 +305,9 @@ async function handleGitHubWebhook(request, env) {
         if (reviewState === "APPROVED") stateEmoji = "✅";
         else if (reviewState === "CHANGES_REQUESTED") stateEmoji = "❌";
 
-        message = `<a href="${repoUrl}">${repoFullName}</a> • PR Review ${stateEmoji}\n` +
-                  `<a href="${reviewAuthorUrl}">${reviewAuthor}</a> submitted review for <a href="${reviewUrl}">${repoName}#${pr.number} ${escapeHtml(pr.title)}</a>: <b>${reviewState}</b>` +
-                  (body ? `\n\n${body.length > 2500 ? body.substring(0, 2500) + "..." : body}` : "");
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>PR Review</b> ${stateEmoji}\n` +
+                  `<a href="${reviewAuthorUrl}"><b>@${reviewAuthor}</b></a> submitted review for <a href="${reviewUrl}"><b>${repoName}#${pr.number} ${escapeHtml(pr.title)}</b></a>: <b>${reviewState}</b>` +
+                  (body ? `\n\n<blockquote>${body.length > 2500 ? body.substring(0, 2500) + "..." : body}</blockquote>` : "");
         break;
       }
 
@@ -339,9 +330,9 @@ async function handleGitHubWebhook(request, env) {
         let actionLabel = action === "created" ? "Started" : (action === "answered" ? "Answered" : action);
 
         message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Discussion</b> ${categoryEmoji}\n` +
-                  `<a href="${discAuthorUrl}">${discAuthor}</a> ${actionLabel} Discussion <a href="${discUrl}">#${discNumber} ${discTitle}</a>\n` +
+                  `<a href="${discAuthorUrl}"><b>@${discAuthor}</b></a> ${actionLabel} Discussion <a href="${discUrl}"><b>#${discNumber} ${discTitle}</b></a>\n` +
                   `Category: <b>${category}</b>` +
-                  (action === "created" && body ? `\n\n${body.length > 2500 ? body.substring(0, 2500) + "..." : body}` : "");
+                  (action === "created" && body ? `\n\n<blockquote>${body.length > 2500 ? body.substring(0, 2500) + "..." : body}</blockquote>` : "");
         break;
       }
 
@@ -360,9 +351,9 @@ async function handleGitHubWebhook(request, env) {
         const commentUrl = comment.html_url || disc.html_url;
         const body = escapeHtml(comment.body || "").trim();
 
-        message = `<a href="${repoUrl}">${repoFullName}</a> • Discussion Comment 💬\n` +
-                  `<a href="${commentAuthorUrl}">${commentAuthor}</a> Commented on <a href="${commentUrl}">#${discNumber} ${discTitle}</a>\n\n` +
-                  `${body.length > 2500 ? body.substring(0, 2500) + "..." : body}`;
+        message = `<a href="${repoUrl}">${repoFullName}</a> • <b>Discussion Comment</b> 💬\n` +
+                  `<a href="${commentAuthorUrl}"><b>@${commentAuthor}</b></a> commented on <a href="${commentUrl}"><b>#${discNumber} ${discTitle}</b></a>\n\n` +
+                  `<blockquote>${body.length > 2500 ? body.substring(0, 2500) + "..." : body}</blockquote>`;
         break;
       }
 
