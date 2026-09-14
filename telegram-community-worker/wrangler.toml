@@ -1,6 +1,7 @@
 name = "airbeats-telegram-bot"
 main = "worker.js"
 compatibility_date = "2024-09-01"
+account_id = "3fc8d733e2a595ffa62ee60be38ce538"
 
 # Automatically triggers daily leaderboard post at 12:00 UTC every day
 [triggers]
