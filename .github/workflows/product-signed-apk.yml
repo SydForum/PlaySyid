@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload Release APK to Telegram (Topic 8)
         env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '8836707725:AAFt08h_tOCnMbC06bcDRDiSuTUEJnkKsHo' }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: "-1004388752678"
           THREAD_ID: "8"
           VERSION: ${{ env.VERSION_NAME }}
