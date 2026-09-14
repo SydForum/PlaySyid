@@ -2284,13 +2284,32 @@ async function handleCrashReport(request, env) {
     if (payload.incident) {
       // Google Cloud Monitoring / Firebase Alerts Webhook
       const inc = payload.incident;
-      errorName = inc.policy_name || inc.condition_name || "Crashlytics Alert";
-      errorMessage = inc.summary || "New crash incident reported by Firebase";
-      issueUrl = inc.url || null;
-      if (inc.documentation?.content) {
-        rawStack = inc.documentation.content;
+      const isTest = inc.summary === "Test Incident" || (inc.documentation?.content === "TEST ALERT");
+      
+      if (isTest) {
+        errorName = "🧪 Webhook Connection Test";
+        errorMessage = "Google Cloud Monitoring webhook verified successfully!";
+        device = "Google Cloud Monitoring";
+        androidVersion = "Channel Verification";
+        version = "Verified & Active";
+        rawStack = "✅ Verification Successful!\n\nYour Webhook endpoint is live and verified.\nFirebase Crashlytics alerts will stream directly to this Telegram Topic 224.";
+      } else {
+        errorName = inc.policy_name || inc.condition_name || "Crashlytics Alert";
+        errorMessage = inc.summary || "New crash incident reported by Firebase";
+        device = inc.resource_name?.includes("example_resources") ? "AirBeats (Android)" : (inc.resource_name || "AirBeats (Android)");
+        if (inc.documentation?.content) {
+          rawStack = inc.documentation.content;
+        }
+        
+        // Extract version from summary if present (e.g. v6.2.0, 6.2.0 (Build 210))
+        const combined = `${errorMessage} ${rawStack}`;
+        const verMatch = combined.match(/v?(\d+\.\d+(?:\.\d+)?)(\s*\(?(?:Build\s*)?(\d+)\)?)?/i);
+        if (verMatch) {
+          version = verMatch[1];
+          if (verMatch[3]) versionCode = verMatch[3];
+        }
       }
-      device = inc.resource_name || "AirBeats (Android)";
+      issueUrl = inc.url || null;
     } else {
       // Direct / Extension Webhook
       errorName = payload.error || payload.title || "Fatal Exception";
