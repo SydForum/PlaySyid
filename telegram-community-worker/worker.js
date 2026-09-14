@@ -703,6 +703,14 @@ async function handleTelegramWebhook(request, env) {
       }
 
       return new Response("OK");
+    } else if (lowerText.startsWith("/action") || lowerText.startsWith("/actions") || lowerText.startsWith("/workflow") || lowerText.startsWith("/workflows")) {
+      if (senderId !== adminId) {
+        await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> This command is restricted to authorized administrators only. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
+        return new Response("OK");
+      }
+
+      await sendWorkflowsMenu(env, chatId, threadId);
+      return new Response("OK");
     } else if (lowerText === "/myid" || lowerText === "/id") {
       const senderId = message.from?.id || "unknown";
       await sendTelegramMessage(env, `🆔 <b>Your Telegram User ID:</b> <code>${senderId}</code>\n💬 <b>Chat ID:</b> <code>${chatId}</code>`, chatId, threadId);
@@ -716,6 +724,7 @@ async function handleTelegramWebhook(request, env) {
                       `🚫 <b>/close_pr &lt;pr#&gt;</b> - Close Pull Request (Admin)\n` +
                       `🐛 <b>/issue</b> - Interactive Issue management (Close, Comment, Reopen) (Admin)\n` +
                       `🐛 <b>/issue &lt;issue#&gt;</b> - Quick Issue action menu (Admin)\n` +
+                      `⚙️ <b>/action</b> - Interactive GitHub Actions management & Run (Admin)\n` +
                       `📢 <b>/notification</b> - Broadcast Push Notification to app users (Admin)\n` +
                       `🆔 <b>/myid</b> - Show your Telegram User ID\n` +
                       `ℹ️ <b>/help</b> - Show this message`;
@@ -866,6 +875,53 @@ async function handleTelegramCallbackQuery(query, env) {
     await editTelegramMessage(env, chatId, messageId, `❌ <i>Action cancelled for Issue #${issueNumber}.</i>`, {
       inline_keyboard: [[{ text: `🔙 Back to Issue #${issueNumber}`, callback_data: `issue_select:${issueNumber}` }]]
     });
+    return new Response("OK");
+  }
+
+  // 10. Actions: Back to Workflows List
+  if (data === "action_list") {
+    await answerCallbackQuery(botToken, queryId, "Loading workflows...");
+    await updateMessageToWorkflows(env, chatId, messageId);
+    return new Response("OK");
+  }
+
+  // 11. Actions: Workflow selected (show action options)
+  if (data.startsWith("action_select:")) {
+    const workflowId = data.split(":")[1];
+    await answerCallbackQuery(botToken, queryId, "Loading workflow...");
+    await updateMessageToWorkflowActions(env, chatId, messageId, workflowId);
+    return new Response("OK");
+  }
+
+  // 12. Actions: Run workflow (workflow_dispatch)
+  if (data.startsWith("action_run:")) {
+    const workflowId = data.split(":")[1];
+    const adminName = query.from?.first_name || "Admin";
+    await answerCallbackQuery(botToken, queryId, "Dispatching workflow on main branch...");
+    const result = await triggerWorkflowRun(env, workflowId, adminName);
+    await editTelegramMessage(env, chatId, messageId, result.text, {
+      inline_keyboard: [
+        [{ text: "📋 View Recent Runs", callback_data: `action_runs:${workflowId}`, style: "primary" }],
+        [{ text: "🔙 Back to Actions", callback_data: "action_list", style: "primary" }]
+      ]
+    });
+    return new Response("OK");
+  }
+
+  // 13. Actions: View recent runs
+  if (data.startsWith("action_runs:")) {
+    const workflowId = data.split(":")[1];
+    await answerCallbackQuery(botToken, queryId, "Fetching recent runs...");
+    await updateMessageToWorkflowRuns(env, chatId, messageId, workflowId);
+    return new Response("OK");
+  }
+
+  // 14. Actions: Toggle enable/disable
+  if (data.startsWith("action_toggle:")) {
+    const [, workflowId, toggleAction] = data.split(":");
+    await answerCallbackQuery(botToken, queryId, `${toggleAction === "enable" ? "Enabling" : "Disabling"} workflow...`);
+    await toggleWorkflowState(env, workflowId, toggleAction);
+    await updateMessageToWorkflowActions(env, chatId, messageId, workflowId);
     return new Response("OK");
   }
 
@@ -1468,6 +1524,307 @@ async function postGitHubIssueComment(env, issueNumber, commentText, adminName, 
            `🔗 <a href="https://github.com/${repo}/issues/${issueNumber}">View Issue on GitHub</a>`;
   } catch (err) {
     return `❌ <b>Error:</b> ${escapeHtml(err.message)}`;
+  }
+}
+
+/* -------------------------------------------------------------
+ * 2.4 GITHUB ACTIONS WORKFLOWS (INLINE BUTTONS & RUNNER)
+ * ----------------------------------------------------------- */
+function getWorkflowIcon(name, path) {
+  const lower = (name + " " + path).toLowerCase();
+  if (lower.includes("debug")) return "🛠️";
+  if (lower.includes("release") || lower.includes("product")) return "🚀";
+  if (lower.includes("nightly")) return "🌙";
+  if (lower.includes("trial")) return "🧪";
+  if (lower.includes("crowdin")) return "🌐";
+  if (lower.includes("pages")) return "📄";
+  return "⚙️";
+}
+
+async function sendWorkflowsMenu(env, chatId, threadId) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    await sendTelegramMessage(env, "⚠️ <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.", chatId, threadId);
+    return;
+  }
+
+  const repo = "d0x-dev/AirBeats";
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows?per_page=30`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await sendTelegramMessage(env, "⚠️ Failed to fetch workflows from GitHub.", chatId, threadId);
+      return;
+    }
+
+    const data = await res.json();
+    const workflows = data.workflows || [];
+    if (workflows.length === 0) {
+      await sendTelegramMessage(env, "ℹ️ <b>No GitHub Actions workflows found for AirBeats.</b>", chatId, threadId);
+      return;
+    }
+
+    const inlineKeyboard = workflows.map(wf => {
+      const icon = getWorkflowIcon(wf.name, wf.path);
+      const isActive = wf.state === "active";
+      const statusEmoji = isActive ? "🟢" : "🔴";
+      return [{
+        text: `${icon} ${wf.name} (${statusEmoji})`,
+        callback_data: `action_select:${wf.id}`,
+        style: isActive ? "primary" : "danger"
+      }];
+    });
+
+    inlineKeyboard.push([{ text: "🔄 Refresh Workflows", callback_data: "action_list", style: "primary" }]);
+
+    const text = `⚙️ <b>GitHub Actions Workflows</b> (<code>${repo}</code>)\n\n` +
+                 `Found <b>${workflows.length}</b> configured actions.\n` +
+                 `👇 Tap any workflow below to trigger a run, inspect recent builds, or manage:`;
+
+    await sendTelegramMessage(env, text, chatId, threadId, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await sendTelegramMessage(env, `❌ Error: ${escapeHtml(err.message)}`, chatId, threadId);
+  }
+}
+
+async function updateMessageToWorkflows(env, chatId, messageId) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows?per_page=30`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await editTelegramMessage(env, chatId, messageId, "⚠️ Failed to refresh workflows from GitHub.", null);
+      return;
+    }
+
+    const data = await res.json();
+    const workflows = data.workflows || [];
+    const inlineKeyboard = workflows.map(wf => {
+      const icon = getWorkflowIcon(wf.name, wf.path);
+      const isActive = wf.state === "active";
+      const statusEmoji = isActive ? "🟢" : "🔴";
+      return [{
+        text: `${icon} ${wf.name} (${statusEmoji})`,
+        callback_data: `action_select:${wf.id}`,
+        style: isActive ? "primary" : "danger"
+      }];
+    });
+
+    inlineKeyboard.push([{ text: "🔄 Refresh Workflows", callback_data: "action_list", style: "primary" }]);
+
+    const text = `⚙️ <b>GitHub Actions Workflows</b> (<code>${repo}</code>)\n\n` +
+                 `Found <b>${workflows.length}</b> configured actions.\n` +
+                 `👇 Tap any workflow below to trigger a run, inspect recent builds, or manage:`;
+
+    await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await editTelegramMessage(env, chatId, messageId, `❌ Error: ${escapeHtml(err.message)}`, null);
+  }
+}
+
+async function updateMessageToWorkflowActions(env, chatId, messageId, workflowId) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const wfRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflowId}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!wfRes.ok) {
+      await editTelegramMessage(env, chatId, messageId, `⚠️ Workflow #${workflowId} not found on GitHub.`, {
+        inline_keyboard: [[{ text: "🔙 Back to Workflows", callback_data: "action_list" }]]
+      });
+      return;
+    }
+
+    const wf = await wfRes.json();
+    const icon = getWorkflowIcon(wf.name, wf.path);
+    const isActive = wf.state === "active";
+
+    let lastRunText = "<i>No recent runs found</i>";
+    try {
+      const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflowId}/runs?per_page=1`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json",
+          "User-Agent": "AirBeats-Telegram-Bot/1.0"
+        }
+      });
+      if (runsRes.ok) {
+        const runsData = await runsRes.json();
+        const latest = runsData.workflow_runs?.[0];
+        if (latest) {
+          const runStatus = latest.conclusion || latest.status;
+          const statusBadge = runStatus === "success" ? "Passed ✅" :
+                              runStatus === "failure" ? "Failed ❌" :
+                              runStatus === "in_progress" ? "In Progress ⏳" :
+                              runStatus === "queued" ? "Queued 🕒" : runStatus;
+          const shortSha = latest.head_sha ? latest.head_sha.substring(0, 7) : "";
+          lastRunText = `<b>${statusBadge}</b> (<a href="${latest.html_url}">Run #${latest.run_number}</a>)\n` +
+                        `• Branch: <code>${escapeHtml(latest.head_branch || "main")}</code> • Commit: <code>[${shortSha}]</code>`;
+        }
+      }
+    } catch (_) {}
+
+    const text = `${icon} <b>Workflow: ${escapeHtml(wf.name)}</b>\n\n` +
+                 `📁 <b>Path:</b> <code>${escapeHtml(wf.path)}</code>\n` +
+                 `⚡ <b>State:</b> ${isActive ? "🟢 <b>Active</b>" : "🔴 <b>Disabled</b>"}\n` +
+                 `⏱️ <b>Last Run:</b> ${lastRunText}\n\n` +
+                 `👇 <i>Choose an action below:</i>`;
+
+    const inlineKeyboard = [
+      [{ text: "▶️ Run Workflow (main)", callback_data: `action_run:${wf.id}`, style: "success" }],
+      [{ text: "📋 View Recent Runs", callback_data: `action_runs:${wf.id}`, style: "primary" }],
+      [{ text: isActive ? "⏸️ Disable Workflow" : "▶️ Enable Workflow", callback_data: `action_toggle:${wf.id}:${isActive ? "disable" : "enable"}`, style: isActive ? "danger" : "success" }],
+      [{ text: "🔗 Open on GitHub", url: wf.html_url }],
+      [{ text: "🔙 Back to All Workflows", callback_data: "action_list", style: "primary" }]
+    ];
+
+    await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await editTelegramMessage(env, chatId, messageId, `❌ Error: ${escapeHtml(err.message)}`, {
+      inline_keyboard: [[{ text: "🔙 Back to Workflows", callback_data: "action_list" }]]
+    });
+  }
+}
+
+async function triggerWorkflowRun(env, workflowId, adminName) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const wfRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflowId}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+    const wf = wfRes.ok ? await wfRes.json() : { name: `Workflow #${workflowId}` };
+
+    const dispatchRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflowId}/dispatches`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ ref: "main" })
+    });
+
+    if (dispatchRes.status === 204 || dispatchRes.ok) {
+      return {
+        success: true,
+        text: `🚀 <b>Workflow Dispatched Successfully!</b>\n\n` +
+              `⚙️ <b>Workflow:</b> <b>${escapeHtml(wf.name)}</b>\n` +
+              `🌿 <b>Branch:</b> <code>main</code>\n` +
+              `👤 <b>Triggered By:</b> @${escapeHtml(adminName)}\n\n` +
+              `<i>Runner is spinning up. The bot will deliver real-time progress and build outputs right here!</i>`
+      };
+    } else {
+      const errData = await dispatchRes.text();
+      return {
+        success: false,
+        text: `❌ <b>Failed to dispatch workflow:</b>\n<blockquote>${escapeHtml(errData || "HTTP " + dispatchRes.status)}</blockquote>`
+      };
+    }
+  } catch (err) {
+    return {
+      success: false,
+      text: `❌ <b>Error:</b> ${escapeHtml(err.message)}`
+    };
+  }
+}
+
+async function updateMessageToWorkflowRuns(env, chatId, messageId, workflowId) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const [wfRes, runsRes] = await Promise.all([
+      fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflowId}`, {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json", "User-Agent": "AirBeats-Telegram-Bot/1.0" }
+      }),
+      fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflowId}/runs?per_page=5`, {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json", "User-Agent": "AirBeats-Telegram-Bot/1.0" }
+      })
+    ]);
+
+    const wf = wfRes.ok ? await wfRes.json() : { name: `Workflow #${workflowId}` };
+    const runsData = runsRes.ok ? await runsRes.json() : { workflow_runs: [] };
+    const runs = runsData.workflow_runs || [];
+
+    let runsList = "";
+    if (runs.length === 0) {
+      runsList = "<i>No execution history found for this workflow.</i>";
+    } else {
+      runsList = runs.map((r, i) => {
+        const st = r.conclusion || r.status;
+        const icon = st === "success" ? "✅" :
+                     st === "failure" ? "❌" :
+                     st === "in_progress" ? "⏳" :
+                     st === "queued" ? "🕒" : "⚠️";
+        const shortSha = r.head_sha ? r.head_sha.substring(0, 7) : "";
+        const title = escapeHtml(r.head_commit?.message?.split("\n")[0] || "Run");
+        return `${i + 1}. ${icon} <a href="${r.html_url}"><b>#${r.run_number}</b></a> • <b>${st.toUpperCase()}</b>\n` +
+               `   Branch: <code>${escapeHtml(r.head_branch || "main")}</code> • Commit: <code>[${shortSha}]</code> <i>${title}</i>`;
+      }).join("\n\n");
+    }
+
+    const text = `📋 <b>Recent Runs: ${escapeHtml(wf.name)}</b>\n\n` +
+                 `${runsList}\n\n` +
+                 `👇 <i>Choose an action below:</i>`;
+
+    const inlineKeyboard = [
+      [{ text: "▶️ Run Workflow Now", callback_data: `action_run:${workflowId}`, style: "success" }],
+      [{ text: "🔙 Back to Workflow Details", callback_data: `action_select:${workflowId}`, style: "primary" }],
+      [{ text: "🔙 All Workflows", callback_data: "action_list" }]
+    ];
+
+    await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await editTelegramMessage(env, chatId, messageId, `❌ Error: ${escapeHtml(err.message)}`, {
+      inline_keyboard: [[{ text: "🔙 Back to Workflow", callback_data: `action_select:${workflowId}` }]]
+    });
+  }
+}
+
+async function toggleWorkflowState(env, workflowId, action) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflowId}/${action}`, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+    return res.status === 204 || res.ok;
+  } catch (_) {
+    return false;
   }
 }
 
