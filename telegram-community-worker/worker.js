@@ -43,7 +43,7 @@ export default {
       if (request.method !== "POST") {
         return new Response("Method not allowed", { status: 405 });
       }
-      return handleTelegramWebhook(request, env);
+      return handleTelegramWebhook(request, env, ctx);
     }
 
     // Live Crash Reports Endpoint
@@ -479,7 +479,7 @@ async function handleGitHubWebhook(request, env) {
 /* -------------------------------------------------------------
  * 2. TELEGRAM INTERACTIVE COMMAND HANDLER (/stats, /latest, /merge)
  * ----------------------------------------------------------- */
-async function handleTelegramWebhook(request, env) {
+async function handleTelegramWebhook(request, env, ctx) {
   try {
     const update = await request.json();
 
@@ -493,8 +493,9 @@ async function handleTelegramWebhook(request, env) {
       return new Response("OK");
     }
 
+    const isPrivateChat = message.chat?.type === "private";
     const chatId = message.chat.id;
-    const threadId = message.message_thread_id || env.TELEGRAM_THREAD_ID;
+    const threadId = isPrivateChat ? null : (message.message_thread_id || env.TELEGRAM_THREAD_ID);
     const text = message.text.trim();
     const lowerText = text.toLowerCase();
     const senderId = String(message.from?.id || "");
@@ -550,7 +551,7 @@ async function handleTelegramWebhook(request, env) {
                          `📦 <b>Latest Releases:</b> https://github.com/d0x-dev/AirBeats/releases/latest\n` +
                          `💬 <b>Listen Together:</b> https://listentogether.airbeats.org`;
       await sendTelegramMessage(env, releaseMsg, chatId, threadId);
-    } else if (lowerText.startsWith("/merge") || lowerText.startsWith("/accept")) {
+    } else if (lowerText.startsWith("/merge") || lowerText.startsWith("/accept") || lowerText.startsWith("/prs") || lowerText.startsWith("/pr")) {
       const senderId = String(message.from?.id || "");
       const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
 
@@ -723,20 +724,90 @@ async function handleTelegramWebhook(request, env) {
       const senderId = message.from?.id || "unknown";
       await sendTelegramMessage(env, `🆔 <b>Your Telegram User ID:</b> <code>${senderId}</code>\n💬 <b>Chat ID:</b> <code>${chatId}</code>`, chatId, threadId);
     } else if (lowerText.startsWith("/help") || lowerText.startsWith("/start")) {
-      const helpMsg = `👋 <b>AirBeats Community Bot</b>\n\n` +
-                      `Commands:\n` +
-                      `📊 <b>/stats</b> - View Top 10 Listeners & Community Stats\n` +
-                      `🚀 <b>/latest</b> - Latest APK Download link\n` +
-                      `🔀 <b>/merge</b> - Interactive PR management with inline buttons (Admin)\n` +
-                      `🔀 <b>/merge &lt;pr#&gt;</b> - Quick PR action menu (Admin)\n` +
-                      `🚫 <b>/close_pr &lt;pr#&gt;</b> - Close Pull Request (Admin)\n` +
-                      `🐛 <b>/issue</b> - Interactive Issue management (Close, Comment, Reopen) (Admin)\n` +
-                      `🐛 <b>/issue &lt;issue#&gt;</b> - Quick Issue action menu (Admin)\n` +
-                      `⚙️ <b>/action</b> - Interactive GitHub Actions management & Run (Admin)\n` +
-                      `📢 <b>/notification</b> - Broadcast Push Notification to app users (Admin)\n` +
-                      `🆔 <b>/myid</b> - Show your Telegram User ID\n` +
-                      `ℹ️ <b>/help</b> - Show this message`;
-      await sendTelegramMessage(env, helpMsg, chatId, threadId);
+      if (senderId === adminId) {
+        const adminHelp = `👑 <b>AirBeats Admin Command Center</b> 🎧\n\n` +
+                          `Welcome back, Admin! You have full control over AirBeats via this direct message or the community topics.\n\n` +
+                          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                          `📋 <b>COMPLETE COMMAND DIRECTORY</b>\n` +
+                          `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                          `⚙️ <b>/action</b> — <i>GitHub Actions Manager</i>\n` +
+                          `• Lists all repository workflows with live state (🟢 Active / 🔴 Inactive)\n` +
+                          `• Inspects recent runs (✅ Success, ❌ Failure, ⏳ In Progress)\n` +
+                          `• Triggers new builds via <code>workflow_dispatch</code> (e.g. <i>Build Debug APK</i>)\n` +
+                          `• Enables or disables workflows with a single tap\n\n` +
+                          `🔀 <b>/merge</b> or <b>/prs</b> — <i>Pull Request Management</i>\n` +
+                          `• Lists all open PRs with author, branch, and colorful status buttons\n` +
+                          `• <code>/merge &lt;pr#&gt;</code> — Open detailed action menu for specific PR\n` +
+                          `• Supports <b>Merge</b>, <b>Squash</b>, <b>Rebase</b>, or <b>Close</b>\n` +
+                          `• <code>/close_pr &lt;pr#&gt;</code> — Close a PR directly\n\n` +
+                          `🐛 <b>/issue</b> or <b>/issues</b> — <i>Issue Management</i>\n` +
+                          `• Lists open/closed GitHub issues with author & labels\n` +
+                          `• <code>/issue &lt;issue#&gt;</code> — Open issue action menu\n` +
+                          `• Supports interactive comments, close with reason, or reopen\n\n` +
+                          `📢 <b>/notification</b> — <i>FCM Push Broadcast</i>\n` +
+                          `• Sends live push notifications to AirBeats app users\n` +
+                          `• <b>Format:</b> <code>/notification &lt;title&gt;|&lt;body&gt;|&lt;topic&gt;|[image_url]</code>\n` +
+                          `• <b>Topics:</b> <code>all_users</code> (all app installs) or version tag (e.g. <code>6.2.0</code>)\n` +
+                          `• <i>Example:</i> <code>/notification AirBeats Update|New v6.2.0 released!|all_users</code>\n\n` +
+                          `📊 <b>/stats</b> or <b>/top</b> — <i>Global Leaderboard</i>\n` +
+                          `• Displays top 10 users ranked by listening time with badges (🥇, 🥈, 🥉)\n\n` +
+                          `📦 <b>/latest</b> or <b>/download</b> — <i>App Releases & Links</i>\n` +
+                          `• Links to official website, GitHub APK releases & Listen Together\n\n` +
+                          `🆔 <b>/myid</b> — <i>User & Chat Information</i>\n` +
+                          `• Displays your Telegram User ID & current Chat ID\n\n` +
+                          `💥 <b>Crash Reporting & Telegra.ph:</b>\n` +
+                          `• Fatal crashes logged by Firebase Crashlytics are instantly sent to <b>Topic 224</b> with full stack traces published on <b>Telegra.ph</b>.\n\n` +
+                          `👇 <i>Tap a button below to launch any tool instantly:</i>`;
+
+        const inlineKeyboard = [
+          [
+            { text: "⚙️ GitHub Actions (/action)", callback_data: "start_action" },
+            { text: "🔀 Pull Requests (/merge)", callback_data: "start_prs" }
+          ],
+          [
+            { text: "🐛 GitHub Issues (/issue)", callback_data: "start_issues" },
+            { text: "📢 Push Notification Guide", callback_data: "start_notify_info" }
+          ],
+          [
+            { text: "📊 Top 10 Leaderboard", callback_data: "start_stats" },
+            { text: "📦 Latest APK Release", url: "https://github.com/d0x-dev/AirBeats/releases/latest" }
+          ]
+        ];
+
+        await sendTelegramMessage(env, adminHelp, chatId, threadId, { inline_keyboard: inlineKeyboard });
+        if (ctx && typeof ctx.waitUntil === "function") {
+          ctx.waitUntil(registerBotCommands(env));
+        }
+        return new Response("OK");
+      } else {
+        const publicHelp = `🎵 <b>Welcome to AirBeats Bot!</b> 🎧\n\n` +
+                           `AirBeats is a free, beautiful & open-source music streaming app.\n\n` +
+                           `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                           `📋 <b>AVAILABLE COMMANDS</b>\n` +
+                           `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                           `📊 <b>/stats</b> or <b>/top</b> — Top 10 global listeners leaderboard\n` +
+                           `📦 <b>/latest</b> — Latest APK download & official app links\n` +
+                           `🆔 <b>/myid</b> — Show your Telegram User ID\n` +
+                           `ℹ️ <b>/help</b> — Display this help menu\n\n` +
+                           `🔗 <b>Official Links:</b>\n` +
+                           `• Website: https://airbeats.org\n` +
+                           `• GitHub: https://github.com/d0x-dev/AirBeats\n` +
+                           `• Listen Together: https://listentogether.airbeats.org`;
+
+        const publicKeyboard = [
+          [
+            { text: "📊 Top 10 Leaderboard", callback_data: "start_stats" },
+            { text: "📦 Download Latest APK", url: "https://github.com/d0x-dev/AirBeats/releases/latest" }
+          ],
+          [
+            { text: "🌐 Official Website", url: "https://airbeats.org" },
+            { text: "⭐ Star on GitHub", url: "https://github.com/d0x-dev/AirBeats" }
+          ]
+        ];
+
+        await sendTelegramMessage(env, publicHelp, chatId, threadId, { inline_keyboard: publicKeyboard });
+        return new Response("OK");
+      }
     }
 
     return new Response("OK");
@@ -757,9 +828,55 @@ async function handleTelegramCallbackQuery(query, env) {
   const messageId = query.message?.message_id;
   const botToken = env.TELEGRAM_BOT_TOKEN;
 
-  // Security check: only admin can use these buttons
+  // Allow public users to view leaderboard via start menu button
+  if (data === "start_stats") {
+    await answerCallbackQuery(botToken, queryId, "Loading Leaderboard...");
+    const statsText = await getFormattedLeaderboard(env);
+    await sendTelegramMessage(env, statsText, chatId, null);
+    return new Response("OK");
+  }
+
+  // Security check: only admin can use administrative buttons
   if (fromId !== adminId) {
     await answerCallbackQuery(botToken, queryId, "⛔ Access Denied: Admin only!", true);
+    return new Response("OK");
+  }
+
+  // 0. Start Menu Quick Navigation
+  if (data === "start_action") {
+    await answerCallbackQuery(botToken, queryId, "Opening GitHub Actions...");
+    await sendWorkflowsMenu(env, chatId, null);
+    return new Response("OK");
+  }
+
+  if (data === "start_prs") {
+    await answerCallbackQuery(botToken, queryId, "Opening Pull Requests...");
+    await sendOpenPullRequestsMenu(env, chatId, null);
+    return new Response("OK");
+  }
+
+  if (data === "start_issues") {
+    await answerCallbackQuery(botToken, queryId, "Opening GitHub Issues...");
+    await sendOpenIssuesMenu(env, chatId, null);
+    return new Response("OK");
+  }
+
+  if (data === "start_notify_info") {
+    await answerCallbackQuery(botToken, queryId);
+    const notifyInfo = `📢 <b>Broadcast Push Notification Guide (/notification)</b>\n\n` +
+                       `Send push notifications directly to AirBeats Android users.\n\n` +
+                       `<b>Command Format:</b>\n` +
+                       `<code>/notification &lt;title&gt;|&lt;body&gt;|&lt;topic&gt;|[image_url]</code>\n\n` +
+                       `<b>Parameters:</b>\n` +
+                       `1. <b>Title:</b> Notification headline\n` +
+                       `2. <b>Body:</b> Notification message body\n` +
+                       `3. <b>Topic:</b> Target audience:\n` +
+                       `   • <code>all_users</code> — All app users\n` +
+                       `   • <code>6.2.0</code> — Specific app version users\n` +
+                       `4. <b>Image URL:</b> (Optional) Big picture banner URL\n\n` +
+                       `<b>Example:</b>\n` +
+                       `<code>/notification New Release 🚀|AirBeats 6.2.0 is now available!|all_users</code>`;
+    await sendTelegramMessage(env, notifyInfo, chatId, null);
     return new Response("OK");
   }
 
@@ -1911,7 +2028,8 @@ async function postDailyStats(env) {
 async function sendTelegramMessage(env, text, specificChatId = null, specificThreadId = null, replyMarkup = null) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const chatId = specificChatId || env.TELEGRAM_CHAT_ID;
-  const threadId = specificThreadId !== null && specificThreadId !== undefined ? specificThreadId : env.TELEGRAM_THREAD_ID;
+  const isPrivateChat = String(chatId).charAt(0) !== "-";
+  const threadId = isPrivateChat ? null : (specificThreadId !== null && specificThreadId !== undefined ? specificThreadId : env.TELEGRAM_THREAD_ID);
 
   if (!botToken || !chatId) {
     console.warn("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing");
@@ -1929,7 +2047,7 @@ async function sendTelegramMessage(env, text, specificChatId = null, specificThr
         parse_mode: "HTML",
         disable_web_page_preview: true
       };
-      if (threadId) payload.message_thread_id = parseInt(threadId, 10);
+      if (threadId && !isPrivateChat) payload.message_thread_id = parseInt(threadId, 10);
       if (replyMarkup) payload.reply_markup = replyMarkup;
       const res = await fetch(endpoint, {
         method: "POST",
@@ -1957,7 +2075,7 @@ async function sendTelegramMessage(env, text, specificChatId = null, specificThr
         parse_mode: "HTML",
         disable_web_page_preview: true
       };
-      if (threadId) payload.message_thread_id = parseInt(threadId, 10);
+      if (threadId && !isPrivateChat) payload.message_thread_id = parseInt(threadId, 10);
 
       await fetch(endpoint, {
         method: "POST",
@@ -1969,6 +2087,31 @@ async function sendTelegramMessage(env, text, specificChatId = null, specificThr
   } catch (err) {
     console.error("Failed to send Telegram message:", err);
     return false;
+  }
+}
+
+async function registerBotCommands(env) {
+  const botToken = env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) return;
+  try {
+    const commands = [
+      { command: "start", description: "Master Control Panel & Command Menu" },
+      { command: "help", description: "Full Command Guide & Descriptions" },
+      { command: "action", description: "Manage & Run GitHub Actions (Admin)" },
+      { command: "merge", description: "Manage Pull Requests & Merge (Admin)" },
+      { command: "issue", description: "Manage GitHub Issues & Comments (Admin)" },
+      { command: "notification", description: "Send FCM Push Notification (Admin)" },
+      { command: "stats", description: "Top 10 Global Leaderboard" },
+      { command: "latest", description: "Latest APK Release & Downloads" },
+      { command: "myid", description: "Show Telegram User ID & Chat ID" }
+    ];
+    await fetch(`https://api.telegram.org/bot${botToken}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commands })
+    });
+  } catch (err) {
+    console.warn("Failed to set bot commands:", err);
   }
 }
 
