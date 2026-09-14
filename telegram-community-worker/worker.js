@@ -624,6 +624,85 @@ async function handleTelegramWebhook(request, env) {
 
       await sendOpenIssuesMenu(env, chatId, threadId);
       return new Response("OK");
+    } else if (lowerText.startsWith("/notification") || lowerText.startsWith("/notify")) {
+      if (senderId !== adminId) {
+        await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> This command is restricted to authorized administrators only. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
+        return new Response("OK");
+      }
+
+      // Syntax help message displayed on empty/invalid arguments
+      const formatMsg = `📢 <b>AirBeats App Push Notification</b>\n\n` +
+                        `<b>Usage Format:</b>\n` +
+                        `<code>/notification &lt;title&gt;|&lt;body&gt;|&lt;topic&gt;|&lt;image_url&gt;</code>\n\n` +
+                        `<b>Parameters:</b>\n` +
+                        `• <b>Title</b> <i>(Mandatory)</i>: Headline of notification\n` +
+                        `• <b>Body</b> <i>(Mandatory)</i>: Detailed message text\n` +
+                        `• <b>Topic</b> <i>(Mandatory)</i>: Target FCM topic (e.g. <code>all_users</code>, <code>6.2.0</code>)\n` +
+                        `• <b>Image Link</b> <i>(Optional)</i>: Public direct URL to image banner\n\n` +
+                        `<b>Examples:</b>\n` +
+                        `• <code>/notification AirBeats v6.2.0 Released!|Check out the brand new lyrics engine and performance boosts.|all_users</code>\n\n` +
+                        `• <code>/notification Weekend Chill|Stream curated tracks now playing live.|all_users|https://airbeats.org/banner.png</code>\n\n` +
+                        `• <code>/notification Hotfix Available|Please update your app to resolve playback errors.|6.2.0</code>\n\n` +
+                        `🔒 <i>Note: This command is restricted to administrators only.</i>`;
+
+      // Extract raw argument text after command name (e.g. /notification ...)
+      const cmdMatch = text.match(/^\/(?:notification|notify)(?:@\w+)?(?:\s+([\s\S]+))?$/i);
+      const rawArgs = cmdMatch && cmdMatch[1] ? cmdMatch[1].trim() : "";
+
+      if (!rawArgs) {
+        await sendTelegramMessage(env, formatMsg, chatId, threadId);
+        return new Response("OK");
+      }
+
+      const parts = rawArgs.split("|").map(p => p.trim());
+
+      // First 3 are mandatory: title, body, topic
+      if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
+        await sendTelegramMessage(env, `⚠️ <b>Invalid Format!</b> First 3 fields (Title, Body, Topic) separated by <code>|</code> are mandatory.\n\n` + formatMsg, chatId, threadId);
+        return new Response("OK");
+      }
+
+      const [title, body, rawTopic, imageUrl] = parts;
+      const cleanTopic = rawTopic.replace(/^\/topics\//i, "").trim();
+
+      if (!cleanTopic) {
+        await sendTelegramMessage(env, `⚠️ <b>Invalid Topic!</b> Please specify a valid topic name (e.g. <code>all_users</code> or version <code>6.2.0</code>).`, chatId, threadId);
+        return new Response("OK");
+      }
+
+      if (!env.FIREBASE_SERVICE_ACCOUNT) {
+        await sendTelegramMessage(env, `❌ <b>Firebase Credentials Missing:</b> <code>FIREBASE_SERVICE_ACCOUNT</code> secret is not configured in Cloudflare Worker.`, chatId, threadId);
+        return new Response("OK");
+      }
+
+      try {
+        const result = await sendFcmPushNotification(env, {
+          title,
+          body,
+          topic: cleanTopic,
+          imageUrl: imageUrl || null
+        });
+
+        const msgId = result.name || "Delivered";
+        let successMsg = `📢 <b>Push Notification Broadcast Sent!</b>\n\n` +
+                         `🏷️ <b>Title:</b> <code>${escapeHtml(title)}</code>\n` +
+                         `📝 <b>Message:</b> <code>${escapeHtml(body)}</code>\n` +
+                         `🎯 <b>Target Topic:</b> <code>/topics/${escapeHtml(cleanTopic)}</code>\n`;
+
+        if (imageUrl) {
+          successMsg += `🖼️ <b>Banner Image:</b> <a href="${escapeHtml(imageUrl)}">View Image</a>\n`;
+        }
+
+        successMsg += `\n🆔 <b>FCM Message ID:</b> <code>${escapeHtml(msgId)}</code>\n` +
+                      `📱 <i>Successfully dispatched to all active devices on topic <code>${escapeHtml(cleanTopic)}</code>.</i>`;
+
+        await sendTelegramMessage(env, successMsg, chatId, threadId);
+      } catch (fcmErr) {
+        console.error("FCM dispatch error:", fcmErr);
+        await sendTelegramMessage(env, `❌ <b>FCM Dispatch Error:</b>\n<blockquote>${escapeHtml(fcmErr.message)}</blockquote>`, chatId, threadId);
+      }
+
+      return new Response("OK");
     } else if (lowerText === "/myid" || lowerText === "/id") {
       const senderId = message.from?.id || "unknown";
       await sendTelegramMessage(env, `🆔 <b>Your Telegram User ID:</b> <code>${senderId}</code>\n💬 <b>Chat ID:</b> <code>${chatId}</code>`, chatId, threadId);
@@ -637,6 +716,7 @@ async function handleTelegramWebhook(request, env) {
                       `🚫 <b>/close_pr &lt;pr#&gt;</b> - Close Pull Request (Admin)\n` +
                       `🐛 <b>/issue</b> - Interactive Issue management (Close, Comment, Reopen) (Admin)\n` +
                       `🐛 <b>/issue &lt;issue#&gt;</b> - Quick Issue action menu (Admin)\n` +
+                      `📢 <b>/notification</b> - Broadcast Push Notification to app users (Admin)\n` +
                       `🆔 <b>/myid</b> - Show your Telegram User ID\n` +
                       `ℹ️ <b>/help</b> - Show this message`;
       await sendTelegramMessage(env, helpMsg, chatId, threadId);
@@ -1593,3 +1673,144 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+/* -------------------------------------------------------------
+ * 7. FIREBASE CLOUD MESSAGING (FCM HTTP v1) HELPERS
+ * ----------------------------------------------------------- */
+
+function b64Url(input) {
+  let b64;
+  if (typeof input === "string") {
+    b64 = btoa(input);
+  } else {
+    const bytes = new Uint8Array(input);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    b64 = btoa(binary);
+  }
+  return b64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+/**
+ * Mints an RS256 signed JWT assertion and exchanges it for a Google OAuth2 access token
+ * with the 'https://www.googleapis.com/auth/firebase.messaging' scope.
+ */
+async function getGoogleOAuth2AccessToken(serviceAccountJson) {
+  const sa = typeof serviceAccountJson === "string" ? JSON.parse(serviceAccountJson) : serviceAccountJson;
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const payload = {
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600,
+    iat: now
+  };
+
+  const encodedHeader = b64Url(JSON.stringify(header));
+  const encodedPayload = b64Url(JSON.stringify(payload));
+  const dataToSign = `${encodedHeader}.${encodedPayload}`;
+
+  // Clean PEM and convert to ArrayBuffer
+  const pem = sa.private_key
+    .replace(/-----BEGIN [A-Z ]+-----/g, "")
+    .replace(/-----END [A-Z ]+-----/g, "")
+    .replace(/\s+/g, "");
+  const binary = atob(pem);
+  const keyBytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    keyBytes[i] = binary.charCodeAt(i);
+  }
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8",
+    keyBytes.buffer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const encoder = new TextEncoder();
+  const signatureBuffer = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    cryptoKey,
+    encoder.encode(dataToSign)
+  );
+
+  const signature = b64Url(signatureBuffer);
+  const jwt = `${dataToSign}.${signature}`;
+
+  const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt
+    })
+  });
+
+  const tokenData = await tokenResp.json();
+  if (!tokenData.access_token) {
+    throw new Error(`Google OAuth2 Error: ${JSON.stringify(tokenData)}`);
+  }
+
+  return {
+    accessToken: tokenData.access_token,
+    projectId: sa.project_id
+  };
+}
+
+/**
+ * Dispatches a push notification to a topic via Firebase Cloud Messaging HTTP v1 API.
+ */
+async function sendFcmPushNotification(env, { title, body, topic, imageUrl }) {
+  const { accessToken, projectId } = await getGoogleOAuth2AccessToken(env.FIREBASE_SERVICE_ACCOUNT);
+
+  const cleanTopic = topic.replace(/^\/topics\//i, "").trim();
+
+  const messagePayload = {
+    message: {
+      topic: cleanTopic,
+      notification: {
+        title: title,
+        body: body,
+        ...(imageUrl ? { image: imageUrl } : {})
+      },
+      data: {
+        title: title,
+        body: body,
+        topic: cleanTopic,
+        ...(imageUrl ? { image: imageUrl } : {})
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channel_id: "airbeats_channel",
+          ...(imageUrl ? { image: imageUrl } : {}),
+          default_sound: true,
+          default_vibrate_timings: true
+        }
+      }
+    }
+  };
+
+  const fcmResp = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(messagePayload)
+  });
+
+  const fcmData = await fcmResp.json();
+  if (!fcmResp.ok) {
+    const errMsg = fcmData.error?.message || JSON.stringify(fcmData);
+    throw new Error(errMsg);
+  }
+
+  return fcmData;
+}
+
