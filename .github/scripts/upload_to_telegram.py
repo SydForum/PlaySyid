@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import html
 import requests
@@ -28,9 +28,15 @@ def main():
     if not escaped_changelog:
         escaped_changelog = "• Routine optimizations and bug fixes."
 
-    icon = "🌙" if "nightly" in release_type.lower() else "🚀"
+    if "nightly" in release_type.lower():
+        icon = "🌙"
+    elif "debug" in release_type.lower():
+        icon = "🛠️"
+    else:
+        icon = "🚀"
     header = f"{icon} <b>AirBeats {release_type} v{version}</b>\n\n"
-    footer = f"\n\n📦 <i>Signed APK attached</i>"
+    apk_desc = "Debug APK attached" if "debug" in release_type.lower() else "Signed APK attached"
+    footer = f"\n\n📦 <i>{apk_desc}</i>"
     if release_url:
         footer += f"\n🔗 <a href=\"{release_url}\">View on GitHub</a>"
 
@@ -40,7 +46,7 @@ def main():
     if not send_separate_changelog:
         caption = caption_candidate
     else:
-        caption = f"{header}📦 <i>Signed APK attached</i>\n\n📝 <i>(Detailed changelog posted below 👇)</i>"
+        caption = f"{header}📦 <i>{apk_desc}</i>\n\n📝 <i>(Detailed changelog posted below 👇)</i>"
         if release_url:
             caption += f"\n🔗 <a href=\"{release_url}\">View on GitHub</a>"
 
