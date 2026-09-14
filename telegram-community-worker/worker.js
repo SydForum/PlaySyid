@@ -760,18 +760,12 @@ async function handleTelegramWebhook(request, env, ctx) {
                           `👇 <i>Tap a button below to launch any tool instantly:</i>`;
 
         const inlineKeyboard = [
-          [
-            { text: "⚙️ GitHub Actions (/action)", callback_data: "start_action" },
-            { text: "🔀 Pull Requests (/merge)", callback_data: "start_prs" }
-          ],
-          [
-            { text: "🐛 GitHub Issues (/issue)", callback_data: "start_issues" },
-            { text: "📢 Push Notification Guide", callback_data: "start_notify_info" }
-          ],
-          [
-            { text: "📊 Top 10 Leaderboard", callback_data: "start_stats" },
-            { text: "📦 Latest APK Release", url: "https://github.com/d0x-dev/AirBeats/releases/latest" }
-          ]
+          [{ text: "⚙️ GitHub Actions (/action)", callback_data: "start_action" }],
+          [{ text: "🔀 Pull Requests (/merge)", callback_data: "start_prs" }],
+          [{ text: "🐛 GitHub Issues (/issue)", callback_data: "start_issues" }],
+          [{ text: "📢 Push Notification Guide", callback_data: "start_notify_info" }],
+          [{ text: "📊 Top 10 Leaderboard", callback_data: "start_stats" }],
+          [{ text: "📦 Latest APK Release", url: "https://github.com/d0x-dev/AirBeats/releases/latest" }]
         ];
 
         await sendTelegramMessage(env, adminHelp, chatId, threadId, { inline_keyboard: inlineKeyboard });
@@ -795,14 +789,10 @@ async function handleTelegramWebhook(request, env, ctx) {
                            `• Listen Together: https://listentogether.airbeats.org`;
 
         const publicKeyboard = [
-          [
-            { text: "📊 Top 10 Leaderboard", callback_data: "start_stats" },
-            { text: "📦 Download Latest APK", url: "https://github.com/d0x-dev/AirBeats/releases/latest" }
-          ],
-          [
-            { text: "🌐 Official Website", url: "https://airbeats.org" },
-            { text: "⭐ Star on GitHub", url: "https://github.com/d0x-dev/AirBeats" }
-          ]
+          [{ text: "📊 Top 10 Leaderboard", callback_data: "start_stats" }],
+          [{ text: "📦 Download Latest APK", url: "https://github.com/d0x-dev/AirBeats/releases/latest" }],
+          [{ text: "🌐 Official Website", url: "https://airbeats.org" }],
+          [{ text: "⭐ Star on GitHub", url: "https://github.com/d0x-dev/AirBeats" }]
         ];
 
         await sendTelegramMessage(env, publicHelp, chatId, threadId, { inline_keyboard: publicKeyboard });
