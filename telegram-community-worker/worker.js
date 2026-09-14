@@ -518,12 +518,13 @@ async function sendOpenPullRequestsMenu(env, chatId, threadId) {
     const inlineKeyboard = prs.map(pr => {
       const title = pr.title.length > 36 ? pr.title.substring(0, 36) + "..." : pr.title;
       return [{
-        text: `#${pr.number}: ${title}`,
-        callback_data: `pr_select:${pr.number}`
+        text: `🔀 #${pr.number}: ${title}`,
+        callback_data: `pr_select:${pr.number}`,
+        style: "primary"
       }];
     });
 
-    inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "pr_list" }]);
+    inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "pr_list", style: "primary" }]);
 
     const text = `🔀 <b>Open Pull Requests (${prs.length})</b>\n\n` +
                  `Tap a Pull Request below to manage it:`;
@@ -568,14 +569,10 @@ async function sendPullRequestActionMenu(env, chatId, threadId, prNumber) {
                  `👇 <i>Choose an action to perform:</i>`;
 
     const inlineKeyboard = [
-      [
-        { text: "🟢 Merge PR (Commit)", callback_data: `pr_action:merge:${prNumber}` },
-        { text: "🟣 Squash & Merge", callback_data: `pr_action:squash:${prNumber}` }
-      ],
-      [
-        { text: "🔴 Close PR", callback_data: `pr_action:close:${prNumber}` },
-        { text: "🔙 Back to PR List", callback_data: "pr_list" }
-      ]
+      [{ text: "🟢 Merge PR (Standard Merge)", callback_data: `pr_action:merge:${prNumber}`, style: "success" }],
+      [{ text: "🟣 Squash & Merge", callback_data: `pr_action:squash:${prNumber}`, style: "primary" }],
+      [{ text: "🔴 Close Pull Request", callback_data: `pr_action:close:${prNumber}`, style: "danger" }],
+      [{ text: "🔙 Back to PR List", callback_data: "pr_list" }]
     ];
 
     await sendTelegramMessage(env, text, chatId, threadId, { inline_keyboard: inlineKeyboard });
@@ -606,12 +603,13 @@ async function updateMessageToPRList(env, chatId, messageId) {
     const inlineKeyboard = prs.map(pr => {
       const title = pr.title.length > 36 ? pr.title.substring(0, 36) + "..." : pr.title;
       return [{
-        text: `#${pr.number}: ${title}`,
-        callback_data: `pr_select:${pr.number}`
+        text: `🔀 #${pr.number}: ${title}`,
+        callback_data: `pr_select:${pr.number}`,
+        style: "primary"
       }];
     });
 
-    inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "pr_list" }]);
+    inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "pr_list", style: "primary" }]);
 
     const text = `🔀 <b>Open Pull Requests (${prs.length})</b>\n\n` +
                  `Tap a Pull Request below to manage it:`;
@@ -658,14 +656,10 @@ async function updateMessageToPRActions(env, chatId, messageId, prNumber) {
                  `👇 <i>Choose an action to perform:</i>`;
 
     const inlineKeyboard = [
-      [
-        { text: "🟢 Merge PR (Commit)", callback_data: `pr_action:merge:${prNumber}` },
-        { text: "🟣 Squash & Merge", callback_data: `pr_action:squash:${prNumber}` }
-      ],
-      [
-        { text: "🔴 Close PR", callback_data: `pr_action:close:${prNumber}` },
-        { text: "🔙 Back to PR List", callback_data: "pr_list" }
-      ]
+      [{ text: "🟢 Merge PR (Standard Merge)", callback_data: `pr_action:merge:${prNumber}`, style: "success" }],
+      [{ text: "🟣 Squash & Merge", callback_data: `pr_action:squash:${prNumber}`, style: "primary" }],
+      [{ text: "🔴 Close Pull Request", callback_data: `pr_action:close:${prNumber}`, style: "danger" }],
+      [{ text: "🔙 Back to PR List", callback_data: "pr_list" }]
     ];
 
     await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
