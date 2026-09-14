@@ -124,22 +124,11 @@ jobs:
           THREAD_ID: "9"
           VERSION: ${{ env.NEW_VERSION_NAME }}
           APK_FILE: "Airbeats-v${{ env.NEW_VERSION_NAME }}-Nightly.apk"
+          RELEASE_TYPE: "Nightly Build"
+          RELEASE_URL: "https://github.com/d0x-dev/AirBeats/releases/tag/v${{ env.NEW_VERSION_NAME }}-nightly"
         run: |
-          CAPTION="🌙 <b>AirBeats Nightly Build v${VERSION}</b>
-
-📝 <b>Changelog:</b>
-${CHANGELOG}
-
-📦 <i>Fresh nightly build from main branch</i>
-🔗 <a href=\"https://github.com/d0x-dev/AirBeats/releases/tag/v${VERSION}-nightly\">GitHub Release Page</a>"
-
-          echo "Uploading ${APK_FILE} to Telegram chat ${CHAT_ID}, topic ${THREAD_ID}..."
-          curl --retry 3 --max-time 300 -s -S -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-            -F chat_id="${CHAT_ID}" \
-            -F message_thread_id="${THREAD_ID}" \
-            -F document=@"${APK_FILE}" \
-            -F caption="${CAPTION}" \
-            -F parse_mode="HTML"
+          pip install requests
+          python3 .github/scripts/upload_to_telegram.py
 
 
 

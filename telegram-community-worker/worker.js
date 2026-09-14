@@ -217,14 +217,14 @@ async function handleGitHubWebhook(request, env) {
           const url = rel.html_url;
           const body = rel.body ? escapeHtml(rel.body) : "";
           const isNightly = rel.prerelease || tagName.toLowerCase().includes("nightly");
-          const targetThreadId = isNightly ? 9 : (env.TELEGRAM_THREAD_ID || 3);
+          const targetThreadId = isNightly ? 9 : 8;
 
           let changelogText = "";
           if (body) {
-            changelogText = `\n\n📝 <b>Changelog:</b>\n${body.length > 500 ? body.substring(0, 500) + "..." : body}`;
+            changelogText = `\n\n📝 <b>Changelog:</b>\n${body.length > 2500 ? body.substring(0, 2500) + "\n<i>...(Changelog continued in release notes)</i>" : body}`;
           }
 
-          message = `🚀 <b>New AirBeats ${isNightly ? "Nightly Build" : "Release"}: ${name}!</b>\n\n` +
+          message = `🚀 <b>New AirBeats ${isNightly ? "Nightly Build" : "Official Release"}: ${name}!</b>\n\n` +
                     `🏷️ <b>Tag:</b> <code>${tagName}</code>${changelogText}\n\n` +
                     `📥 <a href="${url}">Download APK & View Release</a>`;
 
@@ -376,23 +376,52 @@ async function sendTelegramMessage(env, text, specificChatId = null, specificThr
   }
 
   const endpoint = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  const MAX_CHUNK = 4000;
+
   try {
-    const payload = {
-      chat_id: chatId,
-      text: text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true
-    };
-    if (threadId) {
-      payload.message_thread_id = parseInt(threadId, 10);
+    if (text.length <= MAX_CHUNK) {
+      const payload = {
+        chat_id: chatId,
+        text: text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true
+      };
+      if (threadId) payload.message_thread_id = parseInt(threadId, 10);
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      return res.ok;
     }
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    return res.ok;
+    // Split long messages into multiple chunks
+    let remaining = text;
+    while (remaining.length > 0) {
+      let chunk = remaining.substring(0, MAX_CHUNK);
+      if (remaining.length > MAX_CHUNK) {
+        const lastNewline = chunk.lastIndexOf("\n");
+        if (lastNewline > 2000) {
+          chunk = chunk.substring(0, lastNewline);
+        }
+      }
+      remaining = remaining.substring(chunk.length);
+
+      const payload = {
+        chat_id: chatId,
+        text: chunk,
+        parse_mode: "HTML",
+        disable_web_page_preview: true
+      };
+      if (threadId) payload.message_thread_id = parseInt(threadId, 10);
+
+      await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    }
+    return true;
   } catch (err) {
     console.error("Failed to send Telegram message:", err);
     return false;
