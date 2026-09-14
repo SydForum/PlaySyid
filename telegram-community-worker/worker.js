@@ -318,11 +318,17 @@ async function handleGitHubWebhook(request, env) {
 }
 
 /* -------------------------------------------------------------
- * 2. TELEGRAM INTERACTIVE COMMAND HANDLER (/stats, /latest)
+ * 2. TELEGRAM INTERACTIVE COMMAND HANDLER (/stats, /latest, /merge)
  * ----------------------------------------------------------- */
 async function handleTelegramWebhook(request, env) {
   try {
     const update = await request.json();
+
+    // 1. Handle Inline Button Callback Queries
+    if (update.callback_query) {
+      return handleTelegramCallbackQuery(update.callback_query, env);
+    }
+
     const message = update.message;
     if (!message || !message.text) {
       return new Response("OK");
@@ -330,28 +336,30 @@ async function handleTelegramWebhook(request, env) {
 
     const chatId = message.chat.id;
     const threadId = message.message_thread_id || env.TELEGRAM_THREAD_ID;
-    const text = message.text.trim().toLowerCase();
+    const text = message.text.trim();
+    const lowerText = text.toLowerCase();
 
-    if (text.startsWith("/stats") || text.startsWith("/top") || text.startsWith("/leaderboard")) {
+    if (lowerText.startsWith("/stats") || lowerText.startsWith("/top") || lowerText.startsWith("/leaderboard")) {
       const statsText = await getFormattedLeaderboard(env);
       await sendTelegramMessage(env, statsText, chatId, threadId);
-    } else if (text.startsWith("/latest") || text.startsWith("/download")) {
+    } else if (lowerText.startsWith("/latest") || lowerText.startsWith("/download")) {
       const releaseMsg = `🎵 <b>AirBeats - Free & Open Source Music Streaming</b>\n\n` +
                          `🔗 <b>Official Website:</b> https://airbeats.org\n` +
                          `📦 <b>Latest Releases:</b> https://github.com/d0x-dev/AirBeats/releases/latest\n` +
                          `💬 <b>Listen Together:</b> https://listentogether.airbeats.org`;
       await sendTelegramMessage(env, releaseMsg, chatId, threadId);
-    } else if (text.startsWith("/merge") || text.startsWith("/accept")) {
+    } else if (lowerText.startsWith("/merge") || lowerText.startsWith("/accept")) {
       const senderId = String(message.from?.id || "");
       const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
 
       if (senderId !== adminId) {
-        await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can merge pull requests. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
+        await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can manage pull requests. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
         return new Response("OK");
       }
 
+      // Check if a specific PR number was supplied (e.g. /merge 11) or replied to
       let prNumber = null;
-      const parts = message.text.trim().split(/\s+/);
+      const parts = text.split(/\s+/);
       if (parts.length > 1) {
         const candidate = parts[1].replace("#", "").trim();
         if (/^\d+$/.test(candidate)) prNumber = candidate;
@@ -361,15 +369,16 @@ async function handleTelegramWebhook(request, env) {
         if (match) prNumber = match[1];
       }
 
-      if (!prNumber) {
-        await sendTelegramMessage(env, "⚠️ <b>Usage:</b> <code>/merge &lt;pr_number&gt;</code> (e.g. <code>/merge 1</code>) or reply directly to any PR notification with <code>/merge</code>.", chatId, threadId);
+      // If specific PR given: show action options for that PR
+      if (prNumber) {
+        await sendPullRequestActionMenu(env, chatId, threadId, prNumber);
         return new Response("OK");
       }
 
-      const adminName = message.from?.first_name || "Admin";
-      const result = await mergeGitHubPullRequest(env, prNumber, adminName);
-      await sendTelegramMessage(env, result, chatId, threadId);
-    } else if (text.startsWith("/close_pr") || text.startsWith("/closepr")) {
+      // If no PR given: show inline buttons with all open pull requests
+      await sendOpenPullRequestsMenu(env, chatId, threadId);
+      return new Response("OK");
+    } else if (lowerText.startsWith("/close_pr") || lowerText.startsWith("/closepr")) {
       const senderId = String(message.from?.id || "");
       const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
 
@@ -379,7 +388,7 @@ async function handleTelegramWebhook(request, env) {
       }
 
       let prNumber = null;
-      const parts = message.text.trim().split(/\s+/);
+      const parts = text.split(/\s+/);
       if (parts.length > 1) {
         const candidate = parts[1].replace("#", "").trim();
         if (/^\d+$/.test(candidate)) prNumber = candidate;
@@ -397,16 +406,17 @@ async function handleTelegramWebhook(request, env) {
       const adminName = message.from?.first_name || "Admin";
       const result = await closeGitHubPullRequest(env, prNumber, adminName);
       await sendTelegramMessage(env, result, chatId, threadId);
-    } else if (text === "/myid" || text === "/id") {
+    } else if (lowerText === "/myid" || lowerText === "/id") {
       const senderId = message.from?.id || "unknown";
       await sendTelegramMessage(env, `🆔 <b>Your Telegram User ID:</b> <code>${senderId}</code>\n💬 <b>Chat ID:</b> <code>${chatId}</code>`, chatId, threadId);
-    } else if (text.startsWith("/help") || text.startsWith("/start")) {
+    } else if (lowerText.startsWith("/help") || lowerText.startsWith("/start")) {
       const helpMsg = `👋 <b>AirBeats Community Bot</b>\n\n` +
                       `Commands:\n` +
                       `📊 <b>/stats</b> - View Top 10 Listeners & Community Stats\n` +
                       `🚀 <b>/latest</b> - Latest APK Download link\n` +
-                      `🔀 <b>/merge &lt;pr#&gt;</b> - Accept & Merge Pull Request (Admin Only)\n` +
-                      `🚫 <b>/close_pr &lt;pr#&gt;</b> - Close Pull Request (Admin Only)\n` +
+                      `🔀 <b>/merge</b> - Interactive PR management with inline buttons (Admin)\n` +
+                      `🔀 <b>/merge &lt;pr#&gt;</b> - Quick PR action menu (Admin)\n` +
+                      `🚫 <b>/close_pr &lt;pr#&gt;</b> - Close Pull Request (Admin)\n` +
                       `🆔 <b>/myid</b> - Show your Telegram User ID\n` +
                       `ℹ️ <b>/help</b> - Show this message`;
       await sendTelegramMessage(env, helpMsg, chatId, threadId);
@@ -419,9 +429,257 @@ async function handleTelegramWebhook(request, env) {
 }
 
 /* -------------------------------------------------------------
- * 2.1 GITHUB PULL REQUEST API HELPERS
+ * 2.1 INLINE BUTTON CALLBACK QUERY HANDLER
  * ----------------------------------------------------------- */
-async function mergeGitHubPullRequest(env, prNumber, adminName) {
+async function handleTelegramCallbackQuery(query, env) {
+  const queryId = query.id;
+  const fromId = String(query.from?.id || "");
+  const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
+  const data = query.data || "";
+  const chatId = query.message?.chat?.id;
+  const messageId = query.message?.message_id;
+  const botToken = env.TELEGRAM_BOT_TOKEN;
+
+  // Security check: only admin can use these buttons
+  if (fromId !== adminId) {
+    await answerCallbackQuery(botToken, queryId, "⛔ Access Denied: Admin only!", true);
+    return new Response("OK");
+  }
+
+  // 1. Back to PR List
+  if (data === "pr_list") {
+    await answerCallbackQuery(botToken, queryId, "Loading pull requests...");
+    await updateMessageToPRList(env, chatId, messageId);
+    return new Response("OK");
+  }
+
+  // 2. PR selected: show action options
+  if (data.startsWith("pr_select:")) {
+    const prNumber = data.split(":")[1];
+    await answerCallbackQuery(botToken, queryId, `Loading PR #${prNumber}...`);
+    await updateMessageToPRActions(env, chatId, messageId, prNumber);
+    return new Response("OK");
+  }
+
+  // 3. PR action clicked (merge / squash / close)
+  if (data.startsWith("pr_action:")) {
+    const parts = data.split(":");
+    const action = parts[1];
+    const prNumber = parts[2];
+    const adminName = query.from?.first_name || "Admin";
+
+    if (action === "merge" || action === "squash") {
+      await answerCallbackQuery(botToken, queryId, `Processing merge for PR #${prNumber}...`);
+      const result = await mergeGitHubPullRequest(env, prNumber, adminName, action);
+      await editTelegramMessage(env, chatId, messageId, result, null);
+    } else if (action === "close") {
+      await answerCallbackQuery(botToken, queryId, `Closing PR #${prNumber}...`);
+      const result = await closeGitHubPullRequest(env, prNumber, adminName);
+      await editTelegramMessage(env, chatId, messageId, result, null);
+    }
+    return new Response("OK");
+  }
+
+  await answerCallbackQuery(botToken, queryId);
+  return new Response("OK");
+}
+
+/* -------------------------------------------------------------
+ * 2.2 PULL REQUEST MENUS & ACTIONS (INLINE BUTTONS)
+ * ----------------------------------------------------------- */
+async function sendOpenPullRequestsMenu(env, chatId, threadId) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    await sendTelegramMessage(env, "⚠️ <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.", chatId, threadId);
+    return;
+  }
+
+  const repo = "d0x-dev/AirBeats";
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/pulls?state=open&per_page=15`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await sendTelegramMessage(env, "⚠️ Failed to fetch open pull requests from GitHub.", chatId, threadId);
+      return;
+    }
+
+    const prs = await res.json();
+    if (!prs || prs.length === 0) {
+      await sendTelegramMessage(env, "ℹ️ <b>No open Pull Requests found for AirBeats.</b>", chatId, threadId);
+      return;
+    }
+
+    const inlineKeyboard = prs.map(pr => {
+      const title = pr.title.length > 36 ? pr.title.substring(0, 36) + "..." : pr.title;
+      return [{
+        text: `#${pr.number}: ${title}`,
+        callback_data: `pr_select:${pr.number}`
+      }];
+    });
+
+    inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "pr_list" }]);
+
+    const text = `🔀 <b>Open Pull Requests (${prs.length})</b>\n\n` +
+                 `Tap a Pull Request below to manage it:`;
+
+    await sendTelegramMessage(env, text, chatId, threadId, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await sendTelegramMessage(env, `❌ Error: ${escapeHtml(err.message)}`, chatId, threadId);
+  }
+}
+
+async function sendPullRequestActionMenu(env, chatId, threadId, prNumber) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await sendTelegramMessage(env, `⚠️ Could not find Pull Request #${prNumber} on GitHub.`, chatId, threadId);
+      return;
+    }
+
+    const pr = await res.json();
+    const title = escapeHtml(pr.title);
+    const author = escapeHtml(pr.user?.login || "Unknown");
+    const baseBranch = escapeHtml(pr.base?.ref || "main");
+    const headBranch = escapeHtml(pr.head?.label || pr.head?.ref || "branch");
+    const additions = pr.additions || 0;
+    const deletions = pr.deletions || 0;
+
+    const text = `🔀 <b>Pull Request #${prNumber}</b>\n\n` +
+                 `<b>Title:</b> <a href="${pr.html_url}">${title}</a>\n` +
+                 `<b>Author:</b> <a href="${pr.user?.html_url}">@${author}</a>\n` +
+                 `<b>Branch:</b> <code>${baseBranch}</code> ⬅️ <code>${headBranch}</code>\n` +
+                 `<b>Changes:</b> <code>+${additions} / -${deletions}</code>\n\n` +
+                 `👇 <i>Choose an action to perform:</i>`;
+
+    const inlineKeyboard = [
+      [
+        { text: "🟢 Merge PR (Commit)", callback_data: `pr_action:merge:${prNumber}` },
+        { text: "🟣 Squash & Merge", callback_data: `pr_action:squash:${prNumber}` }
+      ],
+      [
+        { text: "🔴 Close PR", callback_data: `pr_action:close:${prNumber}` },
+        { text: "🔙 Back to PR List", callback_data: "pr_list" }
+      ]
+    ];
+
+    await sendTelegramMessage(env, text, chatId, threadId, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await sendTelegramMessage(env, `❌ Error: ${escapeHtml(err.message)}`, chatId, threadId);
+  }
+}
+
+async function updateMessageToPRList(env, chatId, messageId) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/pulls?state=open&per_page=15`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    const prs = await res.json();
+    if (!prs || prs.length === 0) {
+      await editTelegramMessage(env, chatId, messageId, "ℹ️ <b>No open Pull Requests found for AirBeats.</b>", null);
+      return;
+    }
+
+    const inlineKeyboard = prs.map(pr => {
+      const title = pr.title.length > 36 ? pr.title.substring(0, 36) + "..." : pr.title;
+      return [{
+        text: `#${pr.number}: ${title}`,
+        callback_data: `pr_select:${pr.number}`
+      }];
+    });
+
+    inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "pr_list" }]);
+
+    const text = `🔀 <b>Open Pull Requests (${prs.length})</b>\n\n` +
+                 `Tap a Pull Request below to manage it:`;
+
+    await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await editTelegramMessage(env, chatId, messageId, `❌ Error: ${escapeHtml(err.message)}`, null);
+  }
+}
+
+async function updateMessageToPRActions(env, chatId, messageId, prNumber) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await editTelegramMessage(env, chatId, messageId, `⚠️ Could not find PR #${prNumber}.`, {
+        inline_keyboard: [[{ text: "🔙 Back to PR List", callback_data: "pr_list" }]]
+      });
+      return;
+    }
+
+    const pr = await res.json();
+    const title = escapeHtml(pr.title);
+    const author = escapeHtml(pr.user?.login || "Unknown");
+    const baseBranch = escapeHtml(pr.base?.ref || "main");
+    const headBranch = escapeHtml(pr.head?.label || pr.head?.ref || "branch");
+    const additions = pr.additions || 0;
+    const deletions = pr.deletions || 0;
+
+    const text = `🔀 <b>Pull Request #${prNumber}</b>\n\n` +
+                 `<b>Title:</b> <a href="${pr.html_url}">${title}</a>\n` +
+                 `<b>Author:</b> <a href="${pr.user?.html_url}">@${author}</a>\n` +
+                 `<b>Branch:</b> <code>${baseBranch}</code> ⬅️ <code>${headBranch}</code>\n` +
+                 `<b>Changes:</b> <code>+${additions} / -${deletions}</code>\n\n` +
+                 `👇 <i>Choose an action to perform:</i>`;
+
+    const inlineKeyboard = [
+      [
+        { text: "🟢 Merge PR (Commit)", callback_data: `pr_action:merge:${prNumber}` },
+        { text: "🟣 Squash & Merge", callback_data: `pr_action:squash:${prNumber}` }
+      ],
+      [
+        { text: "🔴 Close PR", callback_data: `pr_action:close:${prNumber}` },
+        { text: "🔙 Back to PR List", callback_data: "pr_list" }
+      ]
+    ];
+
+    await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await editTelegramMessage(env, chatId, messageId, `❌ Error: ${escapeHtml(err.message)}`, {
+      inline_keyboard: [[{ text: "🔙 Back to PR List", callback_data: "pr_list" }]]
+    });
+  }
+}
+
+/* -------------------------------------------------------------
+ * 2.3 GITHUB PULL REQUEST API HELPERS
+ * ----------------------------------------------------------- */
+async function mergeGitHubPullRequest(env, prNumber, adminName, mergeMethod = "merge") {
   const token = env.GITHUB_TOKEN;
   if (!token) {
     return "⚠️ <b>Error:</b> <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.";
@@ -439,15 +697,15 @@ async function mergeGitHubPullRequest(env, prNumber, adminName) {
         "User-Agent": "AirBeats-Telegram-Bot/1.0"
       },
       body: JSON.stringify({
-        commit_title: `Merge pull request #${prNumber} by ${adminName} via Telegram`,
-        merge_method: "merge"
+        commit_title: `Merge pull request #${prNumber} by ${adminName} via Telegram (${mergeMethod})`,
+        merge_method: mergeMethod
       })
     });
 
     const data = await res.json();
     if (res.ok && data.merged) {
       return `<a href="https://github.com/${repo}">${repo}</a> • <b>Pull Request Merged!</b> 🎉\n\n` +
-             `✅ <b>PR #${prNumber}</b> has been successfully merged into <code>main</code>!\n` +
+             `✅ <b>PR #${prNumber}</b> has been successfully merged (${mergeMethod}) into <code>main</code>!\n` +
              `👤 <b>Approved by:</b> ${escapeHtml(adminName)}\n` +
              `🔗 <a href="https://github.com/${repo}/pull/${prNumber}">View Pull Request on GitHub</a>`;
     } else {
@@ -568,7 +826,7 @@ async function postDailyStats(env) {
 /* -------------------------------------------------------------
  * 4. TELEGRAM API HELPER
  * ----------------------------------------------------------- */
-async function sendTelegramMessage(env, text, specificChatId = null, specificThreadId = null) {
+async function sendTelegramMessage(env, text, specificChatId = null, specificThreadId = null, replyMarkup = null) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const chatId = specificChatId || env.TELEGRAM_CHAT_ID;
   const threadId = specificThreadId !== null && specificThreadId !== undefined ? specificThreadId : env.TELEGRAM_THREAD_ID;
@@ -590,6 +848,7 @@ async function sendTelegramMessage(env, text, specificChatId = null, specificThr
         disable_web_page_preview: true
       };
       if (threadId) payload.message_thread_id = parseInt(threadId, 10);
+      if (replyMarkup) payload.reply_markup = replyMarkup;
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -628,6 +887,52 @@ async function sendTelegramMessage(env, text, specificChatId = null, specificThr
   } catch (err) {
     console.error("Failed to send Telegram message:", err);
     return false;
+  }
+}
+
+async function editTelegramMessage(env, chatId, messageId, text, replyMarkup = null) {
+  const botToken = env.TELEGRAM_BOT_TOKEN;
+  if (!botToken || !chatId || !messageId) return false;
+
+  const endpoint = `https://api.telegram.org/bot${botToken}/editMessageText`;
+  try {
+    const payload = {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true
+    };
+    if (replyMarkup) payload.reply_markup = replyMarkup;
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to edit Telegram message:", err);
+    return false;
+  }
+}
+
+async function answerCallbackQuery(botToken, queryId, text = null, showAlert = false) {
+  if (!botToken || !queryId) return;
+  const endpoint = `https://api.telegram.org/bot${botToken}/answerCallbackQuery`;
+  try {
+    const payload = { callback_query_id: queryId };
+    if (text) {
+      payload.text = text;
+      payload.show_alert = showAlert;
+    }
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.error("Failed to answer callback query:", err);
   }
 }
 
