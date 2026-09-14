@@ -242,24 +242,25 @@ async function handleTelegramWebhook(request, env) {
     }
 
     const chatId = message.chat.id;
+    const threadId = message.message_thread_id || env.TELEGRAM_THREAD_ID;
     const text = message.text.trim().toLowerCase();
 
     if (text.startsWith("/stats") || text.startsWith("/top") || text.startsWith("/leaderboard")) {
       const statsText = await getFormattedLeaderboard(env);
-      await sendTelegramMessage(env, statsText, chatId);
+      await sendTelegramMessage(env, statsText, chatId, threadId);
     } else if (text.startsWith("/latest") || text.startsWith("/download")) {
       const releaseMsg = `🎵 <b>AirBeats - Free & Open Source Music Streaming</b>\n\n` +
                          `🔗 <b>Official Website:</b> https://airbeats.org\n` +
                          `📦 <b>Latest Releases:</b> https://github.com/d0x-dev/AirBeats/releases/latest\n` +
                          `💬 <b>Listen Together:</b> https://listentogether.airbeats.org`;
-      await sendTelegramMessage(env, releaseMsg, chatId);
+      await sendTelegramMessage(env, releaseMsg, chatId, threadId);
     } else if (text.startsWith("/help") || text.startsWith("/start")) {
       const helpMsg = `👋 <b>AirBeats Community Bot</b>\n\n` +
                       `Commands:\n` +
                       `📊 <b>/stats</b> - View Top 10 Listeners & Community Stats\n` +
                       `🚀 <b>/latest</b> - Latest APK Download link\n` +
                       `ℹ️ <b>/help</b> - Show this message`;
-      await sendTelegramMessage(env, helpMsg, chatId);
+      await sendTelegramMessage(env, helpMsg, chatId, threadId);
     }
 
     return new Response("OK");
@@ -340,9 +341,10 @@ async function postDailyStats(env) {
 /* -------------------------------------------------------------
  * 4. TELEGRAM API HELPER
  * ----------------------------------------------------------- */
-async function sendTelegramMessage(env, text, specificChatId = null) {
+async function sendTelegramMessage(env, text, specificChatId = null, specificThreadId = null) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const chatId = specificChatId || env.TELEGRAM_CHAT_ID;
+  const threadId = specificThreadId !== null && specificThreadId !== undefined ? specificThreadId : env.TELEGRAM_THREAD_ID;
 
   if (!botToken || !chatId) {
     console.warn("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing");
@@ -351,15 +353,20 @@ async function sendTelegramMessage(env, text, specificChatId = null) {
 
   const endpoint = `https://api.telegram.org/bot${botToken}/sendMessage`;
   try {
+    const payload = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true
+    };
+    if (threadId) {
+      payload.message_thread_id = parseInt(threadId, 10);
+    }
+
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: "HTML",
-        disable_web_page_preview: true
-      })
+      body: JSON.stringify(payload)
     });
     return res.ok;
   } catch (err) {
