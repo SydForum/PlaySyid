@@ -67,6 +67,9 @@ export default {
   }
 };
 
+// In-memory cache for pending comment drafts during confirmation
+const pendingCommentsMap = new Map();
+
 /* -------------------------------------------------------------
  * 1. GITHUB WEBHOOK HANDLER
  * ----------------------------------------------------------- */
@@ -495,6 +498,49 @@ async function handleTelegramWebhook(request, env) {
     const threadId = message.message_thread_id || env.TELEGRAM_THREAD_ID;
     const text = message.text.trim();
     const lowerText = text.toLowerCase();
+    const senderId = String(message.from?.id || "");
+    const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
+
+    // 2. Check if this message is an admin reply to a comment prompt
+    const replyTo = message.reply_to_message;
+    if (replyTo && senderId === adminId && replyTo.text) {
+      const promptMatch = replyTo.text.match(/Issue #(\d+) - Please send your comment/i);
+      if (promptMatch) {
+        const issueNumber = promptMatch[1];
+        const isCloseAction = /Action:\s*Comment\s*&\s*Close/i.test(replyTo.text);
+        const action = isCloseAction ? "close" : "comment";
+
+        if (lowerText === "/cancel") {
+          pendingCommentsMap.delete(`${chatId}_${issueNumber}`);
+          await sendTelegramMessage(env, `❌ <i>Comment cancelled for Issue #${issueNumber}.</i>`, chatId, threadId);
+          return new Response("OK");
+        }
+
+        const commentText = text;
+        pendingCommentsMap.set(`${chatId}_${issueNumber}`, {
+          comment: commentText,
+          action: action,
+          issueNumber: issueNumber
+        });
+
+        const actionTitle = isCloseAction ? "Comment & Close" : "Post Comment";
+        const confirmBtnText = isCloseAction ? "✅ Yes, Post Comment & Close" : "✅ Yes, Post Comment";
+        const btnStyle = isCloseAction ? "danger" : "primary";
+
+        const confirmText = `📝 <b>Confirm ${actionTitle} for Issue #${issueNumber}:</b>\n\n` +
+                            `💬 <b>Your Comment:</b>\n` +
+                            `<blockquote>${escapeHtml(commentText)}</blockquote>\n\n` +
+                            `<i>Are you sure you want to proceed?</i>`;
+
+        const inlineKeyboard = [
+          [{ text: confirmBtnText, callback_data: `issue_confirm:${action}:${issueNumber}`, style: btnStyle }],
+          [{ text: "❌ No, Cancel", callback_data: `issue_cancel:${issueNumber}`, style: "danger" }]
+        ];
+
+        await sendTelegramMessage(env, confirmText, chatId, threadId, { inline_keyboard: inlineKeyboard });
+        return new Response("OK");
+      }
+    }
 
     if (lowerText.startsWith("/stats") || lowerText.startsWith("/top") || lowerText.startsWith("/leaderboard")) {
       const statsText = await getFormattedLeaderboard(env);
@@ -563,6 +609,30 @@ async function handleTelegramWebhook(request, env) {
       const adminName = message.from?.first_name || "Admin";
       const result = await closeGitHubPullRequest(env, prNumber, adminName);
       await sendTelegramMessage(env, result, chatId, threadId);
+    } else if (lowerText.startsWith("/issue") || lowerText.startsWith("/issues")) {
+      if (senderId !== adminId) {
+        await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can manage issues. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
+        return new Response("OK");
+      }
+
+      let issueNumber = null;
+      const parts = text.split(/\s+/);
+      if (parts.length > 1) {
+        const candidate = parts[1].replace("#", "").trim();
+        if (/^\d+$/.test(candidate)) issueNumber = candidate;
+      }
+      if (!issueNumber && message.reply_to_message?.text) {
+        const match = message.reply_to_message.text.match(/(?:Issue|#)\s*#?(\d+)/i);
+        if (match) issueNumber = match[1];
+      }
+
+      if (issueNumber) {
+        await sendIssueActionMenu(env, chatId, threadId, issueNumber);
+        return new Response("OK");
+      }
+
+      await sendOpenIssuesMenu(env, chatId, threadId);
+      return new Response("OK");
     } else if (lowerText === "/myid" || lowerText === "/id") {
       const senderId = message.from?.id || "unknown";
       await sendTelegramMessage(env, `🆔 <b>Your Telegram User ID:</b> <code>${senderId}</code>\n💬 <b>Chat ID:</b> <code>${chatId}</code>`, chatId, threadId);
@@ -574,6 +644,8 @@ async function handleTelegramWebhook(request, env) {
                       `🔀 <b>/merge</b> - Interactive PR management with inline buttons (Admin)\n` +
                       `🔀 <b>/merge &lt;pr#&gt;</b> - Quick PR action menu (Admin)\n` +
                       `🚫 <b>/close_pr &lt;pr#&gt;</b> - Close Pull Request (Admin)\n` +
+                      `🐛 <b>/issue</b> - Interactive Issue management (Close, Comment, Reopen) (Admin)\n` +
+                      `🐛 <b>/issue &lt;issue#&gt;</b> - Quick Issue action menu (Admin)\n` +
                       `🆔 <b>/myid</b> - Show your Telegram User ID\n` +
                       `ℹ️ <b>/help</b> - Show this message`;
       await sendTelegramMessage(env, helpMsg, chatId, threadId);
@@ -634,6 +706,95 @@ async function handleTelegramCallbackQuery(query, env) {
       const result = await closeGitHubPullRequest(env, prNumber, adminName);
       await editTelegramMessage(env, chatId, messageId, result, null);
     }
+    return new Response("OK");
+  }
+
+  // 4. Issue List navigation (Open or Closed)
+  if (data.startsWith("issue_list:")) {
+    const listType = data.split(":")[1] || "open";
+    await answerCallbackQuery(botToken, queryId, `Loading ${listType} issues...`);
+    await updateMessageToIssueList(env, chatId, messageId, listType);
+    return new Response("OK");
+  }
+
+  // 5. Issue selected: show action options
+  if (data.startsWith("issue_select:")) {
+    const issueNumber = data.split(":")[1];
+    await answerCallbackQuery(botToken, queryId, `Loading Issue #${issueNumber}...`);
+    await updateMessageToIssueActions(env, chatId, messageId, issueNumber);
+    return new Response("OK");
+  }
+
+  // 6. Issue direct action without comment (e.g. close, reopen)
+  if (data.startsWith("issue_action:")) {
+    const parts = data.split(":");
+    const action = parts[1];
+    const issueNumber = parts[2];
+    const adminName = query.from?.first_name || "Admin";
+
+    await answerCallbackQuery(botToken, queryId, `Processing ${action} for Issue #${issueNumber}...`);
+    const result = await updateGitHubIssueState(env, issueNumber, action === "reopen" ? "open" : "closed", adminName);
+    await editTelegramMessage(env, chatId, messageId, result, {
+      inline_keyboard: [[{ text: "🔙 Back to Issues List", callback_data: "issue_list:open" }]]
+    });
+    return new Response("OK");
+  }
+
+  // 7. Admin tapped "Comment & Close" or "Add Comment": prompt for comment
+  if (data.startsWith("issue_ask:")) {
+    const parts = data.split(":");
+    const action = parts[1]; // "close" or "comment"
+    const issueNumber = parts[2];
+    const actionLabel = action === "close" ? "Comment & Close" : "Add Comment";
+
+    await answerCallbackQuery(botToken, queryId, `Please send your comment in reply...`);
+
+    const promptText = `💬 <b>Issue #${issueNumber} - Please send your comment:</b>\n\n` +
+                       `<i>Action: ${actionLabel}</i>\n` +
+                       `<i>Reply to this message with your comment. Other messages will be ignored. Send /cancel to abort.</i>`;
+
+    await sendTelegramMessage(env, promptText, chatId, query.message?.message_thread_id, {
+      force_reply: true,
+      selective: true
+    });
+    return new Response("OK");
+  }
+
+  // 8. Admin confirmed comment submission via inline button
+  if (data.startsWith("issue_confirm:")) {
+    const parts = data.split(":");
+    const action = parts[1]; // "close" or "comment"
+    const issueNumber = parts[2];
+    const adminName = query.from?.first_name || "Admin";
+
+    await answerCallbackQuery(botToken, queryId, `Posting comment to Issue #${issueNumber}...`);
+
+    const cached = pendingCommentsMap.get(`${chatId}_${issueNumber}`);
+    const commentText = cached?.comment || extractCommentFromMessage(query.message?.text);
+    pendingCommentsMap.delete(`${chatId}_${issueNumber}`);
+
+    if (!commentText) {
+      await editTelegramMessage(env, chatId, messageId, `⚠️ <i>Comment expired or empty. Please try again.</i>`, {
+        inline_keyboard: [[{ text: `🔙 Back to Issue #${issueNumber}`, callback_data: `issue_select:${issueNumber}` }]]
+      });
+      return new Response("OK");
+    }
+
+    const result = await postGitHubIssueComment(env, issueNumber, commentText, adminName, action === "close");
+    await editTelegramMessage(env, chatId, messageId, result, {
+      inline_keyboard: [[{ text: "🔙 Back to Issues List", callback_data: "issue_list:open" }]]
+    });
+    return new Response("OK");
+  }
+
+  // 9. Admin cancelled comment confirmation
+  if (data.startsWith("issue_cancel:")) {
+    const issueNumber = data.split(":")[1];
+    pendingCommentsMap.delete(`${chatId}_${issueNumber}`);
+    await answerCallbackQuery(botToken, queryId, "Action cancelled.");
+    await editTelegramMessage(env, chatId, messageId, `❌ <i>Action cancelled for Issue #${issueNumber}.</i>`, {
+      inline_keyboard: [[{ text: `🔙 Back to Issue #${issueNumber}`, callback_data: `issue_select:${issueNumber}` }]]
+    });
     return new Response("OK");
   }
 
@@ -900,6 +1061,340 @@ async function closeGitHubPullRequest(env, prNumber, adminName) {
       const errorMsg = data.message || "Failed to close pull request.";
       return `❌ <b>Failed to Close PR #${prNumber}</b>\n\n⚠️ <i>Reason: ${escapeHtml(errorMsg)}</i>`;
     }
+  } catch (err) {
+    return `❌ <b>Error:</b> ${escapeHtml(err.message)}`;
+  }
+}
+
+/* -------------------------------------------------------------
+ * 2.4 ISSUE MANAGEMENT (MENUS, COMMENTING & GITHUB API)
+ * ----------------------------------------------------------- */
+function extractCommentFromMessage(text) {
+  if (!text) return "";
+  const match = text.match(/💬 (?:Your Comment:)?\s*\n([\s\S]*?)(?:\n\n|\n)?(?:Are you sure|Action:|$)/i);
+  if (match) return match[1].trim();
+  return text.trim();
+}
+
+async function sendOpenIssuesMenu(env, chatId, threadId) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    await sendTelegramMessage(env, "⚠️ <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.", chatId, threadId);
+    return;
+  }
+
+  const repo = "d0x-dev/AirBeats";
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/issues?state=open&per_page=20`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await sendTelegramMessage(env, "⚠️ Failed to fetch open issues from GitHub.", chatId, threadId);
+      return;
+    }
+
+    const allItems = await res.json();
+    const issues = (allItems || []).filter(item => !item.pull_request).slice(0, 15);
+
+    if (issues.length === 0) {
+      const inlineKeyboard = [
+        [{ text: "📁 View Closed Issues (Top 10)", callback_data: "issue_list:closed", style: "primary" }],
+        [{ text: "🔄 Refresh List", callback_data: "issue_list:open" }]
+      ];
+      await sendTelegramMessage(env, "ℹ️ <b>No open Issues found for AirBeats.</b>", chatId, threadId, { inline_keyboard: inlineKeyboard });
+      return;
+    }
+
+    const inlineKeyboard = issues.map(iss => {
+      const title = iss.title.length > 36 ? iss.title.substring(0, 36) + "..." : iss.title;
+      return [{
+        text: `🐛 #${iss.number}: ${title}`,
+        callback_data: `issue_select:${iss.number}`,
+        style: "primary"
+      }];
+    });
+
+    inlineKeyboard.push([{ text: "📁 View Closed Issues (Top 10)", callback_data: "issue_list:closed", style: "primary" }]);
+    inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "issue_list:open" }]);
+
+    const text = `🐛 <b>Open Issues (${issues.length})</b>\n\n` +
+                 `Tap an Issue below to manage, comment, or close:`;
+
+    await sendTelegramMessage(env, text, chatId, threadId, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await sendTelegramMessage(env, `❌ Error: ${escapeHtml(err.message)}`, chatId, threadId);
+  }
+}
+
+async function updateMessageToIssueList(env, chatId, messageId, state = "open") {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const perPage = state === "closed" ? 10 : 20;
+    const res = await fetch(`https://api.github.com/repos/${repo}/issues?state=${state}&per_page=${perPage}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await editTelegramMessage(env, chatId, messageId, `⚠️ Failed to fetch ${state} issues from GitHub.`, null);
+      return;
+    }
+
+    const allItems = await res.json();
+    const issues = (allItems || []).filter(item => !item.pull_request).slice(0, 10);
+
+    const isClosed = state === "closed";
+    const headerTitle = isClosed ? "Closed Issues (Top 10)" : `Open Issues (${issues.length})`;
+    const emoji = isClosed ? "🟣" : "🐛";
+
+    if (issues.length === 0) {
+      const toggleBtn = isClosed 
+        ? [{ text: "📂 View Open Issues", callback_data: "issue_list:open", style: "primary" }]
+        : [{ text: "📁 View Closed Issues (Top 10)", callback_data: "issue_list:closed", style: "primary" }];
+      await editTelegramMessage(env, chatId, messageId, `ℹ️ <b>No ${state} issues found for AirBeats.</b>`, {
+        inline_keyboard: [toggleBtn, [{ text: "🔄 Refresh", callback_data: `issue_list:${state}` }]]
+      });
+      return;
+    }
+
+    const inlineKeyboard = issues.map(iss => {
+      const title = iss.title.length > 36 ? iss.title.substring(0, 36) + "..." : iss.title;
+      return [{
+        text: `${emoji} #${iss.number}: ${title}`,
+        callback_data: `issue_select:${iss.number}`,
+        style: "primary"
+      }];
+    });
+
+    if (isClosed) {
+      inlineKeyboard.push([{ text: "📂 View Open Issues", callback_data: "issue_list:open", style: "primary" }]);
+      inlineKeyboard.push([{ text: "🔄 Refresh Closed List", callback_data: "issue_list:closed" }]);
+    } else {
+      inlineKeyboard.push([{ text: "📁 View Closed Issues (Top 10)", callback_data: "issue_list:closed", style: "primary" }]);
+      inlineKeyboard.push([{ text: "🔄 Refresh List", callback_data: "issue_list:open" }]);
+    }
+
+    const text = `${emoji} <b>${headerTitle}</b>\n\n` +
+                 `Tap an Issue below to view options (${isClosed ? "reopen / comment" : "comment & close / close"}):`;
+
+    await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await editTelegramMessage(env, chatId, messageId, `❌ Error: ${escapeHtml(err.message)}`, null);
+  }
+}
+
+async function sendIssueActionMenu(env, chatId, threadId, issueNumber) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/issues/${issueNumber}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await sendTelegramMessage(env, `⚠️ Could not find Issue #${issueNumber} on GitHub.`, chatId, threadId);
+      return;
+    }
+
+    const issue = await res.json();
+    const title = escapeHtml(issue.title);
+    const author = escapeHtml(issue.user?.login || "Unknown");
+    const state = (issue.state || "open").toUpperCase();
+    const isClosed = state === "CLOSED";
+    const stateEmoji = isClosed ? "🟣" : "🟢";
+    const commentsCount = issue.comments || 0;
+
+    let labelsText = "";
+    if (issue.labels && issue.labels.length > 0) {
+      const labelsList = issue.labels.map(l => escapeHtml(l.name)).join(", ");
+      labelsText = `\n<b>Labels:</b> <code>${labelsList}</code>`;
+    }
+
+    const text = `🐛 <b>Issue #${issueNumber}</b> • ${stateEmoji} <b>${state}</b>\n\n` +
+                 `<b>Title:</b> <a href="${issue.html_url}">${title}</a>\n` +
+                 `<b>Author:</b> <a href="${issue.user?.html_url}">@${author}</a>\n` +
+                 `<b>Comments:</b> <code>${commentsCount}</code>` +
+                 `${labelsText}\n\n` +
+                 `👇 <i>Choose an action to perform:</i>`;
+
+    const inlineKeyboard = [];
+    if (!isClosed) {
+      inlineKeyboard.push([{ text: "💬 Comment & Close Issue", callback_data: `issue_ask:close:${issueNumber}`, style: "danger" }]);
+      inlineKeyboard.push([{ text: "🔴 Close Issue Directly", callback_data: `issue_action:close:${issueNumber}`, style: "danger" }]);
+      inlineKeyboard.push([{ text: "💬 Add Comment Only", callback_data: `issue_ask:comment:${issueNumber}`, style: "primary" }]);
+      inlineKeyboard.push([{ text: "🔙 Back to Issues List", callback_data: "issue_list:open" }]);
+    } else {
+      inlineKeyboard.push([{ text: "🟢 Reopen Issue", callback_data: `issue_action:reopen:${issueNumber}`, style: "success" }]);
+      inlineKeyboard.push([{ text: "💬 Add Comment", callback_data: `issue_ask:comment:${issueNumber}`, style: "primary" }]);
+      inlineKeyboard.push([{ text: "🔙 Back to Closed Issues", callback_data: "issue_list:closed" }]);
+    }
+
+    await sendTelegramMessage(env, text, chatId, threadId, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await sendTelegramMessage(env, `❌ Error: ${escapeHtml(err.message)}`, chatId, threadId);
+  }
+}
+
+async function updateMessageToIssueActions(env, chatId, messageId, issueNumber) {
+  const token = env.GITHUB_TOKEN;
+  const repo = "d0x-dev/AirBeats";
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/issues/${issueNumber}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      }
+    });
+
+    if (!res.ok) {
+      await editTelegramMessage(env, chatId, messageId, `⚠️ Could not find Issue #${issueNumber}.`, {
+        inline_keyboard: [[{ text: "🔙 Back to Issues List", callback_data: "issue_list:open" }]]
+      });
+      return;
+    }
+
+    const issue = await res.json();
+    const title = escapeHtml(issue.title);
+    const author = escapeHtml(issue.user?.login || "Unknown");
+    const state = (issue.state || "open").toUpperCase();
+    const isClosed = state === "CLOSED";
+    const stateEmoji = isClosed ? "🟣" : "🟢";
+    const commentsCount = issue.comments || 0;
+
+    let labelsText = "";
+    if (issue.labels && issue.labels.length > 0) {
+      const labelsList = issue.labels.map(l => escapeHtml(l.name)).join(", ");
+      labelsText = `\n<b>Labels:</b> <code>${labelsList}</code>`;
+    }
+
+    const text = `🐛 <b>Issue #${issueNumber}</b> • ${stateEmoji} <b>${state}</b>\n\n` +
+                 `<b>Title:</b> <a href="${issue.html_url}">${title}</a>\n` +
+                 `<b>Author:</b> <a href="${issue.user?.html_url}">@${author}</a>\n` +
+                 `<b>Comments:</b> <code>${commentsCount}</code>` +
+                 `${labelsText}\n\n` +
+                 `👇 <i>Choose an action to perform:</i>`;
+
+    const inlineKeyboard = [];
+    if (!isClosed) {
+      inlineKeyboard.push([{ text: "💬 Comment & Close Issue", callback_data: `issue_ask:close:${issueNumber}`, style: "danger" }]);
+      inlineKeyboard.push([{ text: "🔴 Close Issue Directly", callback_data: `issue_action:close:${issueNumber}`, style: "danger" }]);
+      inlineKeyboard.push([{ text: "💬 Add Comment Only", callback_data: `issue_ask:comment:${issueNumber}`, style: "primary" }]);
+      inlineKeyboard.push([{ text: "🔙 Back to Issues List", callback_data: "issue_list:open" }]);
+    } else {
+      inlineKeyboard.push([{ text: "🟢 Reopen Issue", callback_data: `issue_action:reopen:${issueNumber}`, style: "success" }]);
+      inlineKeyboard.push([{ text: "💬 Add Comment", callback_data: `issue_ask:comment:${issueNumber}`, style: "primary" }]);
+      inlineKeyboard.push([{ text: "🔙 Back to Closed Issues", callback_data: "issue_list:closed" }]);
+    }
+
+    await editTelegramMessage(env, chatId, messageId, text, { inline_keyboard: inlineKeyboard });
+  } catch (err) {
+    await editTelegramMessage(env, chatId, messageId, `❌ Error: ${escapeHtml(err.message)}`, {
+      inline_keyboard: [[{ text: "🔙 Back to Issues List", callback_data: "issue_list:open" }]]
+    });
+  }
+}
+
+async function updateGitHubIssueState(env, issueNumber, state, adminName) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) return "⚠️ <b>Error:</b> <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.";
+
+  const repo = "d0x-dev/AirBeats";
+  const url = `https://api.github.com/repos/${repo}/issues/${issueNumber}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      },
+      body: JSON.stringify({ state: state })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.state === state) {
+      const isClosed = state === "closed";
+      const stateLabel = isClosed ? "Closed 🚫" : "Reopened 🟢";
+      return `<a href="https://github.com/${repo}">${repo}</a> • <b>Issue ${stateLabel}</b>\n\n` +
+             `Issue #${issueNumber} has been successfully ${isClosed ? "closed" : "reopened"}!\n` +
+             `👤 <b>Admin:</b> ${escapeHtml(adminName)}\n` +
+             `🔗 <a href="https://github.com/${repo}/issues/${issueNumber}">View Issue on GitHub</a>`;
+    } else {
+      return `❌ <b>Failed to update Issue #${issueNumber}</b>\n\n⚠️ <i>Reason: ${escapeHtml(data.message || "Unknown error")}</i>`;
+    }
+  } catch (err) {
+    return `❌ <b>Error:</b> ${escapeHtml(err.message)}`;
+  }
+}
+
+async function postGitHubIssueComment(env, issueNumber, commentText, adminName, alsoClose = false) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) return "⚠️ <b>Error:</b> <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.";
+
+  const repo = "d0x-dev/AirBeats";
+  const commentUrl = `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`;
+
+  try {
+    // 1. Post Comment
+    const commentRes = await fetch(commentUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      },
+      body: JSON.stringify({
+        body: commentText + `\n\n— *Posted by ${adminName} via Telegram*`
+      })
+    });
+
+    if (!commentRes.ok) {
+      const data = await commentRes.json();
+      return `❌ <b>Failed to post comment to Issue #${issueNumber}</b>\n\n⚠️ <i>Reason: ${escapeHtml(data.message || "API error")}</i>`;
+    }
+
+    // 2. If alsoClose requested, close issue
+    let closeResultText = "";
+    if (alsoClose) {
+      const closeRes = await fetch(`https://api.github.com/repos/${repo}/issues/${issueNumber}`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json",
+          "User-Agent": "AirBeats-Telegram-Bot/1.0"
+        },
+        body: JSON.stringify({ state: "closed" })
+      });
+      if (closeRes.ok) {
+        closeResultText = ` and <b>Closed 🚫</b>`;
+      } else {
+        closeResultText = ` (Note: Failed to close issue)`;
+      }
+    }
+
+    return `<a href="https://github.com/${repo}">${repo}</a> • <b>Issue Updated 🎉</b>\n\n` +
+           `✅ Comment successfully posted${closeResultText} for <b>Issue #${issueNumber}</b>!\n` +
+           `👤 <b>Admin:</b> ${escapeHtml(adminName)}\n` +
+           `💬 <b>Comment:</b>\n<blockquote>${escapeHtml(commentText)}</blockquote>\n\n` +
+           `🔗 <a href="https://github.com/${repo}/issues/${issueNumber}">View Issue on GitHub</a>`;
   } catch (err) {
     return `❌ <b>Error:</b> ${escapeHtml(err.message)}`;
   }
