@@ -133,9 +133,10 @@ async function handleGitHubWebhook(request, env) {
         break;
       }
 
-      case "watch": {
+      case "watch":
+      case "star": {
         // Star event
-        if (payload.action === "started") {
+        if (payload.action === "started" || payload.action === "created") {
           const user = escapeHtml(payload.sender?.login || "Someone");
           const userUrl = payload.sender?.html_url || "";
           const starsCount = payload.repository?.stargazers_count || "";
@@ -145,6 +146,18 @@ async function handleGitHubWebhook(request, env) {
                     `<b><a href="${userUrl}">${user}</a></b> just starred <b>${repoName}</b>! 🎉\n` +
                     `🌟 Total Stars: <b>${starsCount}</b>`;
         }
+        break;
+      }
+
+      case "fork": {
+        const user = escapeHtml(payload.sender?.login || "Someone");
+        const userUrl = payload.sender?.html_url || "";
+        const forkUrl = payload.forkee?.html_url || "";
+        const repoName = escapeHtml(payload.repository?.name || "AirBeats");
+
+        message = `🍴 <b>Repository Forked!</b>\n` +
+                  `<b><a href="${userUrl}">${user}</a></b> just forked <b>${repoName}</b>!\n` +
+                  `🔗 <a href="${forkUrl}">View Fork</a>`;
         break;
       }
 
