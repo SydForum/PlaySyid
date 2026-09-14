@@ -46,6 +46,14 @@ export default {
       return handleTelegramWebhook(request, env);
     }
 
+    // Live Crash Reports Endpoint
+    if (url.pathname === "/crash" || url.pathname === "/webhook/crash") {
+      if (request.method !== "POST") {
+        return new Response("Method not allowed", { status: 405 });
+      }
+      return handleCrashReport(request, env);
+    }
+
     // Manual test endpoint to trigger daily stats post: /send-daily-stats?secret=YOUR_ADMIN_SECRET
     if (url.pathname === "/send-daily-stats") {
       const secret = url.searchParams.get("secret");
@@ -2170,4 +2178,203 @@ async function sendFcmPushNotification(env, { title, body, topic, imageUrl }) {
 
   return fcmData;
 }
+
+/* -------------------------------------------------------------
+ * 8. LIVE APP CRASH REPORT HANDLER & TELEGRA.PH INTEGRATION
+ * ----------------------------------------------------------- */
+let cachedTelegraphToken = null;
+
+async function getTelegraphToken() {
+  if (cachedTelegraphToken) return cachedTelegraphToken;
+  try {
+    const res = await fetch("https://api.telegra.ph/createAccount?short_name=AirBeats&author_name=AirBeats%20Crash%20Reporter");
+    const data = await res.json();
+    if (data.ok && data.result?.access_token) {
+      cachedTelegraphToken = data.result.access_token;
+      return cachedTelegraphToken;
+    }
+  } catch (e) {
+    console.error("Failed to create Telegraph account:", e);
+  }
+  return null;
+}
+
+async function publishCrashToTelegraph(crash) {
+  try {
+    const token = await getTelegraphToken();
+    if (!token) return null;
+
+    const pageTitle = `Crash: ${crash.errorName.slice(0, 30)} - ${crash.versionStr}`;
+    const pageContent = [
+      {
+        tag: "h3",
+        children: ["💥 AirBeats App Crash Detected!"]
+      },
+      {
+        tag: "p",
+        children: [
+          `🏷️ Version: ${crash.versionStr}\n`,
+          `📱 Device: ${crash.device} • ${crash.androidVersion}\n`,
+          `🛑 Exception: ${crash.errorName}\n`,
+          `💬 Message: ${crash.errorMessage}`
+        ]
+      }
+    ];
+
+    if (crash.issueUrl) {
+      pageContent.push({
+        tag: "p",
+        children: [
+          {
+            tag: "a",
+            attrs: { href: crash.issueUrl },
+            children: ["🔗 Open in Firebase Crashlytics Console"]
+          }
+        ]
+      });
+    }
+
+    if (crash.rawStack) {
+      pageContent.push(
+        { tag: "hr" },
+        { tag: "h4", children: ["📋 Full Stack Trace:"] },
+        { tag: "pre", children: [crash.rawStack] }
+      );
+    }
+
+    const params = new URLSearchParams();
+    params.append("access_token", token);
+    params.append("title", pageTitle);
+    params.append("author_name", "AirBeats Bot");
+    params.append("author_url", "https://github.com/d0x-dev/AirBeats");
+    params.append("content", JSON.stringify(pageContent));
+    params.append("return_content", "false");
+
+    const resp = await fetch("https://api.telegra.ph/createPage", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString()
+    });
+
+    const data = await resp.json();
+    if (data.ok && data.result?.url) {
+      return data.result.url;
+    } else {
+      console.error("Telegraph error:", data);
+    }
+  } catch (err) {
+    console.error("Failed to publish crash to Telegraph:", err);
+  }
+  return null;
+}
+
+async function handleCrashReport(request, env) {
+  try {
+    const payload = await request.json();
+    
+    let errorName = "Fatal Crash";
+    let errorMessage = "Uncaught Exception";
+    let rawStack = "";
+    let version = "Unknown";
+    let versionCode = "";
+    let device = "Android Device";
+    let androidVersion = "Android";
+    let issueUrl = null;
+
+    if (payload.incident) {
+      // Google Cloud Monitoring / Firebase Alerts Webhook
+      const inc = payload.incident;
+      errorName = inc.policy_name || inc.condition_name || "Crashlytics Alert";
+      errorMessage = inc.summary || "New crash incident reported by Firebase";
+      issueUrl = inc.url || null;
+      if (inc.documentation?.content) {
+        rawStack = inc.documentation.content;
+      }
+      device = inc.resource_name || "AirBeats (Android)";
+    } else {
+      // Direct / Extension Webhook
+      errorName = payload.error || payload.title || "Fatal Exception";
+      errorMessage = payload.message || payload.subtitle || "Unknown error";
+      rawStack = payload.stack || payload.stackTrace || "";
+      version = payload.version || payload.appVersion || "Unknown";
+      versionCode = payload.versionCode || "";
+      device = payload.device || "Android Device";
+      androidVersion = payload.androidVersion || "Android";
+      issueUrl = payload.url || payload.issueUrl || null;
+    }
+
+    const chatId = env.TELEGRAM_CHAT_ID || "-1004388752678";
+    const threadId = env.CRASH_THREAD_ID || "224";
+
+    const versionStr = versionCode ? `v${version} (Build ${versionCode})` : `v${version}`;
+
+    // Extract first 8 lines or ~450 chars of stack trace as a clean preview snippet
+    let shortStack = rawStack.trim().split("\n").slice(0, 8).join("\n");
+    if (shortStack.length > 450) {
+      shortStack = shortStack.substring(0, 450) + "\n... [truncated]";
+    }
+
+    // Publish full crash logs to Telegra.ph if there are logs
+    let telegraphUrl = null;
+    if (rawStack) {
+      telegraphUrl = await publishCrashToTelegraph({
+        errorName,
+        errorMessage,
+        versionStr,
+        device,
+        androidVersion,
+        rawStack,
+        issueUrl
+      });
+    }
+
+    let text = `💥 <b>AirBeats App Crash Detected!</b> ⚠️\n\n` +
+               `🏷️ <b>Version:</b> <code>${escapeHtml(versionStr)}</code>\n` +
+               `📱 <b>Device:</b> <code>${escapeHtml(device)} • ${escapeHtml(androidVersion)}</code>\n` +
+               `🛑 <b>Exception:</b> <code>${escapeHtml(errorName)}</code>\n` +
+               `💬 <b>Message:</b> <code>${escapeHtml(errorMessage)}</code>\n\n`;
+
+    if (shortStack) {
+      text += `📋 <b>Stack Trace:</b>\n` +
+              `<pre><code class="language-text">${escapeHtml(shortStack)}</code></pre>\n\n`;
+    }
+
+    if (telegraphUrl) {
+      text += `📄 <b>Full Logs:</b> <a href="${telegraphUrl}">View Full Crash Log on Telegra.ph</a>\n\n`;
+    }
+
+    if (issueUrl) {
+      text += `🔥 <b>Firebase:</b> <a href="${issueUrl}">Open in Firebase Console</a>\n\n`;
+    }
+
+    text += `📊 <i>Live sync to Topic ${threadId} • Synced via Firebase Crashlytics Webhook</i>`;
+
+    const inlineKeyboard = [];
+    if (telegraphUrl) {
+      inlineKeyboard.push([{ text: "📄 Open Full Crash Log on Telegra.ph ↗", url: telegraphUrl }]);
+    }
+    if (issueUrl) {
+      inlineKeyboard.push([{ text: "🔥 Open in Firebase Console ↗", url: issueUrl }]);
+    }
+
+    const replyMarkup = inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : null;
+
+    await sendTelegramMessage(env, text, chatId, threadId, replyMarkup);
+
+    return new Response(JSON.stringify({
+      status: "ok",
+      message: "Crash report sent to Telegram",
+      telegraphUrl: telegraphUrl || null
+    }), {
+      headers: { "Content-Type": "application/json" }
+    });
+  } catch (err) {
+    console.error("Failed to handle crash report:", err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+}
+
 
