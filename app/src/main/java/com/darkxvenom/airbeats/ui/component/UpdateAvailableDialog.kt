@@ -345,7 +345,7 @@ fun UpdateAvailableDialog(
                         onClick = {
                             val directApkUrl = updateInfo.apkDownloadUrl.ifBlank {
                                 updateInfo.releaseUrl.ifBlank {
-                                    "https://github.com/d0x-dev/AirBeats/releases/latest"
+                                    com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleasePageUrl()
                                 }
                             }
                             updateStarted = context.packageManager.canRequestPackageInstalls()

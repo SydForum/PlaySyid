@@ -1847,7 +1847,7 @@ private fun openNotificationSettings(context: Context) {
 
 suspend fun checkForUpdates(): String? = withContext(Dispatchers.IO) {
     try {
-        val url = URL("https://api.github.com/repos/d0x-dev/airbeats/releases/latest")
+        val url = URL(com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleaseApiUrl(isNightly = false))
         val connection = url.openConnection()
         connection.connect()
         val json = connection.getInputStream().bufferedReader().use { it.readText() }

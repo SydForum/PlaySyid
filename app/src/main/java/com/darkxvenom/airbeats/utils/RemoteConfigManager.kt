@@ -19,6 +19,9 @@ data class AppRemoteConfig(
     val statsApiKey: String,
     val googleApiKey: String,
     val listenTogetherUrl: String,
+    val websiteUrl: String,
+    val githubRepo: String,
+    val updateApiUrl: String,
 )
 
 object RemoteConfigManager {
@@ -28,6 +31,9 @@ object RemoteConfigManager {
     private const val KEY_STATS_API_KEY = "stats_api_key"
     private const val KEY_GOOGLE_API_KEY = "google_api_key"
     private const val KEY_LISTEN_TOGETHER_URL = "listen_together_url"
+    private const val KEY_WEBSITE_URL = "website_url"
+    private const val KEY_GITHUB_REPO = "github_repo"
+    private const val KEY_UPDATE_API_URL = "update_api_url"
     private const val KEY_APP_CONFIG_JSON = "app_config"
     private const val KEY_LAST_SYNC = "last_sync_timestamp"
 
@@ -36,6 +42,9 @@ object RemoteConfigManager {
     val DEFAULT_STATS_API_KEY: String = BuildConfig.STATS_API_KEY
     val DEFAULT_GOOGLE_API_KEY: String = BuildConfig.GOOGLE_API_KEY
     val DEFAULT_LISTEN_TOGETHER_URL: String = "https://listentogether.airbeats.org"
+    val DEFAULT_WEBSITE_URL: String = "https://airbeats.org"
+    val DEFAULT_GITHUB_REPO: String = "d0x-dev/AirBeats"
+    val DEFAULT_UPDATE_API_URL: String = ""
 
     @Volatile
     private var activeConfig: AppRemoteConfig = AppRemoteConfig(
@@ -44,6 +53,9 @@ object RemoteConfigManager {
         statsApiKey = DEFAULT_STATS_API_KEY,
         googleApiKey = DEFAULT_GOOGLE_API_KEY,
         listenTogetherUrl = normalizeUrl(DEFAULT_LISTEN_TOGETHER_URL),
+        websiteUrl = normalizeUrl(DEFAULT_WEBSITE_URL),
+        githubRepo = DEFAULT_GITHUB_REPO,
+        updateApiUrl = DEFAULT_UPDATE_API_URL,
     )
 
     private var sharedPreferences: SharedPreferences? = null
@@ -62,6 +74,15 @@ object RemoteConfigManager {
 
     val listenTogetherUrl: String
         get() = activeConfig.listenTogetherUrl
+
+    val websiteUrl: String
+        get() = activeConfig.websiteUrl
+
+    val githubRepo: String
+        get() = activeConfig.githubRepo
+
+    val updateApiUrl: String
+        get() = activeConfig.updateApiUrl
 
     /**
      * Initializes the RemoteConfigManager:
@@ -91,6 +112,9 @@ object RemoteConfigManager {
         val cachedStatsApiKey = prefs.getString(KEY_STATS_API_KEY, null)
         val cachedGoogleApiKey = prefs.getString(KEY_GOOGLE_API_KEY, null)
         val cachedListenTogetherUrl = prefs.getString(KEY_LISTEN_TOGETHER_URL, null)
+        val cachedWebsiteUrl = prefs.getString(KEY_WEBSITE_URL, null)
+        val cachedGithubRepo = prefs.getString(KEY_GITHUB_REPO, null)
+        val cachedUpdateApiUrl = prefs.getString(KEY_UPDATE_API_URL, null)
 
         activeConfig = AppRemoteConfig(
             playDomain = normalizeUrl(cachedPlayDomain ?: DEFAULT_PLAY_DOMAIN),
@@ -98,9 +122,12 @@ object RemoteConfigManager {
             statsApiKey = cachedStatsApiKey ?: DEFAULT_STATS_API_KEY,
             googleApiKey = cachedGoogleApiKey ?: DEFAULT_GOOGLE_API_KEY,
             listenTogetherUrl = normalizeUrl(cachedListenTogetherUrl ?: DEFAULT_LISTEN_TOGETHER_URL),
+            websiteUrl = normalizeUrl(cachedWebsiteUrl ?: DEFAULT_WEBSITE_URL),
+            githubRepo = cachedGithubRepo ?: DEFAULT_GITHUB_REPO,
+            updateApiUrl = cachedUpdateApiUrl ?: DEFAULT_UPDATE_API_URL,
         )
 
-        Timber.d("RemoteConfigManager: Loaded cached config -> playDomain=$playDomain, statsBaseUrl=$statsBaseUrl")
+        Timber.d("RemoteConfigManager: Loaded cached config -> playDomain=$playDomain, websiteUrl=$websiteUrl, githubRepo=$githubRepo")
     }
 
     private suspend fun fetchFromFirebase() {
@@ -120,6 +147,9 @@ object RemoteConfigManager {
                 put(KEY_STATS_API_KEY, DEFAULT_STATS_API_KEY)
                 put(KEY_GOOGLE_API_KEY, DEFAULT_GOOGLE_API_KEY)
                 put(KEY_LISTEN_TOGETHER_URL, DEFAULT_LISTEN_TOGETHER_URL)
+                put(KEY_WEBSITE_URL, DEFAULT_WEBSITE_URL)
+                put(KEY_GITHUB_REPO, DEFAULT_GITHUB_REPO)
+                put(KEY_UPDATE_API_URL, DEFAULT_UPDATE_API_URL)
             }
             remoteConfig.setDefaultsAsync(defaults)
 
@@ -217,6 +247,9 @@ object RemoteConfigManager {
         val individualStatsApiKey = remoteConfig.getString(KEY_STATS_API_KEY).trim().ifBlank { null }
         val individualGoogleApiKey = remoteConfig.getString(KEY_GOOGLE_API_KEY).trim().ifBlank { null }
         val individualListenTogetherUrl = remoteConfig.getString(KEY_LISTEN_TOGETHER_URL).trim().ifBlank { null }
+        val individualWebsiteUrl = remoteConfig.getString(KEY_WEBSITE_URL).trim().ifBlank { null }
+        val individualGithubRepo = remoteConfig.getString(KEY_GITHUB_REPO).trim().ifBlank { null }
+        val individualUpdateApiUrl = remoteConfig.getString(KEY_UPDATE_API_URL).trim().ifBlank { null }
 
         parseAndApplyJson(
             jsonString = jsonConfigString,
@@ -224,7 +257,10 @@ object RemoteConfigManager {
             overrideStatsBaseUrl = individualStatsBaseUrl,
             overrideStatsApiKey = individualStatsApiKey,
             overrideGoogleApiKey = individualGoogleApiKey,
-            overrideListenTogetherUrl = individualListenTogetherUrl
+            overrideListenTogetherUrl = individualListenTogetherUrl,
+            overrideWebsiteUrl = individualWebsiteUrl,
+            overrideGithubRepo = individualGithubRepo,
+            overrideUpdateApiUrl = individualUpdateApiUrl,
         )
     }
 
@@ -235,12 +271,18 @@ object RemoteConfigManager {
         overrideStatsApiKey: String? = null,
         overrideGoogleApiKey: String? = null,
         overrideListenTogetherUrl: String? = null,
+        overrideWebsiteUrl: String? = null,
+        overrideGithubRepo: String? = null,
+        overrideUpdateApiUrl: String? = null,
     ) {
         var remotePlayDomain: String? = overridePlayDomain
         var remoteStatsBaseUrl: String? = overrideStatsBaseUrl
         var remoteStatsApiKey: String? = overrideStatsApiKey
         var remoteGoogleApiKey: String? = overrideGoogleApiKey
         var remoteListenTogetherUrl: String? = overrideListenTogetherUrl
+        var remoteWebsiteUrl: String? = overrideWebsiteUrl
+        var remoteGithubRepo: String? = overrideGithubRepo
+        var remoteUpdateApiUrl: String? = overrideUpdateApiUrl
 
         if (!jsonString.isNullOrBlank() && jsonString.startsWith("{")) {
             try {
@@ -250,6 +292,9 @@ object RemoteConfigManager {
                 if (remoteStatsApiKey == null && json.has("stats_api_key")) remoteStatsApiKey = json.optString("stats_api_key")
                 if (remoteGoogleApiKey == null && json.has("google_api_key")) remoteGoogleApiKey = json.optString("google_api_key")
                 if (remoteListenTogetherUrl == null && json.has("listen_together_url")) remoteListenTogetherUrl = json.optString("listen_together_url")
+                if (remoteWebsiteUrl == null && json.has("website_url")) remoteWebsiteUrl = json.optString("website_url")
+                if (remoteGithubRepo == null && json.has("github_repo")) remoteGithubRepo = json.optString("github_repo")
+                if (remoteUpdateApiUrl == null && json.has("update_api_url")) remoteUpdateApiUrl = json.optString("update_api_url")
             } catch (e: Exception) {
                 Timber.w(e, "RemoteConfigManager: Failed to parse JSON configuration")
             }
@@ -260,6 +305,9 @@ object RemoteConfigManager {
         val newStatsApiKey = remoteStatsApiKey?.ifBlank { null } ?: activeConfig.statsApiKey
         val newGoogleApiKey = remoteGoogleApiKey?.ifBlank { null } ?: activeConfig.googleApiKey
         val newListenTogetherUrl = normalizeUrl(remoteListenTogetherUrl ?: activeConfig.listenTogetherUrl)
+        val newWebsiteUrl = normalizeUrl(remoteWebsiteUrl ?: activeConfig.websiteUrl)
+        val newGithubRepo = (remoteGithubRepo?.ifBlank { null } ?: activeConfig.githubRepo).trim().removePrefix("https://github.com/").trimEnd('/')
+        val newUpdateApiUrl = normalizeUrl(remoteUpdateApiUrl?.ifBlank { null } ?: activeConfig.updateApiUrl)
 
         val newConfig = AppRemoteConfig(
             playDomain = newPlayDomain,
@@ -267,6 +315,9 @@ object RemoteConfigManager {
             statsApiKey = newStatsApiKey,
             googleApiKey = newGoogleApiKey,
             listenTogetherUrl = newListenTogetherUrl,
+            websiteUrl = newWebsiteUrl,
+            githubRepo = newGithubRepo,
+            updateApiUrl = newUpdateApiUrl,
         )
 
         // Compare against activeConfig
@@ -279,6 +330,9 @@ object RemoteConfigManager {
                 putString(KEY_STATS_API_KEY, newConfig.statsApiKey)
                 putString(KEY_GOOGLE_API_KEY, newConfig.googleApiKey)
                 putString(KEY_LISTEN_TOGETHER_URL, newConfig.listenTogetherUrl)
+                putString(KEY_WEBSITE_URL, newConfig.websiteUrl)
+                putString(KEY_GITHUB_REPO, newConfig.githubRepo)
+                putString(KEY_UPDATE_API_URL, newConfig.updateApiUrl)
                 putLong(KEY_LAST_SYNC, System.currentTimeMillis())
                 apply()
             }
@@ -297,6 +351,39 @@ object RemoteConfigManager {
     fun getPlaylistShareUrl(id: String): String = "$playDomain/playlist?id=$id"
     fun getAlbumShareUrl(id: String): String = "$playDomain/album?id=$id"
     fun getArtistShareUrl(id: String): String = "$playDomain/artist?id=$id"
+
+    // Helper functions for releases and updates
+    fun getLatestReleaseApiUrl(isNightly: Boolean): String {
+        val customUrl = updateApiUrl.trim()
+        if (customUrl.isNotBlank()) {
+            return if (isNightly) {
+                if (customUrl.endsWith("/latest")) customUrl.removeSuffix("/latest") else customUrl
+            } else {
+                if (customUrl.endsWith("/latest")) customUrl else "$customUrl/latest"
+            }
+        }
+        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
+        return if (isNightly) "https://api.github.com/repos/$repo/releases" else "https://api.github.com/repos/$repo/releases/latest"
+    }
+
+    fun getReleasesPageUrl(): String {
+        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
+        return "https://github.com/$repo/releases"
+    }
+
+    fun getLatestReleasePageUrl(): String {
+        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
+        return "https://github.com/$repo/releases/latest"
+    }
+
+    fun getApkDownloadUrl(versionName: String, isNightly: Boolean): String {
+        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
+        return if (isNightly) {
+            "https://github.com/$repo/releases/download/v${versionName}-nightly/Airbeats-v${versionName}-Nightly.apk"
+        } else {
+            "https://github.com/$repo/releases/download/v$versionName/AirBeats_v${versionName}_signed.apk"
+        }
+    }
 
     // Helper functions for deep link matching
     fun isMatchingPlayDomain(host: String?): Boolean {

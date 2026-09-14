@@ -463,7 +463,7 @@ fun VersionCard(uriHandler: UriHandler) {
                                 )
                             }
                         },
-                        onClick = { uriHandler.openUri("https://github.com/d0x-dev/AirBeats/releases/latest") }
+                        onClick = { uriHandler.openUri(com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleasePageUrl()) }
                     ),
                     isLast = false
                 )
@@ -499,7 +499,7 @@ fun VersionCard(uriHandler: UriHandler) {
                                 )
                             }
                         },
-                        onClick = { uriHandler.openUri("https://airbeats.org") }
+                        onClick = { uriHandler.openUri(com.darkxvenom.airbeats.utils.RemoteConfigManager.websiteUrl) }
                     ),
                     isLast = true
                 )
@@ -681,11 +681,10 @@ fun UpdateDownloadDialog(
                             WaterDropButton(
                                 onClick = {
                                     downloadStatus = DownloadStatus.REDIRECTING
-                                    val downloadUrl = if (com.darkxvenom.airbeats.BuildConfig.IS_NIGHTLY) {
-                                        "https://github.com/d0x-dev/AirBeats/releases/download/v${latestVersion}-nightly/Airbeats-v${latestVersion}-Nightly.apk"
-                                    } else {
-                                        "https://github.com/d0x-dev/AirBeats/releases/download/v$latestVersion/AirBeats_v${latestVersion}_signed.apk"
-                                    }
+                                    val downloadUrl = com.darkxvenom.airbeats.utils.RemoteConfigManager.getApkDownloadUrl(
+                                        latestVersion,
+                                        com.darkxvenom.airbeats.BuildConfig.IS_NIGHTLY
+                                    )
                                     uriHandler.openUri(downloadUrl)
                                     downloadStatus = DownloadStatus.COMPLETED
                                     onDismiss()
@@ -760,7 +759,7 @@ enum class DownloadStatus {
 suspend fun checkForUpdates(): String? = withContext(Dispatchers.IO) {
     try {
         if (com.darkxvenom.airbeats.BuildConfig.IS_NIGHTLY) {
-            val url = java.net.URL("https://api.github.com/repos/d0x-dev/AirBeats/releases")
+            val url = java.net.URL(com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleaseApiUrl(isNightly = true))
             val connection = url.openConnection()
             connection.connect()
             val json = connection.getInputStream().bufferedReader().use { it.readText() }
@@ -774,7 +773,7 @@ suspend fun checkForUpdates(): String? = withContext(Dispatchers.IO) {
             }
             return@withContext null
         } else {
-            val url = java.net.URL("https://api.github.com/repos/d0x-dev/AirBeats/releases/latest")
+            val url = java.net.URL(com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleaseApiUrl(isNightly = false))
             val connection = url.openConnection()
             connection.connect()
             val json = connection.getInputStream().bufferedReader().use { it.readText() }
