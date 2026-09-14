@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import html
+import time
 import requests
 
 def create_telegraph_page(title_prefix, changelog_text, release_type, version, release_url=""):
@@ -156,37 +157,59 @@ def main():
     if release_url:
         inline_keyboard.append([{"text": "🔗 View on GitHub", "url": release_url}])
 
-    print(f"Uploading {apk_file} ({os.path.getsize(apk_file)} bytes) to chat {chat_id}, topic {thread_id}...")
+    file_size = os.path.getsize(apk_file)
+    file_basename = os.path.basename(apk_file)
+    print(f"Uploading {apk_file} ({file_size} bytes) to chat {chat_id}, topic {thread_id}...", flush=True)
 
-    with open(apk_file, "rb") as f:
-        data = {
-            "chat_id": chat_id,
-            "caption": caption,
-            "parse_mode": "HTML",
-        }
-        if thread_id:
-            data["message_thread_id"] = thread_id
-        if inline_keyboard:
-            data["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})
+    apk_msg_id = None
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            print(f"Upload attempt {attempt}/{max_attempts}...", flush=True)
+            with open(apk_file, "rb") as f:
+                data = {
+                    "chat_id": chat_id,
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                }
+                if thread_id:
+                    data["message_thread_id"] = thread_id
+                if inline_keyboard:
+                    data["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})
 
-        res = requests.post(
-            f"{base_url}/sendDocument",
-            data=data,
-            files={"document": f},
-            timeout=300
-        )
+                res = requests.post(
+                    f"{base_url}/sendDocument",
+                    data=data,
+                    files={"document": (file_basename, f, "application/vnd.android.package-archive")},
+                    timeout=(30, 300)
+                )
 
-    res_json = res.json()
-    if not res_json.get("ok"):
-        print("Failed to upload APK document to Telegram:", res_json)
+            res_json = res.json()
+            if not res_json.get("ok"):
+                print(f"Warning: Telegram API error on attempt {attempt}: {res_json}", flush=True)
+                if attempt < max_attempts:
+                    time.sleep(5)
+                    continue
+                sys.exit(1)
+
+            apk_msg_id = res_json["result"]["message_id"]
+            print(f"APK successfully uploaded! Telegram Message ID: {apk_msg_id}", flush=True)
+            break
+        except Exception as e:
+            print(f"Warning: Upload attempt {attempt} failed with exception: {e}", flush=True)
+            if attempt < max_attempts:
+                print("Retrying in 5 seconds...", flush=True)
+                time.sleep(5)
+                continue
+            raise e
+
+    if not apk_msg_id:
+        print("Error: Could not retrieve message_id for uploaded APK.", flush=True)
         sys.exit(1)
-
-    apk_msg_id = res_json["result"]["message_id"]
-    print(f"APK successfully uploaded! Telegram Message ID: {apk_msg_id}")
 
     # 4. Pin the latest uploaded APK message in Telegram
     try:
-        print(f"Pinning APK message {apk_msg_id} in chat {chat_id}...")
+        print(f"Pinning APK message {apk_msg_id} in chat {chat_id}...", flush=True)
         pin_payload = {
             "chat_id": chat_id,
             "message_id": apk_msg_id,
@@ -199,13 +222,13 @@ def main():
         )
         pin_json = pin_res.json()
         if pin_json.get("ok"):
-            print("Successfully pinned latest APK message in Telegram!")
+            print("Successfully pinned latest APK message in Telegram!", flush=True)
         else:
-            print(f"Notice: pinChatMessage response: {pin_json}")
+            print(f"Notice: pinChatMessage response: {pin_json}", flush=True)
     except Exception as pin_err:
-        print(f"Notice: Failed to pin message: {pin_err}")
+        print(f"Notice: Failed to pin message: {pin_err}", flush=True)
 
-    print("All Telegram notifications completed successfully!")
+    print("All Telegram notifications completed successfully!", flush=True)
 
 if __name__ == "__main__":
     main()
