@@ -12,6 +12,7 @@ STATS_BASE_URL = "https://db.drkvenom786.workers.dev"
 STATS_API_KEY = "DARKBOY25-10-2006"
 TELEGRAM_CHAT_ID = "-1004388752678"
 TELEGRAM_THREAD_ID = "3"
+ADMIN_TELEGRAM_ID = "8699611292"
 
 # Secrets to set via `npx wrangler secret put <NAME>` or Cloudflare Dashboard:
 # - TELEGRAM_BOT_TOKEN: Your Bot Token from @BotFather

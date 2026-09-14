@@ -341,11 +341,73 @@ async function handleTelegramWebhook(request, env) {
                          `📦 <b>Latest Releases:</b> https://github.com/d0x-dev/AirBeats/releases/latest\n` +
                          `💬 <b>Listen Together:</b> https://listentogether.airbeats.org`;
       await sendTelegramMessage(env, releaseMsg, chatId, threadId);
+    } else if (text.startsWith("/merge") || text.startsWith("/accept")) {
+      const senderId = String(message.from?.id || "");
+      const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
+
+      if (senderId !== adminId) {
+        await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can merge pull requests. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
+        return new Response("OK");
+      }
+
+      let prNumber = null;
+      const parts = message.text.trim().split(/\s+/);
+      if (parts.length > 1) {
+        const candidate = parts[1].replace("#", "").trim();
+        if (/^\d+$/.test(candidate)) prNumber = candidate;
+      }
+      if (!prNumber && message.reply_to_message?.text) {
+        const match = message.reply_to_message.text.match(/(?:Pull Request|PR|#)\s*#?(\d+)/i);
+        if (match) prNumber = match[1];
+      }
+
+      if (!prNumber) {
+        await sendTelegramMessage(env, "⚠️ <b>Usage:</b> <code>/merge &lt;pr_number&gt;</code> (e.g. <code>/merge 1</code>) or reply directly to any PR notification with <code>/merge</code>.", chatId, threadId);
+        return new Response("OK");
+      }
+
+      const adminName = message.from?.first_name || "Admin";
+      const result = await mergeGitHubPullRequest(env, prNumber, adminName);
+      await sendTelegramMessage(env, result, chatId, threadId);
+    } else if (text.startsWith("/close_pr") || text.startsWith("/closepr")) {
+      const senderId = String(message.from?.id || "");
+      const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
+
+      if (senderId !== adminId) {
+        await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can close pull requests. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
+        return new Response("OK");
+      }
+
+      let prNumber = null;
+      const parts = message.text.trim().split(/\s+/);
+      if (parts.length > 1) {
+        const candidate = parts[1].replace("#", "").trim();
+        if (/^\d+$/.test(candidate)) prNumber = candidate;
+      }
+      if (!prNumber && message.reply_to_message?.text) {
+        const match = message.reply_to_message.text.match(/(?:Pull Request|PR|#)\s*#?(\d+)/i);
+        if (match) prNumber = match[1];
+      }
+
+      if (!prNumber) {
+        await sendTelegramMessage(env, "⚠️ <b>Usage:</b> <code>/close_pr &lt;pr_number&gt;</code> or reply to a PR notification with <code>/close_pr</code>.", chatId, threadId);
+        return new Response("OK");
+      }
+
+      const adminName = message.from?.first_name || "Admin";
+      const result = await closeGitHubPullRequest(env, prNumber, adminName);
+      await sendTelegramMessage(env, result, chatId, threadId);
+    } else if (text === "/myid" || text === "/id") {
+      const senderId = message.from?.id || "unknown";
+      await sendTelegramMessage(env, `🆔 <b>Your Telegram User ID:</b> <code>${senderId}</code>\n💬 <b>Chat ID:</b> <code>${chatId}</code>`, chatId, threadId);
     } else if (text.startsWith("/help") || text.startsWith("/start")) {
       const helpMsg = `👋 <b>AirBeats Community Bot</b>\n\n` +
                       `Commands:\n` +
                       `📊 <b>/stats</b> - View Top 10 Listeners & Community Stats\n` +
                       `🚀 <b>/latest</b> - Latest APK Download link\n` +
+                      `🔀 <b>/merge &lt;pr#&gt;</b> - Accept & Merge Pull Request (Admin Only)\n` +
+                      `🚫 <b>/close_pr &lt;pr#&gt;</b> - Close Pull Request (Admin Only)\n` +
+                      `🆔 <b>/myid</b> - Show your Telegram User ID\n` +
                       `ℹ️ <b>/help</b> - Show this message`;
       await sendTelegramMessage(env, helpMsg, chatId, threadId);
     }
@@ -353,6 +415,84 @@ async function handleTelegramWebhook(request, env) {
     return new Response("OK");
   } catch (err) {
     return new Response("Error: " + err.message, { status: 500 });
+  }
+}
+
+/* -------------------------------------------------------------
+ * 2.1 GITHUB PULL REQUEST API HELPERS
+ * ----------------------------------------------------------- */
+async function mergeGitHubPullRequest(env, prNumber, adminName) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    return "⚠️ <b>Error:</b> <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.";
+  }
+
+  const repo = "d0x-dev/AirBeats";
+  const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/merge`;
+
+  try {
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      },
+      body: JSON.stringify({
+        commit_title: `Merge pull request #${prNumber} by ${adminName} via Telegram`,
+        merge_method: "merge"
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.merged) {
+      return `<a href="https://github.com/${repo}">${repo}</a> • <b>Pull Request Merged!</b> 🎉\n\n` +
+             `✅ <b>PR #${prNumber}</b> has been successfully merged into <code>main</code>!\n` +
+             `👤 <b>Approved by:</b> ${escapeHtml(adminName)}\n` +
+             `🔗 <a href="https://github.com/${repo}/pull/${prNumber}">View Pull Request on GitHub</a>`;
+    } else {
+      const errorMsg = data.message || "Merge conflict or pull request not open.";
+      return `❌ <b>Failed to Merge PR #${prNumber}</b>\n\n⚠️ <i>Reason: ${escapeHtml(errorMsg)}</i>\n🔗 <a href="https://github.com/${repo}/pull/${prNumber}">Inspect PR on GitHub</a>`;
+    }
+  } catch (err) {
+    return `❌ <b>Error:</b> ${escapeHtml(err.message)}`;
+  }
+}
+
+async function closeGitHubPullRequest(env, prNumber, adminName) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    return "⚠️ <b>Error:</b> <code>GITHUB_TOKEN</code> secret is missing in Cloudflare Workers.";
+  }
+
+  const repo = "d0x-dev/AirBeats";
+  const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AirBeats-Telegram-Bot/1.0"
+      },
+      body: JSON.stringify({
+        state: "closed"
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.state === "closed") {
+      return `<a href="https://github.com/${repo}">${repo}</a> • <b>Pull Request Closed</b> 🚫\n\n` +
+             `PR #${prNumber} has been closed.\n` +
+             `👤 <b>Closed by:</b> ${escapeHtml(adminName)}\n` +
+             `🔗 <a href="https://github.com/${repo}/pull/${prNumber}">View Pull Request on GitHub</a>`;
+    } else {
+      const errorMsg = data.message || "Failed to close pull request.";
+      return `❌ <b>Failed to Close PR #${prNumber}</b>\n\n⚠️ <i>Reason: ${escapeHtml(errorMsg)}</i>`;
+    }
+  } catch (err) {
+    return `❌ <b>Error:</b> ${escapeHtml(err.message)}`;
   }
 }
 
