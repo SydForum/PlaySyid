@@ -15,6 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -83,14 +84,62 @@ jobs:
       - name: Rename APK
         run: mv app/build/outputs/apk/nightly/app-nightly.apk Airbeats-v${{ env.NEW_VERSION_NAME }}-Nightly.apk
 
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | grep -E '^v.*-nightly$' | head -n 1 || echo "")
+          echo "Previous nightly tag: $PREV_TAG"
+          
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"• %s (%h)" --no-merges | grep -v "chore: Bump version" | head -n 10 || echo "")
+          else
+            COMMITS=$(git log -n 5 --pretty=format:"• %s (%h)" --no-merges | grep -v "chore: Bump version" || echo "")
+          fi
+          
+          if [ -z "$COMMITS" ]; then
+            COMMITS="• Performance optimizations and bug fixes."
+          fi
+
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          echo "$COMMITS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
       - name: Update Nightly Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ env.NEW_VERSION_NAME }}-nightly"
           name: "Airbeats-Nights v${{ env.NEW_VERSION_NAME }}"
-          body: "This is the latest automatic nightly build generated from the main branch."
+          body: |
+            ### 📝 What's Changed
+            ${{ env.CHANGELOG }}
+
+            *Automated Nightly build compiled from main branch.*
           prerelease: true
           files: Airbeats-v${{ env.NEW_VERSION_NAME }}-Nightly.apk
+
+      - name: Upload Nightly APK to Telegram (Topic 9)
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '8836707725:AAFt08h_tOCnMbC06bcDRDiSuTUEJnkKsHo' }}
+          CHAT_ID: "-1004388752678"
+          THREAD_ID: "9"
+          VERSION: ${{ env.NEW_VERSION_NAME }}
+          APK_FILE: "Airbeats-v${{ env.NEW_VERSION_NAME }}-Nightly.apk"
+        run: |
+          CAPTION="🌙 <b>AirBeats Nightly Build v${VERSION}</b>
+
+📝 <b>Changelog:</b>
+${CHANGELOG}
+
+📦 <i>Fresh nightly build from main branch</i>
+🔗 <a href=\"https://github.com/d0x-dev/AirBeats/releases/tag/v${VERSION}-nightly\">GitHub Release Page</a>"
+
+          echo "Uploading ${APK_FILE} to Telegram chat ${CHAT_ID}, topic ${THREAD_ID}..."
+          curl -s -f -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F chat_id="${CHAT_ID}" \
+            -F message_thread_id="${THREAD_ID}" \
+            -F document=@"${APK_FILE}" \
+            -F caption="${CAPTION}" \
+            -F parse_mode="HTML"
 
 
 

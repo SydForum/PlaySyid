@@ -215,10 +215,21 @@ async function handleGitHubWebhook(request, env) {
           const tagName = escapeHtml(rel.tag_name);
           const name = escapeHtml(rel.name || tagName);
           const url = rel.html_url;
+          const body = rel.body ? escapeHtml(rel.body) : "";
+          const isNightly = rel.prerelease || tagName.toLowerCase().includes("nightly");
+          const targetThreadId = isNightly ? 9 : (env.TELEGRAM_THREAD_ID || 3);
 
-          message = `🚀 <b>New AirBeats Release: ${name}!</b>\n\n` +
-                    `🏷️ <b>Tag:</b> <code>${tagName}</code>\n` +
-                    `📥 <a href="${url}">Download APK & View Release Notes</a>`;
+          let changelogText = "";
+          if (body) {
+            changelogText = `\n\n📝 <b>Changelog:</b>\n${body.length > 500 ? body.substring(0, 500) + "..." : body}`;
+          }
+
+          message = `🚀 <b>New AirBeats ${isNightly ? "Nightly Build" : "Release"}: ${name}!</b>\n\n` +
+                    `🏷️ <b>Tag:</b> <code>${tagName}</code>${changelogText}\n\n` +
+                    `📥 <a href="${url}">Download APK & View Release</a>`;
+
+          await sendTelegramMessage(env, message, null, targetThreadId);
+          message = null;
         }
         break;
       }
