@@ -446,7 +446,6 @@ object AutoBackupManager {
             val requestBody = backupFile.asRequestBody(mediaType)
             val request = Request.Builder()
                 .url(url)
-                .header("X-API-Key", RemoteConfigManager.statsApiKey)
                 .post(requestBody)
                 .build()
 
@@ -467,7 +466,6 @@ object AutoBackupManager {
             val url = "${RemoteConfigManager.statsBaseUrl}/download?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
             val request = Request.Builder()
                 .url(url)
-                .header("X-API-Key", RemoteConfigManager.statsApiKey)
                 .get()
                 .build()
 
@@ -507,7 +505,6 @@ object AutoBackupManager {
             val url = "${RemoteConfigManager.statsBaseUrl}/delete?file=${URLEncoder.encode(cloudFile, "UTF-8")}"
             val request = Request.Builder()
                 .url(url)
-                .header("X-API-Key", RemoteConfigManager.statsApiKey)
                 .post("".toRequestBody(null))
                 .build()
 
@@ -627,4 +624,3 @@ object AutoBackupManager {
         exitProcess(0)
     }
 }
-

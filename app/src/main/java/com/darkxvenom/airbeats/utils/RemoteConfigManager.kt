@@ -3,7 +3,6 @@ package com.darkxvenom.airbeats.utils
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
-import com.darkxvenom.airbeats.BuildConfig
 import com.darkxvenom.airbeats.innertube.models.YTItem
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
@@ -16,8 +15,6 @@ import timber.log.Timber
 data class AppRemoteConfig(
     val playDomain: String,
     val statsBaseUrl: String,
-    val statsApiKey: String,
-    val googleApiKey: String,
     val listenTogetherUrl: String,
     val websiteUrl: String,
     val githubRepo: String,
@@ -28,8 +25,6 @@ object RemoteConfigManager {
     private const val PREFS_NAME = "airbeats_remote_config_cache"
     private const val KEY_PLAY_DOMAIN = "play_domain"
     private const val KEY_STATS_BASE_URL = "stats_base_url"
-    private const val KEY_STATS_API_KEY = "stats_api_key"
-    private const val KEY_GOOGLE_API_KEY = "google_api_key"
     private const val KEY_LISTEN_TOGETHER_URL = "listen_together_url"
     private const val KEY_WEBSITE_URL = "website_url"
     private const val KEY_GITHUB_REPO = "github_repo"
@@ -38,23 +33,19 @@ object RemoteConfigManager {
     private const val KEY_LAST_SYNC = "last_sync_timestamp"
 
     val DEFAULT_PLAY_DOMAIN: String = "https://play.airbeats.org"
-    val DEFAULT_STATS_BASE_URL: String = BuildConfig.STATS_BASE_URL.ifBlank { "https://db.drkvenom786.workers.dev" }
-    val DEFAULT_STATS_API_KEY: String = BuildConfig.STATS_API_KEY
-    val DEFAULT_GOOGLE_API_KEY: String = BuildConfig.GOOGLE_API_KEY
+    // Privileged service credentials must never be embedded in an APK.
+    // Cloud statistics and privileged API calls remain unavailable unless redesigned
+    // behind authenticated server-side access.
+    val DEFAULT_STATS_BASE_URL: String = ""
     val DEFAULT_LISTEN_TOGETHER_URL: String = "https://listentogether.airbeats.org"
     val DEFAULT_WEBSITE_URL: String = "https://airbeats.org"
     val DEFAULT_GITHUB_REPO: String = "d0x-dev/AirBeats"
     val DEFAULT_UPDATE_API_URL: String = ""
 
-    const val DEFAULT_FIREBASE_CONFIG_URL: String = "https://airbeats-54c06-default-rtdb.firebaseio.com/app_config.json"
-    const val DEFAULT_FIREBASE_CONFIG_KEY: String = "NU80YXbaYrAAazHkrGzhIJH3c3XH59ZDOUvz1S9C"
-
     @Volatile
     private var activeConfig: AppRemoteConfig = AppRemoteConfig(
         playDomain = normalizeUrl(DEFAULT_PLAY_DOMAIN),
         statsBaseUrl = normalizeUrl(DEFAULT_STATS_BASE_URL),
-        statsApiKey = DEFAULT_STATS_API_KEY,
-        googleApiKey = DEFAULT_GOOGLE_API_KEY,
         listenTogetherUrl = normalizeUrl(DEFAULT_LISTEN_TOGETHER_URL),
         websiteUrl = normalizeUrl(DEFAULT_WEBSITE_URL),
         githubRepo = DEFAULT_GITHUB_REPO,
@@ -68,12 +59,6 @@ object RemoteConfigManager {
 
     val statsBaseUrl: String
         get() = activeConfig.statsBaseUrl
-
-    val statsApiKey: String
-        get() = activeConfig.statsApiKey
-
-    val googleApiKey: String
-        get() = activeConfig.googleApiKey
 
     val listenTogetherUrl: String
         get() = activeConfig.listenTogetherUrl
@@ -119,8 +104,6 @@ object RemoteConfigManager {
     private fun loadFromCache(prefs: SharedPreferences) {
         val cachedPlayDomain = prefs.getString(KEY_PLAY_DOMAIN, null)
         val cachedStatsBaseUrl = prefs.getString(KEY_STATS_BASE_URL, null)
-        val cachedStatsApiKey = prefs.getString(KEY_STATS_API_KEY, null)
-        val cachedGoogleApiKey = prefs.getString(KEY_GOOGLE_API_KEY, null)
         val cachedListenTogetherUrl = prefs.getString(KEY_LISTEN_TOGETHER_URL, null)
         val cachedWebsiteUrl = prefs.getString(KEY_WEBSITE_URL, null)
         val cachedGithubRepo = prefs.getString(KEY_GITHUB_REPO, null)
@@ -129,8 +112,6 @@ object RemoteConfigManager {
         activeConfig = AppRemoteConfig(
             playDomain = normalizeUrl(cachedPlayDomain ?: DEFAULT_PLAY_DOMAIN),
             statsBaseUrl = normalizeUrl(cachedStatsBaseUrl ?: DEFAULT_STATS_BASE_URL),
-            statsApiKey = cachedStatsApiKey ?: DEFAULT_STATS_API_KEY,
-            googleApiKey = cachedGoogleApiKey ?: DEFAULT_GOOGLE_API_KEY,
             listenTogetherUrl = normalizeUrl(cachedListenTogetherUrl ?: DEFAULT_LISTEN_TOGETHER_URL),
             websiteUrl = normalizeUrl(cachedWebsiteUrl ?: DEFAULT_WEBSITE_URL),
             githubRepo = cachedGithubRepo ?: DEFAULT_GITHUB_REPO,
@@ -141,14 +122,7 @@ object RemoteConfigManager {
     }
 
     private suspend fun fetchFromFirebase() {
-        // Priority 1: Fetch fresh JSON directly from Firebase Realtime Database
-        val secureUrl = BuildConfig.FIREBASE_CONFIG_URL.trim().ifBlank { DEFAULT_FIREBASE_CONFIG_URL }
-        val secureKey = BuildConfig.FIREBASE_CONFIG_KEY.trim().ifBlank { DEFAULT_FIREBASE_CONFIG_KEY }
-        if (secureUrl.isNotBlank()) {
-            fetchFromSecureEndpoint(secureUrl, secureKey)
-        }
-
-        // Priority 2: Fetch from Firebase Remote Config SDK (strictly ignore local defaults so they don't overwrite RTDB)
+        // Firebase Remote Config only contains client-safe values such as service URLs.
         try {
             val remoteConfig = FirebaseRemoteConfig.getInstance()
             val configSettings = FirebaseRemoteConfigSettings.Builder()
@@ -169,76 +143,6 @@ object RemoteConfigManager {
         }
     }
 
-    private suspend fun fetchFromSecureEndpoint(endpointUrl: String, authKey: String) {
-        try {
-            var requestUrl = endpointUrl
-            if (authKey.isNotBlank()) {
-                val separator = if (requestUrl.contains("?")) "&" else "?"
-                if (!requestUrl.contains("auth=")) {
-                    requestUrl = "$requestUrl${separator}auth=$authKey"
-                }
-            }
-
-            val requestBuilder = okhttp3.Request.Builder()
-                .url(requestUrl)
-                .cacheControl(okhttp3.CacheControl.FORCE_NETWORK) // Force network fetch on every open
-            if (authKey.isNotBlank()) {
-                requestBuilder.header("X-API-Key", authKey)
-            }
-
-            val httpClient = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
-            httpClient.newCall(requestBuilder.build()).execute().use { response ->
-                if (response.isSuccessful) {
-                    val rawBody = response.body.string().trim()
-                    if (rawBody.isBlank()) return@use
-                    Timber.d("RemoteConfigManager: Successfully fetched fresh remote config from Firebase RTDB: $rawBody")
-                    val resolvedJson = if (rawBody.startsWith("{")) {
-                        val obj = JSONObject(rawBody)
-                        if (obj.optBoolean("encrypted", false) && obj.has("data")) {
-                            decryptAes(obj.getString("data"), authKey.ifBlank { "airbeats_secure_key" }) ?: rawBody
-                        } else {
-                            rawBody
-                        }
-                    } else {
-                        decryptAes(rawBody, authKey.ifBlank { "airbeats_secure_key" }) ?: rawBody
-                    }
-                    parseAndApplyJson(resolvedJson)
-                } else {
-                    Timber.w("RemoteConfigManager: Firebase RTDB endpoint returned code=${response.code}")
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "RemoteConfigManager: Failed to fetch from Firebase RTDB endpoint: ${e.message}")
-        }
-    }
-
-    private fun decryptAes(cipherTextBase64: String, secretKey: String): String? {
-        return try {
-            val decoded = android.util.Base64.decode(cipherTextBase64, android.util.Base64.DEFAULT)
-            if (decoded.size < 16) return null
-            val iv = ByteArray(16)
-            System.arraycopy(decoded, 0, iv, 0, 16)
-            val cipherBytes = ByteArray(decoded.size - 16)
-            System.arraycopy(decoded, 16, cipherBytes, 0, cipherBytes.size)
-
-            val md = java.security.MessageDigest.getInstance("SHA-256")
-            val keyBytes = md.digest(secretKey.toByteArray(Charsets.UTF_8))
-            val keySpec = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
-            val ivSpec = javax.crypto.spec.IvParameterSpec(iv)
-
-            val cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding")
-            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec, ivSpec)
-            String(cipher.doFinal(cipherBytes), Charsets.UTF_8)
-        } catch (e: Exception) {
-            Timber.w(e, "RemoteConfigManager: Failed to decrypt payload")
-            null
-        }
-    }
-
     private fun parseAndUpdateConfig(remoteConfig: FirebaseRemoteConfig) {
         fun getRemoteStringOrNull(key: String): String? {
             val v = remoteConfig.getValue(key)
@@ -248,22 +152,18 @@ object RemoteConfigManager {
         val jsonConfigString = getRemoteStringOrNull(KEY_APP_CONFIG_JSON)
         val individualPlayDomain = getRemoteStringOrNull(KEY_PLAY_DOMAIN)
         val individualStatsBaseUrl = getRemoteStringOrNull(KEY_STATS_BASE_URL)
-        val individualStatsApiKey = getRemoteStringOrNull(KEY_STATS_API_KEY)
-        val individualGoogleApiKey = getRemoteStringOrNull(KEY_GOOGLE_API_KEY)
         val individualListenTogetherUrl = getRemoteStringOrNull(KEY_LISTEN_TOGETHER_URL)
         val individualWebsiteUrl = getRemoteStringOrNull(KEY_WEBSITE_URL)
         val individualGithubRepo = getRemoteStringOrNull(KEY_GITHUB_REPO)
         val individualUpdateApiUrl = getRemoteStringOrNull(KEY_UPDATE_API_URL)
 
         if (jsonConfigString != null || individualPlayDomain != null || individualStatsBaseUrl != null ||
-            individualStatsApiKey != null || individualGoogleApiKey != null || individualListenTogetherUrl != null ||
+            individualListenTogetherUrl != null ||
             individualWebsiteUrl != null || individualGithubRepo != null || individualUpdateApiUrl != null) {
             parseAndApplyJson(
                 jsonString = jsonConfigString,
                 overridePlayDomain = individualPlayDomain,
                 overrideStatsBaseUrl = individualStatsBaseUrl,
-                overrideStatsApiKey = individualStatsApiKey,
-                overrideGoogleApiKey = individualGoogleApiKey,
                 overrideListenTogetherUrl = individualListenTogetherUrl,
                 overrideWebsiteUrl = individualWebsiteUrl,
                 overrideGithubRepo = individualGithubRepo,
@@ -276,8 +176,6 @@ object RemoteConfigManager {
         jsonString: String?,
         overridePlayDomain: String? = null,
         overrideStatsBaseUrl: String? = null,
-        overrideStatsApiKey: String? = null,
-        overrideGoogleApiKey: String? = null,
         overrideListenTogetherUrl: String? = null,
         overrideWebsiteUrl: String? = null,
         overrideGithubRepo: String? = null,
@@ -285,8 +183,6 @@ object RemoteConfigManager {
     ) {
         var remotePlayDomain: String? = overridePlayDomain
         var remoteStatsBaseUrl: String? = overrideStatsBaseUrl
-        var remoteStatsApiKey: String? = overrideStatsApiKey
-        var remoteGoogleApiKey: String? = overrideGoogleApiKey
         var remoteListenTogetherUrl: String? = overrideListenTogetherUrl
         var remoteWebsiteUrl: String? = overrideWebsiteUrl
         var remoteGithubRepo: String? = overrideGithubRepo
@@ -312,9 +208,7 @@ object RemoteConfigManager {
                 }
 
                 if (remotePlayDomain == null) remotePlayDomain = findString("play_domain", "playDomain", "play_url", "playUrl")
-                if (remoteStatsBaseUrl == null) remoteStatsBaseUrl = findString("stats_base_url", "statsBaseUrl", "stats_url", "statsUrl")
-                if (remoteStatsApiKey == null) remoteStatsApiKey = findString("stats_api_key", "statsApiKey")
-                if (remoteGoogleApiKey == null) remoteGoogleApiKey = findString("google_api_key", "googleApiKey")
+                if (remoteStatsBaseUrl == null) remoteStatsBaseUrl = findString("stats_worker_url", "stats_base_url", "statsBaseUrl", "stats_url", "statsUrl")
                 if (remoteListenTogetherUrl == null) remoteListenTogetherUrl = findString("listen_together_url", "listenTogetherUrl")
                 if (remoteWebsiteUrl == null) remoteWebsiteUrl = findString("website_url", "websiteUrl", "website", "official_website", "officialWebsite")
                 if (remoteGithubRepo == null) remoteGithubRepo = findString("github_repo", "githubRepo", "repo")
@@ -326,8 +220,6 @@ object RemoteConfigManager {
 
         val newPlayDomain = if (!remotePlayDomain.isNullOrBlank()) normalizeUrl(remotePlayDomain) else activeConfig.playDomain
         val newStatsBaseUrl = if (!remoteStatsBaseUrl.isNullOrBlank()) normalizeUrl(remoteStatsBaseUrl) else activeConfig.statsBaseUrl
-        val newStatsApiKey = if (!remoteStatsApiKey.isNullOrBlank()) remoteStatsApiKey else activeConfig.statsApiKey
-        val newGoogleApiKey = if (!remoteGoogleApiKey.isNullOrBlank()) remoteGoogleApiKey else activeConfig.googleApiKey
         val newListenTogetherUrl = if (!remoteListenTogetherUrl.isNullOrBlank()) normalizeUrl(remoteListenTogetherUrl) else activeConfig.listenTogetherUrl
         val newWebsiteUrl = if (!remoteWebsiteUrl.isNullOrBlank()) normalizeUrl(remoteWebsiteUrl) else activeConfig.websiteUrl
         val newGithubRepo = if (!remoteGithubRepo.isNullOrBlank()) remoteGithubRepo.trim().removePrefix("https://github.com/").trimEnd('/') else activeConfig.githubRepo
@@ -336,8 +228,6 @@ object RemoteConfigManager {
         val newConfig = AppRemoteConfig(
             playDomain = newPlayDomain,
             statsBaseUrl = newStatsBaseUrl,
-            statsApiKey = newStatsApiKey,
-            googleApiKey = newGoogleApiKey,
             listenTogetherUrl = newListenTogetherUrl,
             websiteUrl = newWebsiteUrl,
             githubRepo = newGithubRepo,
@@ -351,8 +241,6 @@ object RemoteConfigManager {
             sharedPreferences?.edit()?.apply {
                 putString(KEY_PLAY_DOMAIN, newConfig.playDomain)
                 putString(KEY_STATS_BASE_URL, newConfig.statsBaseUrl)
-                putString(KEY_STATS_API_KEY, newConfig.statsApiKey)
-                putString(KEY_GOOGLE_API_KEY, newConfig.googleApiKey)
                 putString(KEY_LISTEN_TOGETHER_URL, newConfig.listenTogetherUrl)
                 putString(KEY_WEBSITE_URL, newConfig.websiteUrl)
                 putString(KEY_GITHUB_REPO, newConfig.githubRepo)

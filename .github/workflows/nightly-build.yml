@@ -55,23 +55,11 @@ jobs:
       - name: Inject Secrets
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          STATS_API_KEY: ${{ secrets.STATS_API_KEY }}
-          STATS_BASE_URL: ${{ secrets.STATS_BASE_URL }}
-          AUTH_API_BASE_URL: ${{ secrets.AUTH_API_BASE_URL }}
-          FIREBASE_CONFIG_URL: ${{ secrets.FIREBASE_CONFIG_URL }}
-          FIREBASE_CONFIG_KEY: ${{ secrets.FIREBASE_CONFIG_KEY }}
           SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
         run: |
           echo "${GOOGLE_SERVICES_JSON}" | base64 --decode > app/google-services.json
           echo "${SIGNING_KEY_BASE64}" | base64 --decode > app/keystore.jks
           
-          echo "google.api.key=${GOOGLE_API_KEY}" >> local.properties
-          echo "stats.api.key=${STATS_API_KEY}" >> local.properties
-          echo "stats.base.url=${STATS_BASE_URL}" >> local.properties
-          echo "auth.api.base.url=${AUTH_API_BASE_URL}" >> local.properties
-          echo "firebase.config.url=${FIREBASE_CONFIG_URL:-https://airbeats-54c06-default-rtdb.firebaseio.com/app_config.json}" >> local.properties
-          echo "firebase.config.key=${FIREBASE_CONFIG_KEY:-NU80YXbaYrAAazHkrGzhIJH3c3XH59ZDOUvz1S9C}" >> local.properties
 
       - name: Build Release APK
         env:
