@@ -82,17 +82,3 @@ jobs:
           name: AirBeats-Product-Signed-APK
           path: ${{ env.FINAL_APK_NAME }}
           if-no-files-found: error
-
-      - name: Upload Release APK to Telegram (Topic 8)
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: "-1004388752678"
-          THREAD_ID: "8"
-          VERSION: ${{ env.VERSION_NAME }}
-          APK_FILE: ${{ env.FINAL_APK_NAME }}
-          RELEASE_TYPE: "Official Release"
-          CHANGELOG: ${{ env.CHANGELOG }}
-          RELEASE_URL: "https://github.com/d0x-dev/AirBeats/releases/latest"
-        run: |
-          pip install requests
-          python3 .github/scripts/upload_to_telegram.py
