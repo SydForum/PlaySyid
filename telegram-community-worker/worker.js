@@ -476,6 +476,19 @@ async function handleGitHubWebhook(request, env) {
   }
 }
 
+const DEFAULT_ADMIN_IDS = ["8699611292", "7335083822"];
+
+function isBotAdmin(userId, env) {
+  if (!userId) return false;
+  const uid = String(userId).trim();
+  const configured = String(env?.ADMIN_TELEGRAM_ID || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+  const allAdmins = new Set([...DEFAULT_ADMIN_IDS, ...configured]);
+  return allAdmins.has(uid);
+}
+
 /* -------------------------------------------------------------
  * 2. TELEGRAM INTERACTIVE COMMAND HANDLER (/stats, /latest, /merge)
  * ----------------------------------------------------------- */
@@ -499,11 +512,10 @@ async function handleTelegramWebhook(request, env, ctx) {
     const text = message.text.trim();
     const lowerText = text.toLowerCase();
     const senderId = String(message.from?.id || "");
-    const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
 
     // 2. Check if this message is an admin reply to a comment prompt
     const replyTo = message.reply_to_message;
-    if (replyTo && senderId === adminId && replyTo.text) {
+    if (replyTo && isBotAdmin(senderId, env) && replyTo.text) {
       const promptMatch = replyTo.text.match(/Issue #(\d+) - Please send your comment/i);
       if (promptMatch) {
         const issueNumber = promptMatch[1];
@@ -553,9 +565,8 @@ async function handleTelegramWebhook(request, env, ctx) {
       await sendTelegramMessage(env, releaseMsg, chatId, threadId);
     } else if (lowerText.startsWith("/merge") || lowerText.startsWith("/accept") || lowerText.startsWith("/prs") || lowerText.startsWith("/pr")) {
       const senderId = String(message.from?.id || "");
-      const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
 
-      if (senderId !== adminId) {
+      if (!isBotAdmin(senderId, env)) {
         await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can manage pull requests. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
         return new Response("OK");
       }
@@ -583,9 +594,8 @@ async function handleTelegramWebhook(request, env, ctx) {
       return new Response("OK");
     } else if (lowerText.startsWith("/close_pr") || lowerText.startsWith("/closepr")) {
       const senderId = String(message.from?.id || "");
-      const adminId = String(env.ADMIN_TELEGRAM_ID || "8699611292");
 
-      if (senderId !== adminId) {
+      if (!isBotAdmin(senderId, env)) {
         await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can close pull requests. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
         return new Response("OK");
       }
@@ -610,7 +620,7 @@ async function handleTelegramWebhook(request, env, ctx) {
       const result = await closeGitHubPullRequest(env, prNumber, adminName);
       await sendTelegramMessage(env, result, chatId, threadId);
     } else if (lowerText.startsWith("/issue") || lowerText.startsWith("/issues")) {
-      if (senderId !== adminId) {
+      if (!isBotAdmin(senderId, env)) {
         await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> Only authorized administrators can manage issues. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
         return new Response("OK");
       }
@@ -634,7 +644,7 @@ async function handleTelegramWebhook(request, env, ctx) {
       await sendOpenIssuesMenu(env, chatId, threadId);
       return new Response("OK");
     } else if (lowerText.startsWith("/notification") || lowerText.startsWith("/notify")) {
-      if (senderId !== adminId) {
+      if (!isBotAdmin(senderId, env)) {
         await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> This command is restricted to authorized administrators only. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
         return new Response("OK");
       }
@@ -649,62 +659,37 @@ async function handleTelegramWebhook(request, env, ctx) {
                         `• <b>Topic</b> <i>(Mandatory)</i>: Target FCM topic (e.g. <code>all_users</code>, <code>6.2.0</code>)\n` +
                         `• <b>Image Link</b> <i>(Optional)</i>: Public direct URL to image banner\n\n` +
                         `<b>Examples:</b>\n` +
-                        `• <code>/notification AirBeats v6.2.0 Released!|Check out the brand new lyrics engine and performance boosts.|all_users</code>\n\n` +
+                        `• <code>/notification AirBeats v6.2.0 Released|Enjoy the new interface and stability updates!|all_users</code>\n` +
                         `• <code>/notification Weekend Chill|Stream curated tracks now playing live.|all_users|https://airbeats.org/banner.png</code>\n\n` +
-                        `• <code>/notification Hotfix Available|Please update your app to resolve playback errors.|6.2.0</code>\n\n` +
-                        `🔒 <i>Note: This command is restricted to administrators only.</i>`;
+                        `💡 <i>Separate the fields with vertical bars (<code>|</code>).</i>`;
 
-      // Extract raw argument text after command name (e.g. /notification ...)
-      const cmdMatch = text.match(/^\/(?:notification|notify)(?:@\w+)?(?:\s+([\s\S]+))?$/i);
-      const rawArgs = cmdMatch && cmdMatch[1] ? cmdMatch[1].trim() : "";
-
-      if (!rawArgs) {
+      const rawArgs = text.substring(lowerText.indexOf(" ") !== -1 ? lowerText.indexOf(" ") + 1 : text.length).trim();
+      if (!rawArgs || rawArgs.length === 0) {
         await sendTelegramMessage(env, formatMsg, chatId, threadId);
         return new Response("OK");
       }
 
-      const parts = rawArgs.split("|").map(p => p.trim());
-
-      // First 3 are mandatory: title, body, topic
-      if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
-        await sendTelegramMessage(env, `⚠️ <b>Invalid Format!</b> First 3 fields (Title, Body, Topic) separated by <code>|</code> are mandatory.\n\n` + formatMsg, chatId, threadId);
+      const segments = rawArgs.split("|").map(s => s.trim());
+      if (segments.length < 3 || !segments[0] || !segments[1] || !segments[2]) {
+        await sendTelegramMessage(env, `⚠️ <b>Incomplete arguments!</b>\n\n` + formatMsg, chatId, threadId);
         return new Response("OK");
       }
 
-      const [title, body, rawTopic, imageUrl] = parts;
-      const cleanTopic = rawTopic.replace(/^\/topics\//i, "").trim();
+      const notifTitle = segments[0];
+      const notifBody = segments[1];
+      const notifTopic = segments[2].replace(/^#/, "");
+      const notifImageUrl = segments.length > 3 ? segments[3] : "";
 
-      if (!cleanTopic) {
-        await sendTelegramMessage(env, `⚠️ <b>Invalid Topic!</b> Please specify a valid topic name (e.g. <code>all_users</code> or version <code>6.2.0</code>).`, chatId, threadId);
-        return new Response("OK");
-      }
-
-      if (!env.FIREBASE_SERVICE_ACCOUNT) {
-        await sendTelegramMessage(env, `❌ <b>Firebase Credentials Missing:</b> <code>FIREBASE_SERVICE_ACCOUNT</code> secret is not configured in Cloudflare Worker.`, chatId, threadId);
-        return new Response("OK");
-      }
+      await sendTelegramMessage(env, `⏳ <i>Broadcasting FCM push notification to topic <code>${escapeHtml(notifTopic)}</code>...</i>`, chatId, threadId);
 
       try {
-        const result = await sendFcmPushNotification(env, {
-          title,
-          body,
-          topic: cleanTopic,
-          imageUrl: imageUrl || null
-        });
-
-        const msgId = result.name || "Delivered";
-        let successMsg = `📢 <b>Push Notification Broadcast Sent!</b>\n\n` +
-                         `🏷️ <b>Title:</b> <code>${escapeHtml(title)}</code>\n` +
-                         `📝 <b>Message:</b> <code>${escapeHtml(body)}</code>\n` +
-                         `🎯 <b>Target Topic:</b> <code>/topics/${escapeHtml(cleanTopic)}</code>\n`;
-
-        if (imageUrl) {
-          successMsg += `🖼️ <b>Banner Image:</b> <a href="${escapeHtml(imageUrl)}">View Image</a>\n`;
-        }
-
-        successMsg += `\n🆔 <b>FCM Message ID:</b> <code>${escapeHtml(msgId)}</code>\n` +
-                      `📱 <i>Successfully dispatched to all active devices on topic <code>${escapeHtml(cleanTopic)}</code>.</i>`;
-
+        const sendResult = await sendFirebasePushNotification(env, notifTitle, notifBody, notifTopic, notifImageUrl);
+        const successMsg = `✅ <b>Push Notification Broadcast Successfully!</b>\n\n` +
+                           `📌 <b>Title:</b> ${escapeHtml(notifTitle)}\n` +
+                           `📝 <b>Body:</b> ${escapeHtml(notifBody)}\n` +
+                           `🎯 <b>Target Topic:</b> <code>${escapeHtml(notifTopic)}</code>\n` +
+                           (notifImageUrl ? `🖼️ <b>Image Banner:</b> <a href="${escapeHtml(notifImageUrl)}">Preview</a>\n` : "") +
+                           `🆔 <b>FCM Message ID:</b> <code>${escapeHtml(sendResult.messageId || sendResult.name || "Sent")}</code>`;
         await sendTelegramMessage(env, successMsg, chatId, threadId);
       } catch (fcmErr) {
         console.error("FCM dispatch error:", fcmErr);
@@ -713,7 +698,7 @@ async function handleTelegramWebhook(request, env, ctx) {
 
       return new Response("OK");
     } else if (lowerText.startsWith("/action") || lowerText.startsWith("/actions") || lowerText.startsWith("/workflow") || lowerText.startsWith("/workflows")) {
-      if (senderId !== adminId) {
+      if (!isBotAdmin(senderId, env)) {
         await sendTelegramMessage(env, `⛔ <b>Access Denied:</b> This command is restricted to authorized administrators only. (Your ID: <code>${senderId}</code>)`, chatId, threadId);
         return new Response("OK");
       }
@@ -724,7 +709,7 @@ async function handleTelegramWebhook(request, env, ctx) {
       const senderId = message.from?.id || "unknown";
       await sendTelegramMessage(env, `🆔 <b>Your Telegram User ID:</b> <code>${senderId}</code>\n💬 <b>Chat ID:</b> <code>${chatId}</code>`, chatId, threadId);
     } else if (lowerText.startsWith("/help") || lowerText.startsWith("/start")) {
-      if (senderId === adminId) {
+      if (isBotAdmin(senderId, env)) {
         const adminHelp = `👑 <b>AirBeats Admin Command Center</b> 🎧\n\n` +
                           `Welcome back, Admin! You have full control over AirBeats via this direct message or the community topics.\n\n` +
                           `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -827,7 +812,7 @@ async function handleTelegramCallbackQuery(query, env) {
   }
 
   // Security check: only admin can use administrative buttons
-  if (fromId !== adminId) {
+  if (!isBotAdmin(fromId, env)) {
     await answerCallbackQuery(botToken, queryId, "⛔ Access Denied: Admin only!", true);
     return new Response("OK");
   }
