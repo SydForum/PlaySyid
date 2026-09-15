@@ -84,6 +84,10 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             private var startedActivities = 0
             override fun onActivityStarted(activity: Activity) {
+                if (startedActivities == 0) {
+                    // App opened or brought to foreground: fetch fresh URLs from Firebase immediately
+                    com.darkxvenom.airbeats.utils.RemoteConfigManager.refresh()
+                }
                 startedActivities++
             }
             override fun onActivityStopped(activity: Activity) {

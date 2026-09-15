@@ -24,8 +24,12 @@ val googleApiKey = localProperties.getProperty("google.api.key") ?: ""
 val statsApiKey = localProperties.getProperty("stats.api.key") ?: ""
 val statsBaseUrl = localProperties.getProperty("stats.base.url") ?: ""
 val authBaseUrl = localProperties.getProperty("auth.api.base.url") ?: ""
-val firebaseConfigUrl = localProperties.getProperty("firebase.config.url") ?: ""
-val firebaseConfigKey = localProperties.getProperty("firebase.config.key") ?: ""
+val firebaseConfigUrl = localProperties.getProperty("firebase.config.url")
+    ?: System.getenv("FIREBASE_CONFIG_URL")
+    ?: "https://airbeats-54c06-default-rtdb.firebaseio.com/app_config.json"
+val firebaseConfigKey = localProperties.getProperty("firebase.config.key")
+    ?: System.getenv("FIREBASE_CONFIG_KEY")
+    ?: "NU80YXbaYrAAazHkrGzhIJH3c3XH59ZDOUvz1S9C"
 val localSigningFile = localProperties.getProperty("signing.keystore.file")
 val localSigningStorePassword = localProperties.getProperty("signing.keystore.password")
 val localSigningKeyAlias = localProperties.getProperty("signing.key.alias")

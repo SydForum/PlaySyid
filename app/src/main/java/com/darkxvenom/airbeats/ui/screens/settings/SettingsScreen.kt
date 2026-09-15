@@ -499,7 +499,11 @@ fun VersionCard(uriHandler: UriHandler) {
                                 )
                             }
                         },
-                        onClick = { uriHandler.openUri(com.darkxvenom.airbeats.utils.RemoteConfigManager.websiteUrl) }
+                        onClick = {
+                            val url = com.darkxvenom.airbeats.utils.RemoteConfigManager.websiteUrl
+                            val safeUrl = if (url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)) url else "https://$url"
+                            runCatching { uriHandler.openUri(safeUrl) }
+                        }
                     ),
                     isLast = true
                 )

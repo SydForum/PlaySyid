@@ -46,6 +46,9 @@ object RemoteConfigManager {
     val DEFAULT_GITHUB_REPO: String = "d0x-dev/AirBeats"
     val DEFAULT_UPDATE_API_URL: String = ""
 
+    const val DEFAULT_FIREBASE_CONFIG_URL: String = "https://airbeats-54c06-default-rtdb.firebaseio.com/app_config.json"
+    const val DEFAULT_FIREBASE_CONFIG_KEY: String = "NU80YXbaYrAAazHkrGzhIJH3c3XH59ZDOUvz1S9C"
+
     @Volatile
     private var activeConfig: AppRemoteConfig = AppRemoteConfig(
         playDomain = normalizeUrl(DEFAULT_PLAY_DOMAIN),
@@ -88,7 +91,7 @@ object RemoteConfigManager {
      * Initializes the RemoteConfigManager:
      * 1. Synchronously reads the local cache so valid configuration is immediately available on app startup.
      * 2. Sets the innertube shareDomainProvider delegate.
-     * 3. Asynchronously fetches the latest values from Firebase Remote Config without blocking launch.
+     * 3. Asynchronously fetches the latest values from Firebase without blocking launch.
      */
     fun initialize(context: Context) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -100,7 +103,14 @@ object RemoteConfigManager {
         // 2. Wire domain provider to innertube
         YTItem.shareDomainProvider = { playDomain }
 
-        // 3. Asynchronously fetch from Firebase
+        // 3. Immediately fetch fresh config from Firebase
+        refresh()
+    }
+
+    /**
+     * Triggers a fresh background fetch of configuration from Firebase on app open / resume.
+     */
+    fun refresh() {
         CoroutineScope(Dispatchers.IO).launch {
             fetchFromFirebase()
         }
@@ -131,44 +141,31 @@ object RemoteConfigManager {
     }
 
     private suspend fun fetchFromFirebase() {
+        // Priority 1: Fetch fresh JSON directly from Firebase Realtime Database
+        val secureUrl = BuildConfig.FIREBASE_CONFIG_URL.trim().ifBlank { DEFAULT_FIREBASE_CONFIG_URL }
+        val secureKey = BuildConfig.FIREBASE_CONFIG_KEY.trim().ifBlank { DEFAULT_FIREBASE_CONFIG_KEY }
+        if (secureUrl.isNotBlank()) {
+            fetchFromSecureEndpoint(secureUrl, secureKey)
+        }
+
+        // Priority 2: Fetch from Firebase Remote Config SDK (strictly ignore local defaults so they don't overwrite RTDB)
         try {
             val remoteConfig = FirebaseRemoteConfig.getInstance()
             val configSettings = FirebaseRemoteConfigSettings.Builder()
-                .setMinimumFetchIntervalInSeconds(0) // Zero throttle so changes take effect immediately on next open
-                .setFetchTimeoutInSeconds(10)
+                .setMinimumFetchIntervalInSeconds(0) // Zero throttle so changes take effect immediately on open
+                .setFetchTimeoutInSeconds(5)
                 .build()
 
             remoteConfig.setConfigSettingsAsync(configSettings)
-
-            // Setup in-memory defaults
-            val defaults = HashMap<String, Any>().apply {
-                put(KEY_PLAY_DOMAIN, DEFAULT_PLAY_DOMAIN)
-                put(KEY_STATS_BASE_URL, DEFAULT_STATS_BASE_URL)
-                put(KEY_STATS_API_KEY, DEFAULT_STATS_API_KEY)
-                put(KEY_GOOGLE_API_KEY, DEFAULT_GOOGLE_API_KEY)
-                put(KEY_LISTEN_TOGETHER_URL, DEFAULT_LISTEN_TOGETHER_URL)
-                put(KEY_WEBSITE_URL, DEFAULT_WEBSITE_URL)
-                put(KEY_GITHUB_REPO, DEFAULT_GITHUB_REPO)
-                put(KEY_UPDATE_API_URL, DEFAULT_UPDATE_API_URL)
-            }
-            remoteConfig.setDefaultsAsync(defaults)
-
             remoteConfig.fetchAndActivate()
                 .addOnSuccessListener {
                     parseAndUpdateConfig(remoteConfig)
                 }
                 .addOnFailureListener { e ->
-                    Timber.w(e, "RemoteConfigManager: Failed to fetch remote config, using cached values.")
+                    Timber.d("RemoteConfigManager: Firebase Remote Config fetch skipped/failed: ${e.message}")
                 }
         } catch (e: Exception) {
-            Timber.w(e, "RemoteConfigManager: Exception during Firebase Remote Config initialization: ${e.message}")
-        }
-
-        // In addition, if a secure authenticated endpoint is configured, fetch from it with access key
-        val secureUrl = BuildConfig.FIREBASE_CONFIG_URL.trim()
-        val secureKey = BuildConfig.FIREBASE_CONFIG_KEY.trim()
-        if (secureUrl.isNotBlank()) {
-            fetchFromSecureEndpoint(secureUrl, secureKey)
+            Timber.d("RemoteConfigManager: Firebase Remote Config exception: ${e.message}")
         }
     }
 
@@ -182,20 +179,23 @@ object RemoteConfigManager {
                 }
             }
 
-            val requestBuilder = okhttp3.Request.Builder().url(requestUrl)
+            val requestBuilder = okhttp3.Request.Builder()
+                .url(requestUrl)
+                .cacheControl(okhttp3.CacheControl.FORCE_NETWORK) // Force network fetch on every open
             if (authKey.isNotBlank()) {
                 requestBuilder.header("X-API-Key", authKey)
-                requestBuilder.header("Authorization", "Bearer $authKey")
             }
 
             val httpClient = okhttp3.OkHttpClient.Builder()
-                .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
 
             httpClient.newCall(requestBuilder.build()).execute().use { response ->
                 if (response.isSuccessful) {
                     val rawBody = response.body.string().trim()
                     if (rawBody.isBlank()) return@use
+                    Timber.d("RemoteConfigManager: Successfully fetched fresh remote config from Firebase RTDB: $rawBody")
                     val resolvedJson = if (rawBody.startsWith("{")) {
                         val obj = JSONObject(rawBody)
                         if (obj.optBoolean("encrypted", false) && obj.has("data")) {
@@ -204,16 +204,15 @@ object RemoteConfigManager {
                             rawBody
                         }
                     } else {
-                        // Might be raw encrypted base64 payload
                         decryptAes(rawBody, authKey.ifBlank { "airbeats_secure_key" }) ?: rawBody
                     }
                     parseAndApplyJson(resolvedJson)
                 } else {
-                    Timber.w("RemoteConfigManager: Secure URL returned code=${response.code} (Unauthorized/Protected)")
+                    Timber.w("RemoteConfigManager: Firebase RTDB endpoint returned code=${response.code}")
                 }
             }
         } catch (e: Exception) {
-            Timber.w(e, "RemoteConfigManager: Failed to fetch from secure endpoint: ${e.message}")
+            Timber.w(e, "RemoteConfigManager: Failed to fetch from Firebase RTDB endpoint: ${e.message}")
         }
     }
 
@@ -241,27 +240,36 @@ object RemoteConfigManager {
     }
 
     private fun parseAndUpdateConfig(remoteConfig: FirebaseRemoteConfig) {
-        val jsonConfigString = remoteConfig.getString(KEY_APP_CONFIG_JSON).trim()
-        val individualPlayDomain = remoteConfig.getString(KEY_PLAY_DOMAIN).trim().ifBlank { null }
-        val individualStatsBaseUrl = remoteConfig.getString(KEY_STATS_BASE_URL).trim().ifBlank { null }
-        val individualStatsApiKey = remoteConfig.getString(KEY_STATS_API_KEY).trim().ifBlank { null }
-        val individualGoogleApiKey = remoteConfig.getString(KEY_GOOGLE_API_KEY).trim().ifBlank { null }
-        val individualListenTogetherUrl = remoteConfig.getString(KEY_LISTEN_TOGETHER_URL).trim().ifBlank { null }
-        val individualWebsiteUrl = remoteConfig.getString(KEY_WEBSITE_URL).trim().ifBlank { null }
-        val individualGithubRepo = remoteConfig.getString(KEY_GITHUB_REPO).trim().ifBlank { null }
-        val individualUpdateApiUrl = remoteConfig.getString(KEY_UPDATE_API_URL).trim().ifBlank { null }
+        fun getRemoteStringOrNull(key: String): String? {
+            val v = remoteConfig.getValue(key)
+            return if (v.source == FirebaseRemoteConfig.VALUE_SOURCE_REMOTE) remoteConfig.getString(key).trim().ifBlank { null } else null
+        }
 
-        parseAndApplyJson(
-            jsonString = jsonConfigString,
-            overridePlayDomain = individualPlayDomain,
-            overrideStatsBaseUrl = individualStatsBaseUrl,
-            overrideStatsApiKey = individualStatsApiKey,
-            overrideGoogleApiKey = individualGoogleApiKey,
-            overrideListenTogetherUrl = individualListenTogetherUrl,
-            overrideWebsiteUrl = individualWebsiteUrl,
-            overrideGithubRepo = individualGithubRepo,
-            overrideUpdateApiUrl = individualUpdateApiUrl,
-        )
+        val jsonConfigString = getRemoteStringOrNull(KEY_APP_CONFIG_JSON)
+        val individualPlayDomain = getRemoteStringOrNull(KEY_PLAY_DOMAIN)
+        val individualStatsBaseUrl = getRemoteStringOrNull(KEY_STATS_BASE_URL)
+        val individualStatsApiKey = getRemoteStringOrNull(KEY_STATS_API_KEY)
+        val individualGoogleApiKey = getRemoteStringOrNull(KEY_GOOGLE_API_KEY)
+        val individualListenTogetherUrl = getRemoteStringOrNull(KEY_LISTEN_TOGETHER_URL)
+        val individualWebsiteUrl = getRemoteStringOrNull(KEY_WEBSITE_URL)
+        val individualGithubRepo = getRemoteStringOrNull(KEY_GITHUB_REPO)
+        val individualUpdateApiUrl = getRemoteStringOrNull(KEY_UPDATE_API_URL)
+
+        if (jsonConfigString != null || individualPlayDomain != null || individualStatsBaseUrl != null ||
+            individualStatsApiKey != null || individualGoogleApiKey != null || individualListenTogetherUrl != null ||
+            individualWebsiteUrl != null || individualGithubRepo != null || individualUpdateApiUrl != null) {
+            parseAndApplyJson(
+                jsonString = jsonConfigString,
+                overridePlayDomain = individualPlayDomain,
+                overrideStatsBaseUrl = individualStatsBaseUrl,
+                overrideStatsApiKey = individualStatsApiKey,
+                overrideGoogleApiKey = individualGoogleApiKey,
+                overrideListenTogetherUrl = individualListenTogetherUrl,
+                overrideWebsiteUrl = individualWebsiteUrl,
+                overrideGithubRepo = individualGithubRepo,
+                overrideUpdateApiUrl = individualUpdateApiUrl,
+            )
+        }
     }
 
     private fun parseAndApplyJson(
@@ -286,28 +294,44 @@ object RemoteConfigManager {
 
         if (!jsonString.isNullOrBlank() && jsonString.startsWith("{")) {
             try {
-                val json = JSONObject(jsonString)
-                if (remotePlayDomain == null && json.has("play_domain")) remotePlayDomain = json.optString("play_domain")
-                if (remoteStatsBaseUrl == null && json.has("stats_base_url")) remoteStatsBaseUrl = json.optString("stats_base_url")
-                if (remoteStatsApiKey == null && json.has("stats_api_key")) remoteStatsApiKey = json.optString("stats_api_key")
-                if (remoteGoogleApiKey == null && json.has("google_api_key")) remoteGoogleApiKey = json.optString("google_api_key")
-                if (remoteListenTogetherUrl == null && json.has("listen_together_url")) remoteListenTogetherUrl = json.optString("listen_together_url")
-                if (remoteWebsiteUrl == null && json.has("website_url")) remoteWebsiteUrl = json.optString("website_url")
-                if (remoteGithubRepo == null && json.has("github_repo")) remoteGithubRepo = json.optString("github_repo")
-                if (remoteUpdateApiUrl == null && json.has("update_api_url")) remoteUpdateApiUrl = json.optString("update_api_url")
+                val rootJson = JSONObject(jsonString)
+                val json = if (rootJson.has("app_config") && rootJson.optJSONObject("app_config") != null) {
+                    rootJson.getJSONObject("app_config")
+                } else {
+                    rootJson
+                }
+
+                fun findString(vararg keys: String): String? {
+                    for (k in keys) {
+                        if (json.has(k)) {
+                            val v = json.optString(k).trim()
+                            if (v.isNotBlank() && v != "null") return v
+                        }
+                    }
+                    return null
+                }
+
+                if (remotePlayDomain == null) remotePlayDomain = findString("play_domain", "playDomain", "play_url", "playUrl")
+                if (remoteStatsBaseUrl == null) remoteStatsBaseUrl = findString("stats_base_url", "statsBaseUrl", "stats_url", "statsUrl")
+                if (remoteStatsApiKey == null) remoteStatsApiKey = findString("stats_api_key", "statsApiKey")
+                if (remoteGoogleApiKey == null) remoteGoogleApiKey = findString("google_api_key", "googleApiKey")
+                if (remoteListenTogetherUrl == null) remoteListenTogetherUrl = findString("listen_together_url", "listenTogetherUrl")
+                if (remoteWebsiteUrl == null) remoteWebsiteUrl = findString("website_url", "websiteUrl", "website", "official_website", "officialWebsite")
+                if (remoteGithubRepo == null) remoteGithubRepo = findString("github_repo", "githubRepo", "repo")
+                if (remoteUpdateApiUrl == null) remoteUpdateApiUrl = findString("update_api_url", "updateApiUrl")
             } catch (e: Exception) {
                 Timber.w(e, "RemoteConfigManager: Failed to parse JSON configuration")
             }
         }
 
-        val newPlayDomain = normalizeUrl(remotePlayDomain ?: activeConfig.playDomain)
-        val newStatsBaseUrl = normalizeUrl(remoteStatsBaseUrl ?: activeConfig.statsBaseUrl)
-        val newStatsApiKey = remoteStatsApiKey?.ifBlank { null } ?: activeConfig.statsApiKey
-        val newGoogleApiKey = remoteGoogleApiKey?.ifBlank { null } ?: activeConfig.googleApiKey
-        val newListenTogetherUrl = normalizeUrl(remoteListenTogetherUrl ?: activeConfig.listenTogetherUrl)
-        val newWebsiteUrl = normalizeUrl(remoteWebsiteUrl ?: activeConfig.websiteUrl)
-        val newGithubRepo = (remoteGithubRepo?.ifBlank { null } ?: activeConfig.githubRepo).trim().removePrefix("https://github.com/").trimEnd('/')
-        val newUpdateApiUrl = normalizeUrl(remoteUpdateApiUrl?.ifBlank { null } ?: activeConfig.updateApiUrl)
+        val newPlayDomain = if (!remotePlayDomain.isNullOrBlank()) normalizeUrl(remotePlayDomain) else activeConfig.playDomain
+        val newStatsBaseUrl = if (!remoteStatsBaseUrl.isNullOrBlank()) normalizeUrl(remoteStatsBaseUrl) else activeConfig.statsBaseUrl
+        val newStatsApiKey = if (!remoteStatsApiKey.isNullOrBlank()) remoteStatsApiKey else activeConfig.statsApiKey
+        val newGoogleApiKey = if (!remoteGoogleApiKey.isNullOrBlank()) remoteGoogleApiKey else activeConfig.googleApiKey
+        val newListenTogetherUrl = if (!remoteListenTogetherUrl.isNullOrBlank()) normalizeUrl(remoteListenTogetherUrl) else activeConfig.listenTogetherUrl
+        val newWebsiteUrl = if (!remoteWebsiteUrl.isNullOrBlank()) normalizeUrl(remoteWebsiteUrl) else activeConfig.websiteUrl
+        val newGithubRepo = if (!remoteGithubRepo.isNullOrBlank()) remoteGithubRepo.trim().removePrefix("https://github.com/").trimEnd('/') else activeConfig.githubRepo
+        val newUpdateApiUrl = if (!remoteUpdateApiUrl.isNullOrBlank()) normalizeUrl(remoteUpdateApiUrl) else activeConfig.updateApiUrl
 
         val newConfig = AppRemoteConfig(
             playDomain = newPlayDomain,
@@ -322,7 +346,7 @@ object RemoteConfigManager {
 
         // Compare against activeConfig
         if (newConfig != activeConfig) {
-            Timber.i("RemoteConfigManager: Detected updated remote configuration! Saving to cache.")
+            Timber.i("RemoteConfigManager: Detected updated remote configuration! websiteUrl=${newConfig.websiteUrl}")
             activeConfig = newConfig
             sharedPreferences?.edit()?.apply {
                 putString(KEY_PLAY_DOMAIN, newConfig.playDomain)
@@ -342,7 +366,13 @@ object RemoteConfigManager {
     }
 
     private fun normalizeUrl(url: String): String {
-        return url.trim().trimEnd('/')
+        val trimmed = url.trim().trimEnd('/')
+        if (trimmed.isBlank()) return ""
+        return if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) {
+            "https://$trimmed"
+        } else {
+            trimmed
+        }
     }
 
     // Helper functions for share URLs
