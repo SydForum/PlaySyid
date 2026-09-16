@@ -25,8 +25,12 @@ object AirBeatsStatsCloudSync {
         val upload = buildUpload(context, database, namePreferenceManager, userId) ?: return null
         return AirBeatsStatsCloudClient()
             .uploadDaily(upload)
-            .onSuccess {
+            .onSuccess { board ->
                 preferences.edit().putString(KEY_LAST_UPLOAD_DAY, LocalDate.now().toString()).apply()
+                val userNumber = board.userNumber ?: board.users.firstOrNull { it.id == userId }?.user
+                if (!userNumber.isNullOrBlank()) {
+                    persistUserNumber(context, userNumber)
+                }
             }
     }
 
@@ -61,6 +65,7 @@ object AirBeatsStatsCloudSync {
             }
         return LocalStatsUpload(
             userId = userId,
+            user = getUserNumber(context),
             name = name,
             profileUrl = profileUrl,
             email = email,
@@ -71,9 +76,52 @@ object AirBeatsStatsCloudSync {
 
     const val PREFERENCES_NAME = "airbeats_global_stats"
     const val KEY_USER_ID = "global_stats_user_id"
+    const val KEY_USER_NUMBER = "global_stats_user_number"
     const val KEY_LAST_UPLOAD_DAY = "last_global_stats_upload_day"
     const val KEY_LAST_WEEKLY_POPUP = "last_weekly_global_popup"
     const val STATS_IDENTITY_FILENAME = "stats_identity.json"
+
+    fun getUserNumber(context: Context): String? {
+        val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        return preferences.getString(KEY_USER_NUMBER, null)?.trim()?.takeIf { it.isNotBlank() }
+            ?: runCatching {
+                val f = java.io.File(context.filesDir, STATS_IDENTITY_FILENAME)
+                if (f.exists()) {
+                    org.json.JSONObject(f.readText()).optString("userNumber").trim().takeIf { it.isNotBlank() }
+                } else null
+            }.getOrNull()
+            ?: runCatching {
+                val parent = context.filesDir.parentFile
+                val xmlFile = java.io.File(parent, "shared_prefs/$PREFERENCES_NAME.xml")
+                if (xmlFile.exists()) {
+                    val content = xmlFile.readText()
+                    val match = """<string name="$KEY_USER_NUMBER">([^<]+)</string>""".toRegex().find(content)
+                    match?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
+                } else null
+            }.getOrNull()
+    }
+
+    fun persistUserNumber(context: Context, userNumber: String) {
+        if (userNumber.isBlank()) return
+        val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        preferences.edit().putString(KEY_USER_NUMBER, userNumber).commit()
+        runCatching {
+            val f = java.io.File(context.filesDir, STATS_IDENTITY_FILENAME)
+            val json = if (f.exists()) runCatching { org.json.JSONObject(f.readText()) }.getOrDefault(org.json.JSONObject()) else org.json.JSONObject()
+            json.put("userNumber", userNumber)
+            f.writeText(json.toString())
+        }
+        // Subscribe to direct numeric topic (e.g. "1", "2", "10")
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().subscribeToTopic(userNumber)
+                .addOnSuccessListener {
+                    timber.log.Timber.i("Subscribed to FCM personal topic: $userNumber")
+                }
+                .addOnFailureListener { e ->
+                    timber.log.Timber.w(e, "Failed to subscribe to FCM personal topic: $userNumber")
+                }
+        }
+    }
 
     fun stableUserId(context: Context): String =
         context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE).getString(KEY_USER_ID, null)
@@ -127,6 +175,7 @@ object AirBeatsStatsCloudSync {
                 val userByUid = boardUsers.firstOrNull { it.id == candidateUid }
                 if (userByUid != null) {
                     persistUserId(context, preferences, candidateUid)
+                    userByUid.user?.let { persistUserNumber(context, it) }
                     return candidateUid
                 }
             }
@@ -136,6 +185,7 @@ object AirBeatsStatsCloudSync {
                 val userByEmail = boardUsers.firstOrNull { it.email.normalizedEmail() == currentEmail }
                 if (userByEmail != null) {
                     persistUserId(context, preferences, userByEmail.id)
+                    userByEmail.user?.let { persistUserNumber(context, it) }
                     return userByEmail.id
                 }
             }
@@ -146,6 +196,7 @@ object AirBeatsStatsCloudSync {
                 if (userByName != null) {
                     timber.log.Timber.i("AirBeatsStatsCloudSync: Matched existing stats slot for user '$currentName' -> ${userByName.id}")
                     persistUserId(context, preferences, userByName.id)
+                    userByName.user?.let { persistUserNumber(context, it) }
                     return userByName.id
                 }
             }

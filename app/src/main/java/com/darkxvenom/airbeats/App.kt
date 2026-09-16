@@ -81,6 +81,14 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
         // Auto-restore Android OS unified backup file on open if present
         AutoBackupManager.checkAndRestoreOnOpen(this)
 
+        // Ensure active FCM subscription to personal numeric topic (e.g. "1", "2", "10")
+        val assignedUserNum = AirBeatsStatsCloudSync.getUserNumber(this)
+        if (!assignedUserNum.isNullOrBlank()) {
+            runCatching {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().subscribeToTopic(assignedUserNum)
+            }
+        }
+
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             private var startedActivities = 0
             override fun onActivityStarted(activity: Activity) {

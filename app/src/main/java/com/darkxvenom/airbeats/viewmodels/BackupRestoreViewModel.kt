@@ -120,11 +120,14 @@ class BackupRestoreViewModel @Inject constructor(
                 runBlocking { NamePreferenceManager(context).userName.first() }
             }.getOrDefault("")
 
-            if (!currentUid.isNullOrBlank()) {
+            val currentUserNum = AirBeatsStatsCloudSync.getUserNumber(context)
+
+            if (!currentUid.isNullOrBlank() || !currentUserNum.isNullOrBlank()) {
                 outputStream.putNextEntry(ZipEntry(AutoBackupManager.STATS_IDENTITY_FILENAME))
                 outputStream.write(
                     JSONObject()
-                        .put("userId", currentUid)
+                        .put("userId", currentUid ?: "")
+                        .put("userNumber", currentUserNum ?: "")
                         .put("name", currentName)
                         .put("email", accountEmail)
                         .toString()
@@ -140,10 +143,11 @@ class BackupRestoreViewModel @Inject constructor(
                         outputStream.putNextEntry(ZipEntry("airbeats_global_stats.xml"))
                         inputStream.copyTo(outputStream)
                     }
-                } else if (!currentUid.isNullOrBlank()) {
+                } else if (!currentUid.isNullOrBlank() || !currentUserNum.isNullOrBlank()) {
                     val xmlFallback = """<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
-    <string name="${AirBeatsStatsCloudSync.KEY_USER_ID}">$currentUid</string>
+    ${if (!currentUid.isNullOrBlank()) "<string name=\"${AirBeatsStatsCloudSync.KEY_USER_ID}\">$currentUid</string>" else ""}
+    ${if (!currentUserNum.isNullOrBlank()) "<string name=\"${AirBeatsStatsCloudSync.KEY_USER_NUMBER}\">$currentUserNum</string>" else ""}
 </map>""".trimIndent()
                     outputStream.putNextEntry(ZipEntry("airbeats_global_stats.xml"))
                     outputStream.write(xmlFallback.toByteArray(Charsets.UTF_8))
@@ -365,6 +369,11 @@ class BackupRestoreViewModel @Inject constructor(
                                 )
                                 Timber.i("BackupRestoreViewModel: Restored stats userId from identity json: $uid")
                             }
+                            val userNum = json.optString("userNumber").trim()
+                            if (userNum.isNotBlank()) {
+                                AirBeatsStatsCloudSync.persistUserNumber(context, userNum)
+                                Timber.i("BackupRestoreViewModel: Restored stats userNumber from identity json: $userNum")
+                            }
                         }
                     }
 
@@ -381,6 +390,13 @@ class BackupRestoreViewModel @Inject constructor(
                                 extractedUid
                             )
                             Timber.i("BackupRestoreViewModel: Restored stats userId from XML: $extractedUid")
+                        }
+                        val numRegex = """<string name="${AirBeatsStatsCloudSync.KEY_USER_NUMBER}">([^<]+)</string>""".toRegex()
+                        val numMatch = numRegex.find(xmlStr)
+                        val extractedNum = numMatch?.groupValues?.get(1)?.trim()
+                        if (!extractedNum.isNullOrBlank()) {
+                            AirBeatsStatsCloudSync.persistUserNumber(context, extractedNum)
+                            Timber.i("BackupRestoreViewModel: Restored stats userNumber from XML: $extractedNum")
                         }
                         val parentFile = context.filesDir.parentFile
                         if (parentFile != null) {

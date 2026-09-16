@@ -12,9 +12,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-data class GlobalStatsUser(val id: String, val name: String, val profileUrl: String?, val email: String? = null, val totalListenMs: Long, val weeklyListenMs: Long, val lastUpdatedAt: Long, val rank: Int = 0, val fcmToken: String? = null)
-data class GlobalStatsBoard(val users: List<GlobalStatsUser> = emptyList(), val updatedAt: Long = 0L)
-data class LocalStatsUpload(val userId: String, val name: String, val profileUrl: String?, val email: String? = null, val totalListenMs: Long, val weeklyListenMs: Long, val fcmToken: String? = null)
+data class GlobalStatsUser(val id: String, val user: String? = null, val name: String, val profileUrl: String?, val email: String? = null, val totalListenMs: Long, val weeklyListenMs: Long, val lastUpdatedAt: Long, val rank: Int = 0, val fcmToken: String? = null)
+data class GlobalStatsBoard(val users: List<GlobalStatsUser> = emptyList(), val updatedAt: Long = 0L, val userNumber: String? = null)
+data class LocalStatsUpload(val userId: String, val user: String? = null, val name: String, val profileUrl: String?, val email: String? = null, val totalListenMs: Long, val weeklyListenMs: Long, val fcmToken: String? = null)
 
 /** Firebase-authenticated stats client. No stats credential is shipped with the app. */
 class AirBeatsStatsCloudClient {
@@ -42,12 +42,27 @@ class AirBeatsStatsCloudClient {
                 .put("profileUrl", upload.profileUrl ?: JSONObject.NULL)
                 .put("totalListenMs", upload.totalListenMs.coerceAtLeast(0L))
                 .put("weeklyListenMs", upload.weeklyListenMs.coerceAtLeast(0L))
+            if (!upload.user.isNullOrBlank()) {
+                payload.put("user", upload.user)
+            }
             val request = Request.Builder().url("${workerUrl()}/stats").header("Authorization", "Bearer $token").post(payload.toString().toRequestBody(JSON_MEDIA_TYPE)).build()
+            var returnedUserNumber: String? = null
             client.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful && response.code != 429) error(parseError(text, response.code))
+                if (text.isNotBlank()) {
+                    runCatching {
+                        val resJson = JSONObject(text)
+                        returnedUserNumber = resJson.optString("user").takeIf(String::isNotBlank)
+                    }
+                }
             }
-            readBoard().getOrThrow()
+            val board = readBoard().getOrThrow()
+            if (!returnedUserNumber.isNullOrBlank()) {
+                board.copy(userNumber = returnedUserNumber)
+            } else {
+                board
+            }
         }
     }
 
@@ -57,7 +72,8 @@ class AirBeatsStatsCloudClient {
         val usersJson = json.optJSONArray("users") ?: JSONArray()
         val users = List(usersJson.length()) { usersJson.optJSONObject(it) }.mapNotNull { user -> user?.let {
             val id = it.optString("id")
-            if (id.isBlank()) null else GlobalStatsUser(id, it.optString("name", "AirBeats User"), it.optString("profileUrl").takeIf(String::isNotBlank), totalListenMs = it.optLong("totalListenMs"), weeklyListenMs = it.optLong("weeklyListenMs"), lastUpdatedAt = it.optLong("lastUpdatedAt"), rank = it.optInt("rank"))
+            val userNum = it.optString("user").takeIf(String::isNotBlank)
+            if (id.isBlank()) null else GlobalStatsUser(id = id, user = userNum, name = it.optString("name", "AirBeats User"), profileUrl = it.optString("profileUrl").takeIf(String::isNotBlank), totalListenMs = it.optLong("totalListenMs"), weeklyListenMs = it.optLong("weeklyListenMs"), lastUpdatedAt = it.optLong("lastUpdatedAt"), rank = it.optInt("rank"))
         }}
         return GlobalStatsBoard(users, json.optLong("updatedAt"))
     }

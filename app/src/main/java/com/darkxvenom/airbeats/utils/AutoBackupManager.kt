@@ -195,11 +195,14 @@ object AutoBackupManager {
                 runBlocking { NamePreferenceManager(context).userName.first() }
             }.getOrDefault("")
 
-            if (!currentUid.isNullOrBlank()) {
+            val currentUserNum = AirBeatsStatsCloudSync.getUserNumber(context)
+
+            if (!currentUid.isNullOrBlank() || !currentUserNum.isNullOrBlank()) {
                 outputStream.putNextEntry(ZipEntry(STATS_IDENTITY_FILENAME))
                 outputStream.write(
                     JSONObject()
-                        .put("userId", currentUid)
+                        .put("userId", currentUid ?: "")
+                        .put("userNumber", currentUserNum ?: "")
                         .put("name", currentName)
                         .put("email", accountEmail)
                         .toString()
@@ -215,10 +218,11 @@ object AutoBackupManager {
                         outputStream.putNextEntry(ZipEntry(GLOBAL_STATS_FILENAME))
                         inputStream.copyTo(outputStream)
                     }
-                } else if (!currentUid.isNullOrBlank()) {
+                } else if (!currentUid.isNullOrBlank() || !currentUserNum.isNullOrBlank()) {
                     val xmlFallback = """<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
-    <string name="${AirBeatsStatsCloudSync.KEY_USER_ID}">$currentUid</string>
+    ${if (!currentUid.isNullOrBlank()) "<string name=\"${AirBeatsStatsCloudSync.KEY_USER_ID}\">$currentUid</string>" else ""}
+    ${if (!currentUserNum.isNullOrBlank()) "<string name=\"${AirBeatsStatsCloudSync.KEY_USER_NUMBER}\">$currentUserNum</string>" else ""}
 </map>""".trimIndent()
                     outputStream.putNextEntry(ZipEntry(GLOBAL_STATS_FILENAME))
                     outputStream.write(xmlFallback.toByteArray(Charsets.UTF_8))
@@ -342,6 +346,11 @@ object AutoBackupManager {
                                     )
                                     Timber.i("AutoBackupManager: Restored stats userId from identity json: $uid")
                                 }
+                                val userNum = json.optString("userNumber").trim()
+                                if (userNum.isNotBlank()) {
+                                    AirBeatsStatsCloudSync.persistUserNumber(context, userNum)
+                                    Timber.i("AutoBackupManager: Restored stats userNumber from identity json: $userNum")
+                                }
                             }
                         }
 
@@ -358,6 +367,13 @@ object AutoBackupManager {
                                     extractedUid
                                 )
                                 Timber.i("AutoBackupManager: Restored stats userId from XML: $extractedUid")
+                            }
+                            val numRegex = """<string name="${AirBeatsStatsCloudSync.KEY_USER_NUMBER}">([^<]+)</string>""".toRegex()
+                            val numMatch = numRegex.find(xmlStr)
+                            val extractedNum = numMatch?.groupValues?.get(1)?.trim()
+                            if (!extractedNum.isNullOrBlank()) {
+                                AirBeatsStatsCloudSync.persistUserNumber(context, extractedNum)
+                                Timber.i("AutoBackupManager: Restored stats userNumber from XML: $extractedNum")
                             }
                             val parentFile = context.filesDir.parentFile
                             if (parentFile != null) {
