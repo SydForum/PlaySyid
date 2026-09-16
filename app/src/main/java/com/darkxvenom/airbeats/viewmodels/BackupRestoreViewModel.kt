@@ -110,6 +110,28 @@ class BackupRestoreViewModel @Inject constructor(
                 )
             }
 
+            val currentUid = context.getSharedPreferences(AirBeatsStatsCloudSync.PREFERENCES_NAME, Context.MODE_PRIVATE)
+                .getString(AirBeatsStatsCloudSync.KEY_USER_ID, null)
+                ?: runCatching {
+                    val f = File(context.filesDir, AutoBackupManager.STATS_IDENTITY_FILENAME)
+                    if (f.exists()) JSONObject(f.readText()).optString("userId").takeIf { it.isNotBlank() } else null
+                }.getOrNull()
+            val currentName = runCatching {
+                runBlocking { NamePreferenceManager(context).userName.first() }
+            }.getOrDefault("")
+
+            if (!currentUid.isNullOrBlank()) {
+                outputStream.putNextEntry(ZipEntry(AutoBackupManager.STATS_IDENTITY_FILENAME))
+                outputStream.write(
+                    JSONObject()
+                        .put("userId", currentUid)
+                        .put("name", currentName)
+                        .put("email", accountEmail)
+                        .toString()
+                        .toByteArray(Charsets.UTF_8)
+                )
+            }
+
             val parentFile = context.filesDir.parentFile
             if (parentFile != null) {
                 val statsPrefsFile = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
@@ -118,6 +140,13 @@ class BackupRestoreViewModel @Inject constructor(
                         outputStream.putNextEntry(ZipEntry("airbeats_global_stats.xml"))
                         inputStream.copyTo(outputStream)
                     }
+                } else if (!currentUid.isNullOrBlank()) {
+                    val xmlFallback = """<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="${AirBeatsStatsCloudSync.KEY_USER_ID}">$currentUid</string>
+</map>""".trimIndent()
+                    outputStream.putNextEntry(ZipEntry("airbeats_global_stats.xml"))
+                    outputStream.write(xmlFallback.toByteArray(Charsets.UTF_8))
                 }
 
                 val playlistImagesPrefs = parentFile / "shared_prefs" / "playlist_images.xml"
@@ -323,13 +352,42 @@ class BackupRestoreViewModel @Inject constructor(
                         }
                     }
 
+                    AutoBackupManager.STATS_IDENTITY_FILENAME -> {
+                        val content = inputStream.readBytes().toString(Charsets.UTF_8)
+                        runCatching {
+                            val json = JSONObject(content)
+                            val uid = json.optString("userId").trim()
+                            if (uid.isNotBlank()) {
+                                AirBeatsStatsCloudSync.persistUserId(
+                                    context,
+                                    context.getSharedPreferences(AirBeatsStatsCloudSync.PREFERENCES_NAME, Context.MODE_PRIVATE),
+                                    uid
+                                )
+                                Timber.i("BackupRestoreViewModel: Restored stats userId from identity json: $uid")
+                            }
+                        }
+                    }
+
                     "airbeats_global_stats.xml" -> {
+                        val bytes = inputStream.readBytes()
+                        val xmlStr = bytes.toString(Charsets.UTF_8)
+                        val uidRegex = """<string name="${AirBeatsStatsCloudSync.KEY_USER_ID}">([^<]+)</string>""".toRegex()
+                        val match = uidRegex.find(xmlStr)
+                        val extractedUid = match?.groupValues?.get(1)?.trim()
+                        if (!extractedUid.isNullOrBlank()) {
+                            AirBeatsStatsCloudSync.persistUserId(
+                                context,
+                                context.getSharedPreferences(AirBeatsStatsCloudSync.PREFERENCES_NAME, Context.MODE_PRIVATE),
+                                extractedUid
+                            )
+                            Timber.i("BackupRestoreViewModel: Restored stats userId from XML: $extractedUid")
+                        }
                         val parentFile = context.filesDir.parentFile
                         if (parentFile != null) {
                             val destFile = parentFile / "shared_prefs" / "airbeats_global_stats.xml"
                             destFile.parentFile?.mkdirs()
                             destFile.outputStream().use { outputStream ->
-                                inputStream.copyTo(outputStream)
+                                outputStream.write(bytes)
                             }
                         }
                     }

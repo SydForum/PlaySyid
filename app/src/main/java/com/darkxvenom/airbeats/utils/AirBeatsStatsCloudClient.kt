@@ -36,7 +36,12 @@ class AirBeatsStatsCloudClient {
             val auth = FirebaseAuth.getInstance()
             val user = auth.currentUser ?: auth.signInAnonymously().await().user ?: error("Unable to establish a Firebase identity")
             val token = user.getIdToken(true).await().token ?: error("Unable to obtain a Firebase identity token")
-            val payload = JSONObject().put("name", upload.name.ifBlank { "AirBeats User" }).put("profileUrl", upload.profileUrl ?: JSONObject.NULL).put("totalListenMs", upload.totalListenMs.coerceAtLeast(0L)).put("weeklyListenMs", upload.weeklyListenMs.coerceAtLeast(0L))
+            val payload = JSONObject()
+                .put("userId", upload.userId)
+                .put("name", upload.name.ifBlank { "AirBeats User" })
+                .put("profileUrl", upload.profileUrl ?: JSONObject.NULL)
+                .put("totalListenMs", upload.totalListenMs.coerceAtLeast(0L))
+                .put("weeklyListenMs", upload.weeklyListenMs.coerceAtLeast(0L))
             val request = Request.Builder().url("${workerUrl()}/stats").header("Authorization", "Bearer $token").post(payload.toString().toRequestBody(JSON_MEDIA_TYPE)).build()
             client.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()

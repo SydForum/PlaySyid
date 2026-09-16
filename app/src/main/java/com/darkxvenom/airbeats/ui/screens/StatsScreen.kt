@@ -629,6 +629,7 @@ fun StatsScreen(
         WeeklyGlobalStatsSheet(
             users = weeklyUsers,
             currentUserId = globalStats.currentUserId,
+            currentUserName = globalStats.currentUserName,
             onDismiss = {
                 viewModel.markWeeklyPopupSeen()
                 showWeeklyGlobalStats = false
@@ -645,6 +646,9 @@ private fun GlobalStatsBoardCard(
     val users = state.board.users
     val topUser = users.firstOrNull()
     val currentUser = users.firstOrNull { it.id == state.currentUserId }
+        ?: if (state.currentUserName.isNotBlank() && !state.currentUserName.equals("AirBeats User", ignoreCase = true)) {
+            users.firstOrNull { it.name.trim().equals(state.currentUserName.trim(), ignoreCase = true) }
+        } else null
 
     Card(
         modifier = Modifier
@@ -708,9 +712,10 @@ private fun GlobalStatsBoardCard(
                     .heightIn(max = 400.dp)
             ) {
                 items(users, key = { it.id }) { user ->
+                    val isCurrent = user.id == state.currentUserId || (currentUser != null && user.id == currentUser.id)
                     GlobalUserRankRow(
                         user = user,
-                        isCurrentUser = user.id == state.currentUserId,
+                        isCurrentUser = isCurrent,
                     )
                 }
             }
@@ -804,6 +809,7 @@ private fun GlobalUserRankRow(
 private fun WeeklyGlobalStatsSheet(
     users: List<GlobalStatsUser>,
     currentUserId: String,
+    currentUserName: String = "",
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(
@@ -842,13 +848,14 @@ private fun WeeklyGlobalStatsSheet(
                         .weight(1f, fill = false)
                 ) {
                     items(users, key = { it.id }) { user ->
+                        val isCurrent = user.id == currentUserId || (currentUserName.isNotBlank() && !currentUserName.equals("AirBeats User", ignoreCase = true) && user.name.trim().equals(currentUserName.trim(), ignoreCase = true))
                         Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 5.dp)
                                     .background(
-                                        if (user.id == currentUserId) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                        if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
                                         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
                                         RoundedCornerShape(14.dp),
                                     )

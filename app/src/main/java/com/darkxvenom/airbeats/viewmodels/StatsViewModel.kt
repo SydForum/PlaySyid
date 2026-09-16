@@ -45,6 +45,7 @@ data class GlobalStatsUiState(
     val board: GlobalStatsBoard = GlobalStatsBoard(),
     val error: String? = null,
     val currentUserId: String = "",
+    val currentUserName: String = "",
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -233,7 +234,8 @@ constructor(
     }
 
     private suspend fun syncAndLoadGlobalStats(forceUpload: Boolean = false) {
-        globalStats.value = globalStats.value.copy(isLoading = true, error = null)
+        val currentName = runCatching { namePreferenceManager.userName.first().trim() }.getOrDefault("")
+        globalStats.value = globalStats.value.copy(isLoading = true, error = null, currentUserName = currentName)
         val userId = AirBeatsStatsCloudSync.resolveStableUserId(context, namePreferenceManager, statsPreferences)
         if (forceUpload || shouldUploadToday()) {
             buildUpload(userId)?.let { upload ->
@@ -246,6 +248,7 @@ constructor(
                                 isLoading = false,
                                 board = board,
                                 currentUserId = userId,
+                                currentUserName = currentName,
                                 error = null,
                             )
                         return
@@ -263,6 +266,7 @@ constructor(
                         isLoading = false,
                         board = board,
                         currentUserId = userId,
+                        currentUserName = currentName,
                     )
             }.onFailure { error ->
                 globalStats.value =
@@ -270,6 +274,7 @@ constructor(
                         isLoading = false,
                         error = error.message,
                         currentUserId = userId,
+                        currentUserName = currentName,
                     )
             }
     }
