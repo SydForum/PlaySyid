@@ -1107,8 +1107,10 @@ fun ModernHomeTopBarInline(
                 )
 
                 CircleIconButton(
-                    icon = R.drawable.search,
-                    onClick = onSearchClick
+                    icon = R.drawable.newspaper,
+                    onClick = {
+                        // Developer News - navigation destination will be configured once screen is specified
+                    }
                 )
 
                 CircleIconButton(
