@@ -89,31 +89,10 @@ fun LocalSongsScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        mediaMetadata?.thumbnailUrl?.let { imageUrl ->
-            com.darkxvenom.airbeats.ui.component.BlurredBackground(
-                model = imageUrl
-            )
-            val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        if (isDark) Brush.verticalGradient(
-                            listOf(
-                                Color.Black.copy(alpha = 0.2f),
-                                Color.Black.copy(alpha = 0.5f),
-                                Color.Black.copy(alpha = 0.85f)
-                            )
-                        ) else Brush.verticalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.25f),
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.85f)
-                            )
-                        )
-                    )
-            )
-        }
+        // Adaptive background: blurred song thumbnail when playing, Library mesh when no song playing
+        com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground(
+            artworkUrl = mediaMetadata?.thumbnailUrl
+        )
 
         // ── Main content ──────────────────────────────────────────────────────
         Column(
