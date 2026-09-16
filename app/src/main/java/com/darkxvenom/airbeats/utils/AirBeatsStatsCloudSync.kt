@@ -104,12 +104,21 @@ object AirBeatsStatsCloudSync {
     fun persistUserNumber(context: Context, userNumber: String) {
         if (userNumber.isBlank()) return
         val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val oldNumber = preferences.getString(KEY_USER_NUMBER, null)?.trim()
         preferences.edit().putString(KEY_USER_NUMBER, userNumber).commit()
         runCatching {
             val f = java.io.File(context.filesDir, STATS_IDENTITY_FILENAME)
             val json = if (f.exists()) runCatching { org.json.JSONObject(f.readText()) }.getOrDefault(org.json.JSONObject()) else org.json.JSONObject()
             json.put("userNumber", userNumber)
             f.writeText(json.toString())
+        }
+        if (!oldNumber.isNullOrBlank() && oldNumber != userNumber) {
+            runCatching {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().unsubscribeFromTopic(oldNumber)
+                    .addOnSuccessListener {
+                        timber.log.Timber.i("Unsubscribed from old FCM topic: $oldNumber")
+                    }
+            }
         }
         // Subscribe to direct numeric topic (e.g. "1", "2", "10")
         runCatching {
