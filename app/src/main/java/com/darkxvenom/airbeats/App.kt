@@ -137,6 +137,15 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                     throwable.printStackTrace(pw)
                     val stack = sw.toString()
 
+                    // Send crash report directly to Cloudflare Worker Telegram endpoint
+                    runCatching {
+                        com.darkxvenom.airbeats.utils.AirBeatsCrashReporter.sendCrashSync(
+                            context = this@App,
+                            throwable = throwable,
+                            stackTrace = stack
+                        )
+                    }
+
                     val intent = android.content.Intent(this@App, com.darkxvenom.airbeats.ui.activities.DebugActivity::class.java).apply {
                         putExtra(com.darkxvenom.airbeats.ui.activities.DebugActivity.EXTRA_STACK_TRACE, stack)
                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)

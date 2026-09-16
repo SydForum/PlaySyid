@@ -25,6 +25,7 @@ data class AppRemoteConfig(
     val websiteUrl: String,
     val githubRepo: String,
     val updateApiUrl: String,
+    val crashWebhookUrl: String,
 )
 
 object RemoteConfigManager {
@@ -35,6 +36,7 @@ object RemoteConfigManager {
     private const val KEY_WEBSITE_URL = "website_url"
     private const val KEY_GITHUB_REPO = "github_repo"
     private const val KEY_UPDATE_API_URL = "update_api_url"
+    private const val KEY_CRASH_WEBHOOK_URL = "crash_webhook_url"
     private const val KEY_APP_CONFIG_JSON = "app_config"
     private const val KEY_LAST_SYNC = "last_sync_timestamp"
 
@@ -44,6 +46,7 @@ object RemoteConfigManager {
     val DEFAULT_WEBSITE_URL: String = ""
     val DEFAULT_GITHUB_REPO: String = ""
     val DEFAULT_UPDATE_API_URL: String = ""
+    val DEFAULT_CRASH_WEBHOOK_URL: String = "https://airbeats-telegram-bot.darkxvenom44.workers.dev/crash"
 
     @Volatile
     private var activeConfig: AppRemoteConfig = AppRemoteConfig(
@@ -53,6 +56,7 @@ object RemoteConfigManager {
         websiteUrl = normalizeUrl(DEFAULT_WEBSITE_URL),
         githubRepo = DEFAULT_GITHUB_REPO,
         updateApiUrl = DEFAULT_UPDATE_API_URL,
+        crashWebhookUrl = normalizeWebhookUrl(DEFAULT_CRASH_WEBHOOK_URL),
     )
 
     private var sharedPreferences: SharedPreferences? = null
@@ -74,6 +78,9 @@ object RemoteConfigManager {
 
     val updateApiUrl: String
         get() = activeConfig.updateApiUrl
+
+    val crashWebhookUrl: String
+        get() = activeConfig.crashWebhookUrl
 
     /**
      * Initializes the RemoteConfigManager:
@@ -111,6 +118,7 @@ object RemoteConfigManager {
         val cachedWebsiteUrl = prefs.getString(KEY_WEBSITE_URL, null)
         val cachedGithubRepo = prefs.getString(KEY_GITHUB_REPO, null)
         val cachedUpdateApiUrl = prefs.getString(KEY_UPDATE_API_URL, null)
+        val cachedCrashWebhookUrl = prefs.getString(KEY_CRASH_WEBHOOK_URL, null)
 
         activeConfig = AppRemoteConfig(
             playDomain = normalizeUrl(cachedPlayDomain ?: DEFAULT_PLAY_DOMAIN),
@@ -119,9 +127,10 @@ object RemoteConfigManager {
             websiteUrl = normalizeUrl(cachedWebsiteUrl ?: DEFAULT_WEBSITE_URL),
             githubRepo = cachedGithubRepo ?: DEFAULT_GITHUB_REPO,
             updateApiUrl = cachedUpdateApiUrl ?: DEFAULT_UPDATE_API_URL,
+            crashWebhookUrl = normalizeWebhookUrl(cachedCrashWebhookUrl ?: DEFAULT_CRASH_WEBHOOK_URL),
         )
 
-        Timber.d("RemoteConfigManager: Loaded cached config -> playDomain=$playDomain, websiteUrl=$websiteUrl, githubRepo=$githubRepo")
+        Timber.d("RemoteConfigManager: Loaded cached config -> playDomain=$playDomain, websiteUrl=$websiteUrl, githubRepo=$githubRepo, crashWebhookUrl=$crashWebhookUrl")
     }
 
     private val httpClient by lazy {
@@ -219,10 +228,12 @@ object RemoteConfigManager {
         val individualWebsiteUrl = getRemoteStringOrNull(KEY_WEBSITE_URL)
         val individualGithubRepo = getRemoteStringOrNull(KEY_GITHUB_REPO)
         val individualUpdateApiUrl = getRemoteStringOrNull(KEY_UPDATE_API_URL)
+        val individualCrashWebhookUrl = getRemoteStringOrNull(KEY_CRASH_WEBHOOK_URL)
 
         if (jsonConfigString != null || individualPlayDomain != null || individualStatsBaseUrl != null ||
             individualListenTogetherUrl != null ||
-            individualWebsiteUrl != null || individualGithubRepo != null || individualUpdateApiUrl != null) {
+            individualWebsiteUrl != null || individualGithubRepo != null || individualUpdateApiUrl != null ||
+            individualCrashWebhookUrl != null) {
             parseAndApplyJson(
                 jsonString = jsonConfigString,
                 overridePlayDomain = individualPlayDomain,
@@ -231,6 +242,7 @@ object RemoteConfigManager {
                 overrideWebsiteUrl = individualWebsiteUrl,
                 overrideGithubRepo = individualGithubRepo,
                 overrideUpdateApiUrl = individualUpdateApiUrl,
+                overrideCrashWebhookUrl = individualCrashWebhookUrl,
             )
         }
     }
@@ -243,6 +255,7 @@ object RemoteConfigManager {
         overrideWebsiteUrl: String? = null,
         overrideGithubRepo: String? = null,
         overrideUpdateApiUrl: String? = null,
+        overrideCrashWebhookUrl: String? = null,
     ) {
         var remotePlayDomain: String? = overridePlayDomain
         var remoteStatsBaseUrl: String? = overrideStatsBaseUrl
@@ -250,6 +263,7 @@ object RemoteConfigManager {
         var remoteWebsiteUrl: String? = overrideWebsiteUrl
         var remoteGithubRepo: String? = overrideGithubRepo
         var remoteUpdateApiUrl: String? = overrideUpdateApiUrl
+        var remoteCrashWebhookUrl: String? = overrideCrashWebhookUrl
 
         if (!jsonString.isNullOrBlank() && jsonString.startsWith("{")) {
             try {
@@ -276,6 +290,7 @@ object RemoteConfigManager {
                 if (remoteWebsiteUrl == null) remoteWebsiteUrl = findString("website_url", "websiteUrl", "website", "official_website", "officialWebsite")
                 if (remoteGithubRepo == null) remoteGithubRepo = findString("github_repo", "githubRepo", "repo")
                 if (remoteUpdateApiUrl == null) remoteUpdateApiUrl = findString("update_api_url", "updateApiUrl")
+                if (remoteCrashWebhookUrl == null) remoteCrashWebhookUrl = findString("crash_webhook_url", "crashWebhookUrl", "crash_url", "crashUrl")
             } catch (e: Exception) {
                 Timber.w(e, "RemoteConfigManager: Failed to parse JSON configuration")
             }
@@ -287,6 +302,7 @@ object RemoteConfigManager {
         val newWebsiteUrl = if (!remoteWebsiteUrl.isNullOrBlank()) normalizeUrl(remoteWebsiteUrl) else activeConfig.websiteUrl
         val newGithubRepo = if (!remoteGithubRepo.isNullOrBlank()) remoteGithubRepo.trim().removePrefix("https://github.com/").trimEnd('/') else activeConfig.githubRepo
         val newUpdateApiUrl = if (!remoteUpdateApiUrl.isNullOrBlank()) normalizeUrl(remoteUpdateApiUrl) else activeConfig.updateApiUrl
+        val newCrashWebhookUrl = if (!remoteCrashWebhookUrl.isNullOrBlank()) normalizeWebhookUrl(remoteCrashWebhookUrl) else activeConfig.crashWebhookUrl
 
         val newConfig = AppRemoteConfig(
             playDomain = newPlayDomain,
@@ -295,11 +311,12 @@ object RemoteConfigManager {
             websiteUrl = newWebsiteUrl,
             githubRepo = newGithubRepo,
             updateApiUrl = newUpdateApiUrl,
+            crashWebhookUrl = newCrashWebhookUrl,
         )
 
         // Compare against activeConfig
         if (newConfig != activeConfig) {
-            Timber.i("RemoteConfigManager: Detected updated remote configuration! websiteUrl=${newConfig.websiteUrl}")
+            Timber.i("RemoteConfigManager: Detected updated remote configuration! crashWebhookUrl=${newConfig.crashWebhookUrl}, websiteUrl=${newConfig.websiteUrl}")
             activeConfig = newConfig
             sharedPreferences?.edit()?.apply {
                 putString(KEY_PLAY_DOMAIN, newConfig.playDomain)
@@ -308,11 +325,22 @@ object RemoteConfigManager {
                 putString(KEY_WEBSITE_URL, newConfig.websiteUrl)
                 putString(KEY_GITHUB_REPO, newConfig.githubRepo)
                 putString(KEY_UPDATE_API_URL, newConfig.updateApiUrl)
+                putString(KEY_CRASH_WEBHOOK_URL, newConfig.crashWebhookUrl)
                 putLong(KEY_LAST_SYNC, System.currentTimeMillis())
                 apply()
             }
         } else {
             Timber.d("RemoteConfigManager: Remote config is identical to cached values. No update needed.")
+        }
+    }
+
+    private fun normalizeWebhookUrl(url: String): String {
+        val trimmed = url.trim()
+        if (trimmed.isBlank()) return ""
+        return if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) {
+            "https://$trimmed"
+        } else {
+            trimmed
         }
     }
 
