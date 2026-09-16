@@ -143,6 +143,8 @@ object DeveloperNewsManager {
                     id = obj.optString("id", key),
                     title = obj.optString("title", ""),
                     message = obj.optString("message", ""),
+                    author = obj.optString("author", "").takeIf { it.isNotBlank() }
+                        ?: obj.optString("authorName", "").takeIf { it.isNotBlank() },
                     imageUrl = obj.optString("imageUrl", "").takeIf { it.isNotBlank() },
                     actionUrl = obj.optString("actionUrl", "").takeIf { it.isNotBlank() },
                     actionText = obj.optString("actionText", "").takeIf { it.isNotBlank() },

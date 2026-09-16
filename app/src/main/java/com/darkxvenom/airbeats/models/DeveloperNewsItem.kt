@@ -1,4 +1,4 @@
-﻿package com.darkxvenom.airbeats.models
+package com.darkxvenom.airbeats.models
 
 import androidx.annotation.Keep
 
@@ -7,6 +7,7 @@ data class DeveloperNewsItem(
     val id: String = "",
     val title: String = "",
     val message: String = "",
+    val author: String? = null,
     val imageUrl: String? = null,
     val actionUrl: String? = null,
     val actionText: String? = null,
