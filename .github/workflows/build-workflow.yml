@@ -115,7 +115,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p desktop-builds
-          gh release download --repo d0x-dev/Airbeats-Desktop --dir desktop-builds
+          gh release download --repo d0x-dev/Airbeats-Desktop --dir desktop-builds --pattern "*"
           ls -la desktop-builds
 
       - name: Upload Windows (.exe) Artifact
