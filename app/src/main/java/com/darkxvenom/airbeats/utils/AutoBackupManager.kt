@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import com.darkxvenom.airbeats.BuildConfig
 import com.darkxvenom.airbeats.db.InternalDatabase
@@ -15,8 +16,10 @@ import com.darkxvenom.airbeats.extensions.zipOutputStream
 import com.darkxvenom.airbeats.playback.MusicService
 import com.darkxvenom.airbeats.playback.MusicService.Companion.PERSISTENT_QUEUE_FILE
 import com.darkxvenom.airbeats.ui.component.NamePreferenceManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -296,6 +299,31 @@ object AutoBackupManager {
             }
         } catch (e: Exception) {
             Timber.e(e, "AutoBackupManager: createAutoBackup failed")
+            false
+        }
+    }
+
+    fun restoreFromUri(context: Context, uri: Uri, shouldRestart: Boolean = true): Boolean {
+        return try {
+            Timber.d("AutoBackupManager: Starting restore from Uri: $uri")
+            val targetFile = getAutoBackupFile(context)
+            context.applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+                FileOutputStream(targetFile).use { fos ->
+                    stream.copyTo(fos)
+                }
+            }
+            if (targetFile.exists() && targetFile.length() > 0) {
+                // Promote manually restored backup to cloud device backup immediately
+                CoroutineScope(Dispatchers.IO).launch {
+                    uploadToCloud(context, targetFile)
+                }
+                restoreFromInputStream(context, FileInputStream(targetFile), shouldRestart = shouldRestart)
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: restoreFromUri failed")
+            reportException(e)
             false
         }
     }
