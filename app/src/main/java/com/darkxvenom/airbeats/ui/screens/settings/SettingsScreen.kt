@@ -1067,6 +1067,16 @@ fun SettingsScreen(
                         title = stringResource(R.string.community),
                         items = listOf(
                             SettingsCategoryItem(
+                                icon = painterResource(R.drawable.newspaper),
+                                title = {
+                                    Text(
+                                        "News from Developers",
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = { navController.navigate("settings/developer_news") }
+                            ),
+                            SettingsCategoryItem(
                                 icon = painterResource(R.drawable.info),
                                 title = {
                                     Text(

@@ -93,8 +93,9 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
             private var startedActivities = 0
             override fun onActivityStarted(activity: Activity) {
                 if (startedActivities == 0) {
-                    // App opened or brought to foreground: fetch fresh URLs from Firebase immediately
+                    // App opened or brought to foreground: fetch fresh URLs and developer news from Firebase immediately
                     com.darkxvenom.airbeats.utils.RemoteConfigManager.refresh()
+                    com.darkxvenom.airbeats.utils.DeveloperNewsManager.refresh()
                 }
                 startedActivities++
             }
@@ -128,6 +129,11 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
             crashlytics.setCustomKey("device_id", deviceId)
             crashlytics.setCustomKey("version_name", BuildConfig.VERSION_NAME)
             crashlytics.setCustomKey("version_code", BuildConfig.VERSION_CODE)
+        } catch (_: Exception) {}
+
+        // Initialize Developer News & Announcements (Firebase Realtime Database)
+        try {
+            com.darkxvenom.airbeats.utils.DeveloperNewsManager.init(this)
         } catch (_: Exception) {}
 
         try {

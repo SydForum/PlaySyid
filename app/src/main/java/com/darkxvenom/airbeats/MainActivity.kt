@@ -1657,6 +1657,12 @@ class MainActivity : ComponentActivity() {
                                         onDismiss = { updateInfoState = null }
                                     )
                                 }
+
+                                com.darkxvenom.airbeats.ui.component.DeveloperNewsPopupDialog(
+                                    onNavigateToNews = {
+                                        navController.navigate("settings/developer_news")
+                                    }
+                                )
                             }
 
                             LaunchedEffect(shouldShowSearchBar, openSearchImmediately) {
