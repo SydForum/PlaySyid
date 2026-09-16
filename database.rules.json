@@ -1,0 +1,1 @@
+{"rules":{"app_config":{".read":true,".write":false},"developer_news":{".read":true,".write":false},".read":"auth != null",".write":false}}
