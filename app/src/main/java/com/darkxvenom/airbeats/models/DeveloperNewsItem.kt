@@ -1,10 +1,8 @@
 ﻿package com.darkxvenom.airbeats.models
 
 import androidx.annotation.Keep
-import com.google.firebase.database.IgnoreExtraProperties
 
 @Keep
-@IgnoreExtraProperties
 data class DeveloperNewsItem(
     val id: String = "",
     val title: String = "",

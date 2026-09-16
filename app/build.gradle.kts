@@ -154,6 +154,10 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+configurations.all {
+    exclude(group = "org.json", module = "json")
+}
+
 dependencies {
     implementation("dev.chrisbanes.haze:haze:0.7.3")
     implementation(libs.guava)
@@ -212,7 +216,6 @@ dependencies {
     implementation("com.google.firebase:firebase-config")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-database")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)

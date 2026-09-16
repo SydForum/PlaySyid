@@ -1,14 +1,10 @@
-package com.darkxvenom.airbeats.utils
+﻿package com.darkxvenom.airbeats.utils
 
 import android.content.Context
 import android.content.SharedPreferences
 import com.darkxvenom.airbeats.models.DeveloperNewsItem
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,8 +44,6 @@ object DeveloperNewsManager {
             .build()
     }
 
-    private var databaseListenerAttached = false
-
     fun init(context: Context) {
         val appContext = context.applicationContext
         prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -57,8 +51,7 @@ object DeveloperNewsManager {
         // Load cached announcements for instant offline display
         loadCachedNews()
 
-        // Attach Realtime listener & trigger background fetch
-        attachRealtimeDatabaseListener()
+        // Trigger background fetch from Firebase Realtime Database
         refresh()
     }
 
@@ -68,87 +61,50 @@ object DeveloperNewsManager {
             try {
                 fetchFromRestApi()
             } catch (e: Exception) {
-                Timber.e(e, "DeveloperNewsManager: Failed to refresh news via REST")
+                Timber.e(e, "DeveloperNewsManager: Failed to refresh news from RTDB")
             } finally {
                 _isSyncing.value = false
             }
         }
     }
 
-    private fun attachRealtimeDatabaseListener() {
-        if (databaseListenerAttached) return
+    private suspend fun fetchFromRestApi() = withContext(Dispatchers.IO) {
         try {
-            val app = runCatching { FirebaseApp.getInstance() }.getOrNull() ?: return
-            val database = FirebaseDatabase.getInstance(app)
-            val newsRef = database.getReference("developer_news")
+            val app = runCatching { FirebaseApp.getInstance() }.getOrNull() ?: return@withContext
+            val options = app.options
+            val baseUrl = (options.databaseUrl?.takeIf { it.isNotBlank() } ?: "https://-default-rtdb.firebaseio.com").trimEnd('/')
 
-            newsRef.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    scope.launch {
-                        val items = mutableListOf<DeveloperNewsItem>()
-                        for (child in snapshot.children) {
-                            try {
-                                val item = child.getValue(DeveloperNewsItem::class.java)
-                                if (item != null) {
-                                    val finalItem = if (item.id.isBlank()) item.copy(id = child.key.orEmpty()) else item
-                                    if (finalItem.active) {
-                                        items.add(finalItem)
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Timber.w(e, "DeveloperNewsManager: Error parsing child ")
-                            }
-                        }
-                        updateNews(items)
+            var token: String? = null
+            try {
+                val auth = FirebaseAuth.getInstance()
+                val user = auth.currentUser ?: auth.signInAnonymously().await().user
+                token = user?.getIdToken(false)?.await()?.token
+            } catch (e: Exception) {
+                Timber.d("DeveloperNewsManager: Firebase anonymous auth skipped: ")
+            }
+
+            val requestUrl = if (!token.isNullOrBlank()) {
+                "/developer_news.json?auth="
+            } else {
+                "/developer_news.json"
+            }
+
+            val request = Request.Builder()
+                .url(requestUrl)
+                .header("Cache-Control", "no-cache")
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body.string()
+                    if (body.isNotBlank() && body != "null" && !body.contains("\"error\"")) {
+                        parseNewsJson(body)
                     }
                 }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Timber.w("DeveloperNewsManager: Realtime listener cancelled: ")
-                    // On error (e.g. permission/network), fallback to authenticated REST query
-                    refresh()
-                }
-            })
-            databaseListenerAttached = true
-            Timber.d("DeveloperNewsManager: Attached Firebase RTDB listener")
-        } catch (e: Exception) {
-            Timber.e(e, "DeveloperNewsManager: Failed to attach Realtime Database listener")
-        }
-    }
-
-    private suspend fun fetchFromRestApi() = withContext(Dispatchers.IO) {
-        val app = runCatching { FirebaseApp.getInstance() }.getOrNull() ?: return@withContext
-        val options = app.options
-        val baseUrl = (options.databaseUrl?.takeIf { it.isNotBlank() } ?: "https://-default-rtdb.firebaseio.com").trimEnd('/')
-
-        var token: String? = null
-        try {
-            val auth = FirebaseAuth.getInstance()
-            val user = auth.currentUser ?: auth.signInAnonymously().await().user
-            token = user?.getIdToken(false)?.await()?.token
-        } catch (e: Exception) {
-            Timber.d("DeveloperNewsManager: Firebase anonymous auth skipped: ")
-        }
-
-        val requestUrl = if (!token.isNullOrBlank()) {
-            "/developer_news.json?auth="
-        } else {
-            "/developer_news.json"
-        }
-
-        val request = Request.Builder()
-            .url(requestUrl)
-            .header("Cache-Control", "no-cache")
-            .get()
-            .build()
-
-        httpClient.newCall(request).execute().use { response ->
-            if (response.isSuccessful) {
-                val body = response.body.string()
-                if (body.isNotBlank() && body != "null" && !body.contains("\"error\"")) {
-                    parseNewsJson(body)
-                }
             }
+        } catch (e: Exception) {
+            Timber.w(e, "DeveloperNewsManager: Error fetching news from Firebase")
         }
     }
 

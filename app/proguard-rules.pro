@@ -88,3 +88,11 @@
 -dontwarn java.beans.Introspector
 -dontwarn java.beans.PropertyDescriptor
 -dontwarn okhttp3.internal.Util
+
+# Keep Android framework org.json classes and prevent R8 renaming
+-keep class org.json.** { *; }
+-dontwarn org.json.**
+
+# Keep models loaded from remote Firebase endpoints
+-keep class com.darkxvenom.airbeats.models.** { *; }
+
