@@ -76,6 +76,7 @@ import com.darkxvenom.airbeats.ui.component.AvatarPreferenceManager
 import com.darkxvenom.airbeats.ui.component.AvatarSelection
 import com.darkxvenom.airbeats.ui.component.ChangelogScreen
 import com.darkxvenom.airbeats.ui.component.UpdateAvailableDialog
+import com.darkxvenom.airbeats.utils.RemoteConfigManager
 import com.darkxvenom.airbeats.utils.UpdateInfo
 import com.darkxvenom.airbeats.utils.Updater
 import com.darkxvenom.airbeats.utils.rememberPreference
@@ -1099,11 +1100,14 @@ fun SettingsScreen(
                                 icon = painterResource(R.drawable.telegram),
                                 title = {
                                     Text(
-                                        "Telegram Bot",
+                                        "Telegram",
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 },
-                                onClick = { uriHandler.openUri("https://t.me/Stormxmusicrobot") }
+                                onClick = {
+                                    val telegramUrl = RemoteConfigManager.telegramUrl.ifBlank { RemoteConfigManager.DEFAULT_TELEGRAM_URL }
+                                    uriHandler.openUri(telegramUrl)
+                                }
                             )
                         )
                     )
