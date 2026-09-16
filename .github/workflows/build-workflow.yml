@@ -1,18 +1,15 @@
 name: Build Workflow (Release, Nightly, Debug)
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
   build-variants:
     name: Build ${{ matrix.title }} APK
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     strategy:
       fail-fast: false
       matrix:
@@ -109,6 +106,7 @@ jobs:
   fetch-desktop-builds:
     name: Fetch Desktop Builds (Windows, macOS, Linux)
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     steps:
       - name: Download Latest Desktop Releases from Airbeats-Desktop
         env:
@@ -168,5 +166,5 @@ jobs:
           THREAD_ID: "812"
           RUN_ID: ${{ github.run_id }}
           COMMIT_SHA: ${{ github.sha }}
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_MESSAGE: ${{ github.event.release.name || github.event.head_commit.message || 'Official Release' }}
         run: python3 .github/scripts/notify_all_builds.py
