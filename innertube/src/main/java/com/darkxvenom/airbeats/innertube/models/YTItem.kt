@@ -18,7 +18,7 @@ sealed class YTItem {
     abstract val shareLink: String
 
     companion object {
-        var shareDomainProvider: () -> String = { "https://play.airbeats.org" }
+        var shareDomainProvider: () -> String = { "" }
     }
 }
 

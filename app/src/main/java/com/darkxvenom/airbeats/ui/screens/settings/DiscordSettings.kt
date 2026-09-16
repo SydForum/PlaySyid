@@ -706,11 +706,16 @@ fun EnhancedRichPresence(
                     // Botón AirBeats mejorado
                     OutlinedButton(
                         onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                "https://github.com/darkxvenom/airbeats".toUri()
-                            )
-                            context.startActivity(intent)
+                            val targetUrl = com.darkxvenom.airbeats.utils.RemoteConfigManager.websiteUrl.ifBlank {
+                                com.darkxvenom.airbeats.utils.RemoteConfigManager.getReleasesPageUrl()
+                            }
+                            if (targetUrl.isNotBlank()) {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    targetUrl.toUri()
+                                )
+                                context.startActivity(intent)
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         border = BorderStroke(

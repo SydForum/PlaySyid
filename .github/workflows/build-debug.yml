@@ -82,3 +82,17 @@ jobs:
         with:
           name: AirBeats-Debug-APK
           path: ${{ env.FINAL_APK_NAME }}
+
+      - name: Upload Debug APK to Telegram (Topic 44)
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: "-1004388752678"
+          THREAD_ID: "44"
+          VERSION: ${{ env.VERSION_NAME }}
+          APK_FILE: ${{ env.FINAL_APK_NAME }}
+          RELEASE_TYPE: "Debug Build"
+          CHANGELOG: ${{ env.CHANGELOG }}
+          RELEASE_URL: "https://github.com/d0x-dev/AirBeats/actions/runs/${{ github.run_id }}"
+        run: |
+          pip install requests
+          python3 .github/scripts/upload_to_telegram.py

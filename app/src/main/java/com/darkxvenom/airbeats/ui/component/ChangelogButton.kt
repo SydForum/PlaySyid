@@ -164,8 +164,15 @@ fun ChangelogScreen(viewModel: ChangelogViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedTab by remember { mutableStateOf(ChangelogTab.RELEASES) }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadChangelog("d0x-dev", "AirBeats")
+    val repoString = com.darkxvenom.airbeats.utils.RemoteConfigManager.githubRepo.trim()
+    val repoParts = repoString.split("/")
+    val owner = repoParts.getOrNull(0)?.trim().orEmpty()
+    val repo = repoParts.getOrNull(1)?.trim().orEmpty()
+
+    LaunchedEffect(owner, repo) {
+        if (owner.isNotBlank() && repo.isNotBlank()) {
+            viewModel.loadChangelog(owner, repo)
+        }
     }
 
     Column(
@@ -194,7 +201,11 @@ fun ChangelogScreen(viewModel: ChangelogViewModel = viewModel()) {
                     isLoading = uiState.isLoadingReleases,
                     error = uiState.releasesError,
                     lastUpdated = uiState.lastUpdated,
-                    onRetry = { viewModel.loadChangelog("d0x-dev", "AirBeats") }
+                    onRetry = {
+                        if (owner.isNotBlank() && repo.isNotBlank()) {
+                            viewModel.loadChangelog(owner, repo)
+                        }
+                    }
                 )
             }
 
@@ -204,7 +215,11 @@ fun ChangelogScreen(viewModel: ChangelogViewModel = viewModel()) {
                     isLoading = uiState.isLoadingCommits,
                     error = uiState.commitsError,
                     lastUpdated = uiState.lastUpdated,
-                    onRetry = { viewModel.loadChangelog("d0x-dev", "AirBeats") }
+                    onRetry = {
+                        if (owner.isNotBlank() && repo.isNotBlank()) {
+                            viewModel.loadChangelog(owner, repo)
+                        }
+                    }
                 )
             }
         }

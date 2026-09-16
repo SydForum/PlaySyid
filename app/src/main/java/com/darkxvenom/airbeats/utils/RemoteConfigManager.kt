@@ -4,13 +4,19 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import com.darkxvenom.airbeats.innertube.models.YTItem
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
 
 data class AppRemoteConfig(
     val playDomain: String,
@@ -32,14 +38,11 @@ object RemoteConfigManager {
     private const val KEY_APP_CONFIG_JSON = "app_config"
     private const val KEY_LAST_SYNC = "last_sync_timestamp"
 
-    val DEFAULT_PLAY_DOMAIN: String = "https://play.airbeats.org"
-    // Privileged service credentials must never be embedded in an APK.
-    // Cloud statistics and privileged API calls remain unavailable unless redesigned
-    // behind authenticated server-side access.
+    val DEFAULT_PLAY_DOMAIN: String = ""
     val DEFAULT_STATS_BASE_URL: String = ""
-    val DEFAULT_LISTEN_TOGETHER_URL: String = "https://listentogether.airbeats.org"
-    val DEFAULT_WEBSITE_URL: String = "https://airbeats.org"
-    val DEFAULT_GITHUB_REPO: String = "d0x-dev/AirBeats"
+    val DEFAULT_LISTEN_TOGETHER_URL: String = ""
+    val DEFAULT_WEBSITE_URL: String = ""
+    val DEFAULT_GITHUB_REPO: String = ""
     val DEFAULT_UPDATE_API_URL: String = ""
 
     @Volatile
@@ -121,7 +124,67 @@ object RemoteConfigManager {
         Timber.d("RemoteConfigManager: Loaded cached config -> playDomain=$playDomain, websiteUrl=$websiteUrl, githubRepo=$githubRepo")
     }
 
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .build()
+    }
+
     private suspend fun fetchFromFirebase() {
+        // 1. Fetch from Firebase Realtime Database (direct from google-services.json config)
+        fetchFromRealtimeDatabase()
+
+        // 2. Fetch from Firebase Remote Config (companion/fallback)
+        fetchFromRemoteConfig()
+    }
+
+    private suspend fun fetchFromRealtimeDatabase() {
+        try {
+            val app = runCatching { FirebaseApp.getInstance() }.getOrNull() ?: return
+            val options = app.options
+            val baseUrl = (options.databaseUrl?.takeIf { it.isNotBlank() } ?: "https://${options.projectId}-default-rtdb.firebaseio.com").trimEnd('/')
+
+            var token: String? = null
+            try {
+                val auth = FirebaseAuth.getInstance()
+                val user = auth.currentUser ?: auth.signInAnonymously().await().user
+                token = user?.getIdToken(false)?.await()?.token
+            } catch (e: Exception) {
+                Timber.d("RemoteConfigManager: Firebase anonymous auth skipped: ${e.message}")
+            }
+
+            val requestUrl = if (!token.isNullOrBlank()) {
+                "$baseUrl/app_config.json?auth=$token"
+            } else {
+                "$baseUrl/app_config.json"
+            }
+
+            val request = Request.Builder()
+                .url(requestUrl)
+                .header("Cache-Control", "no-cache")
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    if (body.isNotBlank() && !body.contains("\"error\"")) {
+                        Timber.d("RemoteConfigManager: RTDB fetch succeeded: $body")
+                        parseAndApplyJson(body)
+                    } else {
+                        Timber.d("RemoteConfigManager: RTDB returned error or empty body: $body")
+                    }
+                } else {
+                    Timber.d("RemoteConfigManager: RTDB HTTP status code: ${response.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.d("RemoteConfigManager: RTDB fetch exception: ${e.message}")
+        }
+    }
+
+    private suspend fun fetchFromRemoteConfig() {
         // Firebase Remote Config only contains client-safe values such as service URLs.
         try {
             val remoteConfig = FirebaseRemoteConfig.getInstance()
@@ -280,22 +343,24 @@ object RemoteConfigManager {
                 if (customUrl.endsWith("/latest")) customUrl else "$customUrl/latest"
             }
         }
-        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
+        val repo = githubRepo.trim()
+        if (repo.isBlank()) return ""
         return if (isNightly) "https://api.github.com/repos/$repo/releases" else "https://api.github.com/repos/$repo/releases/latest"
     }
 
     fun getReleasesPageUrl(): String {
-        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
-        return "https://github.com/$repo/releases"
+        val repo = githubRepo.trim()
+        return if (repo.isNotBlank()) "https://github.com/$repo/releases" else ""
     }
 
     fun getLatestReleasePageUrl(): String {
-        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
-        return "https://github.com/$repo/releases/latest"
+        val repo = githubRepo.trim()
+        return if (repo.isNotBlank()) "https://github.com/$repo/releases/latest" else ""
     }
 
     fun getApkDownloadUrl(versionName: String, isNightly: Boolean): String {
-        val repo = githubRepo.trim().ifBlank { DEFAULT_GITHUB_REPO }
+        val repo = githubRepo.trim()
+        if (repo.isBlank()) return ""
         return if (isNightly) {
             "https://github.com/$repo/releases/download/v${versionName}-nightly/Airbeats-v${versionName}-Nightly.apk"
         } else {
@@ -303,21 +368,16 @@ object RemoteConfigManager {
         }
     }
 
-    // Helper functions for deep link matching
+    // Helper functions for deep link matching (matches dynamically against active Firebase configuration)
     fun isMatchingPlayDomain(host: String?): Boolean {
-        if (host == null) return false
+        if (host.isNullOrBlank() || playDomain.isBlank()) return false
         val currentHost = runCatching { Uri.parse(playDomain).host }.getOrNull()
-        return host.equals(currentHost, ignoreCase = true) ||
-                host.equals("play.airbeats.org", ignoreCase = true) ||
-                host.equals("play.airbeats.app", ignoreCase = true) ||
-                host.equals("airbeats.org", ignoreCase = true)
+        return !currentHost.isNullOrBlank() && host.equals(currentHost, ignoreCase = true)
     }
 
     fun isMatchingListenTogetherDomain(host: String?): Boolean {
-        if (host == null) return false
+        if (host.isNullOrBlank() || listenTogetherUrl.isBlank()) return false
         val currentHost = runCatching { Uri.parse(listenTogetherUrl).host }.getOrNull()
-        return host.equals(currentHost, ignoreCase = true) ||
-                host.equals("listentogether.airbeats.org", ignoreCase = true) ||
-                host.equals("listentogether.airbeats.app", ignoreCase = true)
+        return !currentHost.isNullOrBlank() && host.equals(currentHost, ignoreCase = true)
     }
 }

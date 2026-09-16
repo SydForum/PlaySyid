@@ -64,8 +64,9 @@ fun ReleaseNotesCard() {
 suspend fun fetchReleaseNotesText(): List<String> {
     return withContext(Dispatchers.IO) {
         try {
-            val document =
-                Jsoup.connect("https://github.com/darkxvenom/airbeats/releases/latest").get()
+            val releaseUrl = com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleasePageUrl()
+            if (releaseUrl.isBlank()) return@withContext emptyList<String>()
+            val document = Jsoup.connect(releaseUrl).get()
             val changelogElement = document.selectFirst(".markdown-body")
             val htmlContent = changelogElement?.html() ?: "No release notes found"
 

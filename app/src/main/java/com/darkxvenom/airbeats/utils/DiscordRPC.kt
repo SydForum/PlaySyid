@@ -36,7 +36,7 @@ class DiscordRPC(
             smallText = song.artists.firstOrNull()?.name,
             buttons = listOf(
                 "Listen on YouTube Music" to com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(song.song.id),
-                "Visit AirBeats" to "https://github.com/darkxvenom/airbeats"
+                "Visit AirBeats" to com.darkxvenom.airbeats.utils.RemoteConfigManager.websiteUrl
             ),
             type = Type.LISTENING,
             statusDisplayType = if (useDetails) StatusDisplayType.DETAILS else StatusDisplayType.STATE,
