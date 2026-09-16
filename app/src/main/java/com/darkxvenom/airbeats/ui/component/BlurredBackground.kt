@@ -1,7 +1,6 @@
 package com.darkxvenom.airbeats.ui.component
 
-import android.os.Build
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -9,63 +8,37 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
-import coil.request.ImageRequest
+import com.darkxvenom.airbeats.ui.player.FluidBackground
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
 
 @Composable
 fun BlurredBackground(
     model: Any?,
     modifier: Modifier = Modifier,
-    blurRadius: Dp = 90.dp
+    blurRadius: androidx.compose.ui.unit.Dp = 90.dp
 ) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && model != null) {
-        val context = LocalContext.current
-        var isLoaded by remember(model) { mutableStateOf(false) }
-        val alpha by animateFloatAsState(
-            targetValue = if (isLoaded) 1f else 0f,
-            animationSpec = tween(500),
-            label = "blurred_bg_alpha"
-        )
-
-        Box(modifier = modifier.fillMaxSize()) {
-            LibraryMeshBackground()
-
+    if (model != null) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(model)
-                    .crossfade(true)
-                    .build(),
+                model = model,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                onState = { state ->
-                    if (state is AsyncImagePainter.State.Success) {
-                        isLoaded = true
-                    }
-                },
-                modifier = Modifier
+                modifier = modifier
                     .fillMaxSize()
-                    .graphicsLayer { this.alpha = alpha }
                     .blur(blurRadius)
             )
+        } else {
+            FluidBackground(modifier = modifier.fillMaxSize())
         }
     } else {
         LibraryMeshBackground(modifier = modifier)
@@ -148,98 +121,53 @@ fun LibraryMeshBackground(
 
 /**
  * Adaptive background for all main screens (Home, Explore, Settings, About, Appearance, Stats, etc.):
- * - Base layer: Always displays the Library screen mesh background (no black void on startup or while fetching).
- * - Below Android 12 (Android 11, 10, etc.): Always displays the Library mesh background. Never loads thumbnail or uses fluid background.
- * - Android 12+: Once the song thumbnail successfully loads, smoothly fades in the blurred thumbnail and gradient overlay.
+ * - When a song is playing (artworkUrl != null): displays the blurred song thumbnail with smooth overlay.
+ * - When no song is playing (artworkUrl == null): displays the Library screen mesh background.
  */
 @Composable
 fun ScreenAdaptiveBackground(
     artworkUrl: String?,
     modifier: Modifier = Modifier,
 ) {
-    val isSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val validArtworkUrl = artworkUrl?.takeIf { it.isNotBlank() }
+    Crossfade(
+        targetState = artworkUrl?.takeIf { it.isNotBlank() },
+        animationSpec = tween(500),
+        modifier = modifier.fillMaxSize(),
+        label = "ScreenAdaptiveBackgroundCrossfade"
+    ) { currentArtworkUrl ->
+        if (currentArtworkUrl != null) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                BlurredBackground(
+                    model = currentArtworkUrl.highQualityThumbnail()
+                )
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Base layer: Always render the Library mesh background immediately
-        LibraryMeshBackground()
-
-        if (isSupported) {
-            val context = LocalContext.current
-            var lastLoadedUrl by remember { mutableStateOf<String?>(null) }
-            var isCurrentLoaded by remember { mutableStateOf(false) }
-
-            LaunchedEffect(validArtworkUrl) {
-                if (validArtworkUrl == null) {
-                    isCurrentLoaded = false
-                }
-            }
-
-            val targetAlpha = if (validArtworkUrl != null && isCurrentLoaded) 1f else 0f
-            val thumbnailAlpha by animateFloatAsState(
-                targetValue = targetAlpha,
-                animationSpec = tween(600),
-                label = "ScreenAdaptiveBackgroundThumbnailAlpha"
-            )
-
-            val displayModel = validArtworkUrl ?: lastLoadedUrl
-
-            if (thumbnailAlpha > 0f || validArtworkUrl != null) {
                 val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-                val surfaceColor = MaterialTheme.colorScheme.surface
-                val backgroundColor = MaterialTheme.colorScheme.background
-                val overlayBrush = remember(isDarkTheme, surfaceColor, backgroundColor) {
-                    if (isDarkTheme) {
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.Black.copy(alpha = 0.2f),
-                                Color.Black.copy(alpha = 0.5f),
-                                Color.Black.copy(alpha = 0.85f)
-                            )
+                val overlayBrush = if (isDarkTheme) {
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = 0.2f),
+                            Color.Black.copy(alpha = 0.5f),
+                            Color.Black.copy(alpha = 0.85f)
                         )
-                    } else {
-                        Brush.verticalGradient(
-                            listOf(
-                                surfaceColor.copy(alpha = 0.25f),
-                                surfaceColor.copy(alpha = 0.5f),
-                                backgroundColor.copy(alpha = 0.85f)
-                            )
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.25f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.85f)
                         )
-                    }
+                    )
                 }
 
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer { this.alpha = thumbnailAlpha }
-                ) {
-                    if (displayModel != null) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(displayModel.highQualityThumbnail())
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            onState = { state ->
-                                if (state is AsyncImagePainter.State.Success) {
-                                    isCurrentLoaded = true
-                                    lastLoadedUrl = validArtworkUrl
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .blur(90.dp)
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(overlayBrush)
-                    )
-                }
+                        .background(overlayBrush)
+                )
             }
+        } else {
+            LibraryMeshBackground()
         }
     }
 }
