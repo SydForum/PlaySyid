@@ -159,6 +159,48 @@ def main():
 
     file_size = os.path.getsize(apk_file)
     file_basename = os.path.basename(apk_file)
+    size_mb = round(file_size / (1024 * 1024), 2)
+    print(f"File size of {file_basename}: {size_mb} MB ({file_size} bytes)", flush=True)
+
+    # Telegram Bot API hard limit for bot file uploads is 50 MB (52,428,800 bytes)
+    MAX_BOT_API_SIZE = 50 * 1024 * 1024
+
+    if file_size >= MAX_BOT_API_SIZE:
+        print(f"Notice: APK size ({size_mb} MB) exceeds Telegram's 50 MB Bot API upload limit.", flush=True)
+        print("Posting notification message with changelog and download buttons instead of direct file upload...", flush=True)
+        oversize_text = (
+            f"{icon} <b>AirBeats {release_type} v{version}</b>\n\n"
+            f"⚠️ <b>Notice:</b> APK size ({size_mb} MB) exceeds Telegram's 50 MB Bot API upload limit.\n"
+            f"Please download the APK directly using the buttons below:"
+        )
+        msg_data = {
+            "chat_id": chat_id,
+            "text": oversize_text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+        if thread_id:
+            msg_data["message_thread_id"] = thread_id
+        if inline_keyboard:
+            msg_data["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})
+
+        try:
+            res = requests.post(f"{base_url}/sendMessage", json=msg_data, timeout=30)
+            res_json = res.json()
+            if res_json.get("ok"):
+                msg_id = res_json["result"]["message_id"]
+                print(f"Successfully posted oversize APK notice! Message ID: {msg_id}", flush=True)
+                try:
+                    requests.post(f"{base_url}/pinChatMessage", json={"chat_id": chat_id, "message_id": msg_id, "disable_notification": False}, timeout=15)
+                except Exception as pe:
+                    print(f"Notice: Failed to pin message: {pe}", flush=True)
+            else:
+                print(f"Warning: Failed to post message: {res_json}", flush=True)
+        except Exception as e:
+            print(f"Warning: Exception while posting oversize notification: {e}", flush=True)
+        print("Completed oversize APK notification. Exiting cleanly.", flush=True)
+        sys.exit(0)
+
     print(f"Uploading {apk_file} ({file_size} bytes) to chat {chat_id}, topic {thread_id}...", flush=True)
 
     apk_msg_id = None
@@ -187,6 +229,33 @@ def main():
             res_json = res.json()
             if not res_json.get("ok"):
                 print(f"Warning: Telegram API error on attempt {attempt}: {res_json}", flush=True)
+                if res_json.get("error_code") == 413:
+                    print("Telegram returned 413 Request Entity Too Large. Falling back to notification message...", flush=True)
+                    oversize_text = (
+                        f"{icon} <b>AirBeats {release_type} v{version}</b>\n\n"
+                        f"⚠️ <b>Notice:</b> APK size ({size_mb} MB) exceeds Telegram's 50 MB Bot API upload limit.\n"
+                        f"Please download the APK directly using the buttons below:"
+                    )
+                    msg_data = {
+                        "chat_id": chat_id,
+                        "text": oversize_text,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": True
+                    }
+                    if thread_id:
+                        msg_data["message_thread_id"] = thread_id
+                    if inline_keyboard:
+                        msg_data["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})
+                    fallback_res = requests.post(f"{base_url}/sendMessage", json=msg_data, timeout=30)
+                    fb_json = fallback_res.json()
+                    if fb_json.get("ok"):
+                        msg_id = fb_json["result"]["message_id"]
+                        try:
+                            requests.post(f"{base_url}/pinChatMessage", json={"chat_id": chat_id, "message_id": msg_id, "disable_notification": False}, timeout=15)
+                        except Exception:
+                            pass
+                    sys.exit(0)
+
                 if attempt < max_attempts:
                     time.sleep(5)
                     continue
