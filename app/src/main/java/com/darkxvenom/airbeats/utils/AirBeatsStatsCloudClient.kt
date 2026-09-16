@@ -40,7 +40,7 @@ class AirBeatsStatsCloudClient {
             val request = Request.Builder().url("${workerUrl()}/stats").header("Authorization", "Bearer $token").post(payload.toString().toRequestBody(JSON_MEDIA_TYPE)).build()
             client.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()
-                if (!response.isSuccessful) error(parseError(text, response.code))
+                if (!response.isSuccessful && response.code != 429) error(parseError(text, response.code))
             }
             readBoard().getOrThrow()
         }

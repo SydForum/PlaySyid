@@ -15,6 +15,7 @@ import com.darkxvenom.airbeats.utils.AirBeatsStatsCloudSync
 import com.darkxvenom.airbeats.utils.GlobalStatsBoard
 import com.darkxvenom.airbeats.utils.LocalStatsUpload
 import com.darkxvenom.airbeats.utils.reportException
+import timber.log.Timber
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -245,16 +246,12 @@ constructor(
                                 isLoading = false,
                                 board = board,
                                 currentUserId = userId,
+                                error = null,
                             )
-                    }.onFailure { error ->
-                        globalStats.value =
-                            globalStats.value.copy(
-                                isLoading = false,
-                                error = error.message,
-                                currentUserId = userId,
-                            )
+                        return
+                    }.onFailure { uploadError ->
+                        Timber.d("StatsViewModel: Daily upload error/throttled: ${uploadError.message}")
                     }
-                return
             }
         }
 
