@@ -105,3 +105,41 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ env.TARGET_NAME }}
           if-no-files-found: error
+
+  fetch-desktop-builds:
+    name: Fetch Desktop Builds (Windows, macOS, Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Latest Desktop Releases from Airbeats-Desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p desktop-builds
+          gh release download --repo d0x-dev/Airbeats-Desktop --dir desktop-builds
+          ls -la desktop-builds
+
+      - name: Upload Windows (.exe) Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AirBeats-Windows-EXE
+          path: |
+            desktop-builds/*setup.exe
+            desktop-builds/*portable.exe
+          if-no-files-found: warn
+
+      - name: Upload macOS (.dmg) Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AirBeats-macOS-DMG
+          path: desktop-builds/*.dmg
+          if-no-files-found: warn
+
+      - name: Upload Linux (Snap & AppImage) Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AirBeats-Linux-Snap-AppImage
+          path: |
+            desktop-builds/*.AppImage
+            desktop-builds/*.deb
+            desktop-builds/*.snap
+          if-no-files-found: warn
