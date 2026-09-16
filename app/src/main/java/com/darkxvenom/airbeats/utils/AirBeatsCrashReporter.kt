@@ -1,4 +1,4 @@
-﻿package com.darkxvenom.airbeats.utils
+package com.darkxvenom.airbeats.utils
 
 import android.content.Context
 import android.os.Build
@@ -33,18 +33,32 @@ object AirBeatsCrashReporter {
             .build()
     }
 
+    private fun isDuplicate(errorKey: String): Boolean {
+        val now = System.currentTimeMillis()
+        val lastReported = recentErrors[errorKey]
+        if (lastReported != null && (now - lastReported) < DEDUP_WINDOW_MS) {
+            return true
+        }
+        recentErrors[errorKey] = now
+        if (recentErrors.size > 200) {
+            recentErrors.entries.removeIf { (now - it.value) > DEDUP_WINDOW_MS }
+        }
+        return false
+    }
+
     /**
      * Reports a non-fatal exception asynchronously with deduplication.
      */
     fun report(throwable: Throwable) {
-        val errorKey = "${throwable.javaClass.simpleName}:${throwable.message}:${throwable.stackTrace.firstOrNull()?.toString()}"
-        val now = System.currentTimeMillis()
-        val lastReported = recentErrors[errorKey]
-        if (lastReported != null && (now - lastReported) < DEDUP_WINDOW_MS) {
-            // Deduplicated
+        if (throwable is java.util.concurrent.CancellationException ||
+            throwable is kotlinx.coroutines.CancellationException) {
             return
         }
-        recentErrors[errorKey] = now
+
+        val errorKey = "${throwable.javaClass.simpleName}:${throwable.message}:${throwable.stackTrace.firstOrNull()?.toString()}"
+        if (isDuplicate(errorKey)) {
+            return
+        }
 
         CoroutineScope(Dispatchers.IO).launch {
             sendPayload(
@@ -63,7 +77,19 @@ object AirBeatsCrashReporter {
         throwable: Throwable,
         stackTrace: String? = null
     ) {
+        if (throwable is java.util.concurrent.CancellationException ||
+            throwable is kotlinx.coroutines.CancellationException) {
+            return
+        }
+
         val trace = stackTrace ?: getStackTraceString(throwable)
+        val firstLine = trace.lineSequence().firstOrNull()?.take(150) ?: throwable.javaClass.name
+        val errorKey = "${throwable.javaClass.name}:${throwable.message}:$firstLine"
+        if (isDuplicate(errorKey)) {
+            Timber.d("AirBeatsCrashReporter: Duplicate fatal crash skipped")
+            return
+        }
+
         val targetUrl = getWebhookUrl()
         if (targetUrl.isBlank()) return
 
@@ -96,6 +122,13 @@ object AirBeatsCrashReporter {
         errorMessage: String,
         stackTrace: String
     ) {
+        val firstLine = stackTrace.lineSequence().firstOrNull()?.take(150) ?: errorName
+        val errorKey = "$errorName:$errorMessage:$firstLine"
+        if (isDuplicate(errorKey)) {
+            Timber.d("AirBeatsCrashReporter: Duplicate async crash skipped")
+            return
+        }
+
         CoroutineScope(Dispatchers.IO).launch {
             sendPayload(errorName, errorMessage, stackTrace)
         }

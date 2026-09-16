@@ -68,14 +68,6 @@ class DebugActivity : ComponentActivity() {
         val reportText = buildCrashReport(this, timestampText, stack)
         val deviceInfo = buildDeviceInfo(this)
 
-        runCatching {
-            com.darkxvenom.airbeats.utils.AirBeatsCrashReporter.sendCrashAsync(
-                errorName = previewText,
-                errorMessage = previewText,
-                stackTrace = stack
-            )
-        }
-
         setContent {
             AirBeatsTheme(
                 darkTheme = true
