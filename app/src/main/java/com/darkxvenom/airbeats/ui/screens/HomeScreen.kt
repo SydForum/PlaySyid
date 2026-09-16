@@ -806,7 +806,7 @@ fun HomeScreen(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp)
+                                .padding(vertical = 48.dp)
                                 .animateItem(),
                         ) {
                             LoadingIndicator()

@@ -200,11 +200,17 @@ class HomeViewModel @Inject constructor(
     fun onAccountChanged(cookie: String) {
         val fingerprint = cookie.hashCode()
         if (accountFingerprint == fingerprint) return
+        val isFirst = (accountFingerprint == null)
         accountFingerprint = fingerprint
         // The application collector is asynchronous; set the client now so the
         // refresh cannot accidentally request the anonymous home feed.
         YouTube.cookie = cookie
-        refresh()
+        if (!isFirst) {
+            loadJob?.cancel()
+            loadJob = viewModelScope.launch(Dispatchers.IO) {
+                load()
+            }
+        }
     }
 
     init {
