@@ -1109,7 +1109,7 @@ fun ModernHomeTopBarInline(
                 CircleIconButton(
                     icon = R.drawable.newspaper,
                     onClick = {
-                        // Developer News - navigation destination will be configured once screen is specified
+                        navController.navigate("settings/developer_news")
                     }
                 )
 

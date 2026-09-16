@@ -1,4 +1,4 @@
-﻿package com.darkxvenom.airbeats.utils
+package com.darkxvenom.airbeats.utils
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -72,34 +72,57 @@ object DeveloperNewsManager {
         try {
             val app = runCatching { FirebaseApp.getInstance() }.getOrNull() ?: return@withContext
             val options = app.options
-            val baseUrl = (options.databaseUrl?.takeIf { it.isNotBlank() } ?: "https://-default-rtdb.firebaseio.com").trimEnd('/')
+            val projectId = options.projectId?.takeIf { it.isNotBlank() } ?: "airbeats-54c06"
+            val baseUrl = (options.databaseUrl?.takeIf { it.isNotBlank() } ?: "https://$projectId-default-rtdb.firebaseio.com").trimEnd('/')
 
+            val directUrl = "$baseUrl/developer_news.json"
+            Timber.d("DeveloperNewsManager: Fetching news from $directUrl")
+
+            val request = Request.Builder()
+                .url(directUrl)
+                .header("Cache-Control", "no-cache")
+                .get()
+                .build()
+
+            var fetchedSuccessfully = false
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    if (body.isNotBlank() && body != "null" && !body.contains("\"error\"")) {
+                        parseNewsJson(body)
+                        fetchedSuccessfully = true
+                    }
+                } else {
+                    Timber.w("DeveloperNewsManager: Direct news fetch failed with code ${response.code}")
+                }
+            }
+
+            if (fetchedSuccessfully) return@withContext
+
+            // Fallback with Firebase Auth token if direct read fails
             var token: String? = null
             try {
                 val auth = FirebaseAuth.getInstance()
                 val user = auth.currentUser ?: auth.signInAnonymously().await().user
                 token = user?.getIdToken(false)?.await()?.token
             } catch (e: Exception) {
-                Timber.d("DeveloperNewsManager: Firebase anonymous auth skipped: ")
+                Timber.d("DeveloperNewsManager: Firebase anonymous auth skipped: ${e.message}")
             }
 
-            val requestUrl = if (!token.isNullOrBlank()) {
-                "/developer_news.json?auth="
-            } else {
-                "/developer_news.json"
-            }
+            if (!token.isNullOrBlank()) {
+                val authUrl = "$baseUrl/developer_news.json?auth=$token"
+                val authRequest = Request.Builder()
+                    .url(authUrl)
+                    .header("Cache-Control", "no-cache")
+                    .get()
+                    .build()
 
-            val request = Request.Builder()
-                .url(requestUrl)
-                .header("Cache-Control", "no-cache")
-                .get()
-                .build()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body.string()
-                    if (body.isNotBlank() && body != "null" && !body.contains("\"error\"")) {
-                        parseNewsJson(body)
+                httpClient.newCall(authRequest).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string().orEmpty()
+                        if (body.isNotBlank() && body != "null" && !body.contains("\"error\"")) {
+                            parseNewsJson(body)
+                        }
                     }
                 }
             }
