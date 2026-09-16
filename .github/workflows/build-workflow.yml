@@ -143,3 +143,30 @@ jobs:
             desktop-builds/*.deb
             desktop-builds/*.snap
           if-no-files-found: warn
+
+  notify-telegram:
+    name: Send Build Links to Telegram (Topic 812)
+    needs: [build-variants, fetch-desktop-builds]
+    runs-on: ubuntu-latest
+    if: always() && needs.build-variants.result == 'success' && needs.fetch-desktop-builds.result == 'success'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Post Download Buttons to Telegram Topic 812
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: "-1004388752678"
+          THREAD_ID: "812"
+          RUN_ID: ${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: python3 .github/scripts/notify_all_builds.py
