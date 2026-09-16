@@ -137,15 +137,6 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                     throwable.printStackTrace(pw)
                     val stack = sw.toString()
 
-                    // Send crash report directly to Cloudflare Worker Telegram endpoint
-                    runCatching {
-                        com.darkxvenom.airbeats.utils.AirBeatsCrashReporter.sendCrashSync(
-                            context = this@App,
-                            throwable = throwable,
-                            stackTrace = stack
-                        )
-                    }
-
                     val intent = android.content.Intent(this@App, com.darkxvenom.airbeats.ui.activities.DebugActivity::class.java).apply {
                         putExtra(com.darkxvenom.airbeats.ui.activities.DebugActivity.EXTRA_STACK_TRACE, stack)
                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -153,14 +144,14 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                     startActivity(intent)
                     try { Thread.sleep(500) } catch (_: InterruptedException) {}
                 } catch (e: Exception) {
-                    reportException(e)
+                    Timber.e(e, "UncaughtExceptionHandler failure")
                 } finally {
                     android.os.Process.killProcess(android.os.Process.myPid())
                     kotlin.system.exitProcess(2)
                 }
             }
         } catch (e: Exception) {
-            reportException(e)
+            Timber.e(e, "Failed to register UncaughtExceptionHandler")
         }
 
         val locale = Locale.getDefault()

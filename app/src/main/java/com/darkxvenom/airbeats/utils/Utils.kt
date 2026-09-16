@@ -11,7 +11,4 @@ fun reportException(throwable: Throwable) {
     runCatching {
         FirebaseCrashlytics.getInstance().recordException(throwable)
     }
-    runCatching {
-        AirBeatsCrashReporter.report(throwable)
-    }
 }

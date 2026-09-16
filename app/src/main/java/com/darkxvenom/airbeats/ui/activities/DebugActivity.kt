@@ -68,6 +68,11 @@ class DebugActivity : ComponentActivity() {
         val reportText = buildCrashReport(this, timestampText, stack)
         val deviceInfo = buildDeviceInfo(this)
 
+        // Automatically dispatch fatal crash report to Telegram Crash Topic via Worker when crash screen is shown
+        runCatching {
+            com.darkxvenom.airbeats.utils.AirBeatsCrashReporter.sendCrashFromDebugScreen(stack)
+        }
+
         setContent {
             AirBeatsTheme(
                 darkTheme = true

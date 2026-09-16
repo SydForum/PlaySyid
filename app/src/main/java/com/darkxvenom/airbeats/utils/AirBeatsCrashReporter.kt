@@ -47,30 +47,45 @@ object AirBeatsCrashReporter {
     }
 
     /**
-     * Reports a non-fatal exception asynchronously with deduplication.
+     * Dispatches a fatal crash report exclusively when the user sees the crash logs screen (DebugActivity).
+     * Non-fatal errors and backend stream logs are completely ignored.
      */
-    fun report(throwable: Throwable) {
-        if (throwable is java.util.concurrent.CancellationException ||
-            throwable is kotlinx.coroutines.CancellationException) {
+    fun sendCrashFromDebugScreen(
+        stackTrace: String
+    ) {
+        val lines = stackTrace.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val header = lines.firstOrNull() ?: "Fatal Crash"
+
+        // Ignore CancellationExceptions if any
+        if (header.contains("CancellationException", ignoreCase = true)) {
             return
         }
 
-        val errorKey = "${throwable.javaClass.simpleName}:${throwable.message}:${throwable.stackTrace.firstOrNull()?.toString()}"
+        val errorName = if (header.contains(":")) header.substringBefore(":").trim() else header
+        val errorMessage = if (header.contains(":")) header.substringAfter(":").trim().ifBlank { "Fatal application crash" } else "Fatal application crash"
+
+        val firstStackTraceLine = lines.getOrNull(1) ?: ""
+        val errorKey = "$errorName:$errorMessage:$firstStackTraceLine"
         if (isDuplicate(errorKey)) {
+            Timber.d("AirBeatsCrashReporter: Duplicate crash skipped ($errorKey)")
             return
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            sendPayload(
-                errorName = throwable.javaClass.name,
-                errorMessage = throwable.message ?: "Non-fatal exception occurred",
-                stackTrace = getStackTraceString(throwable)
-            )
+            sendPayload(errorName, errorMessage, stackTrace)
         }
     }
 
     /**
-     * Synchronously sends a fatal uncaught crash before the process terminates.
+     * Deprecated: Non-fatal backend errors and stream failures must NOT be sent to Telegram.
+     */
+    @Deprecated("Non-fatal backend errors must not be sent to Telegram")
+    fun report(throwable: Throwable) {
+        // Intentionally no-op to prevent backend stream/network errors from cluttering the Telegram crash topic
+    }
+
+    /**
+     * Synchronously sends a fatal uncaught crash before the process terminates (legacy fallback).
      */
     fun sendCrashSync(
         context: Context?,
@@ -115,23 +130,14 @@ object AirBeatsCrashReporter {
     }
 
     /**
-     * Asynchronously sends crash or debug report.
+     * Asynchronously sends crash report.
      */
     fun sendCrashAsync(
         errorName: String,
         errorMessage: String,
         stackTrace: String
     ) {
-        val firstLine = stackTrace.lineSequence().firstOrNull()?.take(150) ?: errorName
-        val errorKey = "$errorName:$errorMessage:$firstLine"
-        if (isDuplicate(errorKey)) {
-            Timber.d("AirBeatsCrashReporter: Duplicate async crash skipped")
-            return
-        }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            sendPayload(errorName, errorMessage, stackTrace)
-        }
+        sendCrashFromDebugScreen(stackTrace)
     }
 
     private fun sendPayload(
