@@ -990,7 +990,7 @@ fun SettingsScreen(
                                 onClick = { navController.navigate("settings/lyrics") }
                             ),
                             SettingsCategoryItem(
-                                icon = painterResource(R.drawable.auto_awesome),
+                                icon = painterResource(R.drawable.ic_gen_ai),
                                 title = { Text("AI Integration", color = MaterialTheme.colorScheme.onSurface) },
                                 onClick = { navController.navigate("settings/ai") }
                             ),

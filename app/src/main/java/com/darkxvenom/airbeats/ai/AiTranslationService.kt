@@ -1,4 +1,4 @@
-﻿package com.darkxvenom.airbeats.ai
+package com.darkxvenom.airbeats.ai
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -177,9 +177,16 @@ object AiTranslationService {
         return when (provider) {
             "OpenRouter" -> "https://openrouter.ai/api/v1/chat/completions"
             "OpenAI" -> "https://api.openai.com/v1/chat/completions"
-            "Groq" -> "https://api.groq.com/openai/v1/chat/completions"
-            "Gemini" -> "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+            "Perplexity" -> "https://api.perplexity.ai/chat/completions"
             "Claude" -> "https://api.anthropic.com/v1/messages"
+            "Gemini" -> "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+            "XAi" -> "https://api.x.ai/v1/chat/completions"
+            "Mistral" -> "https://api.mistral.ai/v1/chat/completions"
+            "Nvidia" -> "https://integrate.api.nvidia.com/v1/chat/completions"
+            "OrcaRouter" -> "https://api.orcarouter.com/v1/chat/completions"
+            "Groq" -> "https://api.groq.com/openai/v1/chat/completions"
+            "Puter" -> "https://api.puter.com/v1/chat/completions"
+            "DeepL" -> "https://api.deepl.com/v2/translate"
             else -> customBaseUrl.ifBlank { "https://openrouter.ai/api/v1/chat/completions" }
         }
     }

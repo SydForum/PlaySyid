@@ -55,6 +55,9 @@ import com.darkxvenom.airbeats.ui.component.PreferenceEntry
 import com.darkxvenom.airbeats.ui.component.SettingsGeneralCategory
 import com.darkxvenom.airbeats.ui.component.SettingsPage
 import com.darkxvenom.airbeats.ui.component.SwitchPreference
+import androidx.compose.ui.res.stringResource
+import com.darkxvenom.airbeats.constants.AiRecommendationsKey
+import com.darkxvenom.airbeats.ui.component.RefreshAiRecommendationDialog
 import com.darkxvenom.airbeats.utils.rememberPreference
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,8 +78,14 @@ fun AiSettings(
     var autoTranslate by rememberPreference(AutoTranslateKey, false)
     var replaceOriginalLyrics by rememberPreference(ReplaceOriginalLyricsWithTranslationKey, false)
     var deeplApiKey by rememberPreference(DeeplApiKey, "")
+    var aiRecommendations by rememberPreference(AiRecommendationsKey, false)
+    var showRefreshAiDialog by remember { mutableStateOf(false) }
 
-    val aiProviders = listOf("OpenRouter", "OpenAI", "Groq", "Gemini", "Claude", "DeepL", "Custom")
+    val aiProviders = listOf(
+        "OpenRouter", "OpenAI", "Perplexity", "Claude", "Gemini",
+        "XAi", "Mistral", "Nvidia", "OrcaRouter", "Groq",
+        "Puter", "DeepL", "Custom"
+    )
 
     val modelsByProvider = mapOf(
         "OpenRouter" to listOf(
@@ -94,10 +103,15 @@ fun AiSettings(
             "gpt-4-turbo",
             "Custom"
         ),
-        "Groq" to listOf(
-            "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant",
-            "gemma2-9b-it",
+        "Perplexity" to listOf(
+            "sonar",
+            "sonar-pro",
+            "sonar-reasoning",
+            "Custom"
+        ),
+        "Claude" to listOf(
+            "claude-3-5-haiku-latest",
+            "claude-3-5-sonnet-latest",
             "Custom"
         ),
         "Gemini" to listOf(
@@ -107,9 +121,38 @@ fun AiSettings(
             "gemini-1.5-flash",
             "Custom"
         ),
-        "Claude" to listOf(
-            "claude-3-5-haiku-latest",
-            "claude-3-5-sonnet-latest",
+        "XAi" to listOf(
+            "grok-2-latest",
+            "grok-beta",
+            "Custom"
+        ),
+        "Mistral" to listOf(
+            "mistral-small-latest",
+            "mistral-large-latest",
+            "codestral-latest",
+            "Custom"
+        ),
+        "Nvidia" to listOf(
+            "meta/llama-3.1-70b-instruct",
+            "meta/llama-3.1-8b-instruct",
+            "mistralai/mistral-large-2-instruct",
+            "Custom"
+        ),
+        "OrcaRouter" to listOf(
+            "gpt-4o-mini",
+            "claude-3-5-sonnet",
+            "Custom"
+        ),
+        "Groq" to listOf(
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "gemma2-9b-it",
+            "Custom"
+        ),
+        "Puter" to listOf(
+            "gpt-4o-mini",
+            "claude-3-5-sonnet",
+            "deepseek-chat",
             "Custom"
         ),
         "DeepL" to listOf("default"),
@@ -128,9 +171,15 @@ fun AiSettings(
         val portalUrl = when (aiProvider) {
             "OpenRouter" -> "https://openrouter.ai/keys"
             "OpenAI" -> "https://platform.openai.com/api-keys"
-            "Groq" -> "https://console.groq.com/keys"
+            "Perplexity" -> "https://www.perplexity.ai/settings/api"
+            "Claude" -> "https://console.anthropic.com/settings/keys"
             "Gemini" -> "https://aistudio.google.com/app/apikey"
-            "Claude" -> "https://console.anthropic.com/"
+            "XAi" -> "https://console.x.ai/"
+            "Mistral" -> "https://console.mistral.ai/api-keys/"
+            "Nvidia" -> "https://build.nvidia.com/"
+            "OrcaRouter" -> "https://orcarouter.com/"
+            "Groq" -> "https://console.groq.com/keys"
+            "Puter" -> "https://puter.com/"
             "DeepL" -> "https://www.deepl.com/pro-api"
             else -> null
         }
@@ -307,7 +356,7 @@ fun AiSettings(
                 {
                     ListPreference(
                         title = { Text("AI Provider") },
-                        icon = { Icon(painterResource(R.drawable.auto_awesome), contentDescription = null) },
+                        icon = { Icon(painterResource(R.drawable.ic_gen_ai), contentDescription = null) },
                         selectedValue = aiProvider,
                         values = aiProviders,
                         valueText = { it },
@@ -323,17 +372,41 @@ fun AiSettings(
                                     openRouterModel = "gpt-4o-mini"
                                     openRouterBaseUrl = "https://api.openai.com/v1/chat/completions"
                                 }
-                                "Groq" -> {
-                                    openRouterModel = "llama-3.3-70b-versatile"
-                                    openRouterBaseUrl = "https://api.groq.com/openai/v1/chat/completions"
+                                "Perplexity" -> {
+                                    openRouterModel = "sonar"
+                                    openRouterBaseUrl = "https://api.perplexity.ai/chat/completions"
+                                }
+                                "Claude" -> {
+                                    openRouterModel = "claude-3-5-haiku-latest"
+                                    openRouterBaseUrl = "https://api.anthropic.com/v1/messages"
                                 }
                                 "Gemini" -> {
                                     openRouterModel = "gemini-2.5-flash-lite"
                                     openRouterBaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
                                 }
-                                "Claude" -> {
-                                    openRouterModel = "claude-3-5-haiku-latest"
-                                    openRouterBaseUrl = "https://api.anthropic.com/v1/messages"
+                                "XAi" -> {
+                                    openRouterModel = "grok-2-latest"
+                                    openRouterBaseUrl = "https://api.x.ai/v1/chat/completions"
+                                }
+                                "Mistral" -> {
+                                    openRouterModel = "mistral-small-latest"
+                                    openRouterBaseUrl = "https://api.mistral.ai/v1/chat/completions"
+                                }
+                                "Nvidia" -> {
+                                    openRouterModel = "meta/llama-3.1-70b-instruct"
+                                    openRouterBaseUrl = "https://integrate.api.nvidia.com/v1/chat/completions"
+                                }
+                                "OrcaRouter" -> {
+                                    openRouterModel = "gpt-4o-mini"
+                                    openRouterBaseUrl = "https://api.orcarouter.com/v1/chat/completions"
+                                }
+                                "Groq" -> {
+                                    openRouterModel = "llama-3.3-70b-versatile"
+                                    openRouterBaseUrl = "https://api.groq.com/openai/v1/chat/completions"
+                                }
+                                "Puter" -> {
+                                    openRouterModel = "gpt-4o-mini"
+                                    openRouterBaseUrl = "https://api.puter.com/v1/chat/completions"
                                 }
                                 "DeepL" -> {
                                     openRouterBaseUrl = "https://api.deepl.com/v2/translate"
@@ -442,6 +515,36 @@ fun AiSettings(
                     )
                 }
             )
+        )
+
+        SettingsGeneralCategory(
+            title = stringResource(R.string.ai_recommendations),
+            items = listOf(
+                {
+                    SwitchPreference(
+                        title = { Text(stringResource(R.string.ai_recommendations)) },
+                        description = stringResource(R.string.ai_recommendations_summary),
+                        icon = { Icon(painterResource(R.drawable.ic_gen_ai), contentDescription = null) },
+                        checked = aiRecommendations,
+                        onCheckedChange = { aiRecommendations = it }
+                    )
+                },
+                {
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.refresh_ai_recommendation)) },
+                        description = stringResource(R.string.refresh_ai_recommendation_summary),
+                        icon = { Icon(painterResource(R.drawable.cached), contentDescription = null) },
+                        onClick = { showRefreshAiDialog = true },
+                        isEnabled = aiRecommendations
+                    )
+                }
+            )
+        )
+    }
+
+    if (showRefreshAiDialog) {
+        RefreshAiRecommendationDialog(
+            onDismiss = { showRefreshAiDialog = false }
         )
     }
 }

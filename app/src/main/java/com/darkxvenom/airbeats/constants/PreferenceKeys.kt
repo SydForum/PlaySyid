@@ -655,6 +655,7 @@ val AutoTranslateKey = booleanPreferencesKey("autoTranslate")
 val ReplaceOriginalLyricsWithTranslationKey = booleanPreferencesKey("replaceOriginalLyricsWithTranslation")
 val DeeplApiKey = stringPreferencesKey("deeplApiKey")
 val DeeplFormalityKey = stringPreferencesKey("deeplFormality")
+val AiRecommendationsKey = booleanPreferencesKey("aiRecommendations")
 
 val AiTranslationLanguages = linkedMapOf(
     "hi-Latn" to "Hinglish (Hindi in English)",

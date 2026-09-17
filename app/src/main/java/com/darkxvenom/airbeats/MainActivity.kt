@@ -481,6 +481,30 @@ class MainActivity : ComponentActivity() {
                 }
         }
 
+        lifecycleScope.launch {
+            dataStore.data
+                .map { (try { it[com.darkxvenom.airbeats.constants.AiRecommendationsKey] } catch (e: Exception) { null }) ?: false }
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    val workManager = androidx.work.WorkManager.getInstance(this@MainActivity)
+                    if (enabled) {
+                        val request = androidx.work.PeriodicWorkRequestBuilder<com.darkxvenom.airbeats.ai.AiRecommendationWorker>(1, java.util.concurrent.TimeUnit.DAYS)
+                            .setConstraints(
+                                androidx.work.Constraints.Builder()
+                                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                                    .build()
+                            )
+                            .build()
+                        workManager.enqueueUniquePeriodicWork(
+                            "AiRecommendationWorker",
+                            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                            request
+                        )
+                    } else {
+                        workManager.cancelUniqueWork("AiRecommendationWorker")
+                    }
+                }
+        }
 
         setContent {
             var updateInfoState by remember { mutableStateOf<UpdateInfo?>(null) }

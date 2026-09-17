@@ -933,5 +933,32 @@
     <!-- Crossfade Audio -->
     <string name="crossfade">Crossfade</string>
     <string name="crossfade_desc">Overlap and fade smoothly between consecutive songs</string>
+
+    <!-- AI Providers & Recommendations -->
+    <string name="ai_provider">AI Provider</string>
+    <string name="ai_provider_help">Get API Keys</string>
+    <string name="ai_provider_openrouter_help">Visit openrouter.ai for free and paid models</string>
+    <string name="ai_provider_mistral_help">Visit console.mistral.ai/api-keys</string>
+    <string name="ai_provider_openai_help">Visit platform.openai.com/api-keys</string>
+    <string name="ai_provider_claude_help">Visit console.anthropic.com/settings/keys</string>
+    <string name="ai_provider_gemini_help">Visit aistudio.google.com/apikey</string>
+    <string name="ai_provider_perplexity_help">Visit perplexity.ai/settings/api</string>
+    <string name="ai_provider_xai_help">Visit console.x.ai</string>
+    <string name="ai_provider_deepl_help">Visit deepl.com/pro-api for free and paid keys</string>
+    <string name="ai_provider_nvidia_help">Visit build.nvidia.com for API keys</string>
+    <string name="ai_provider_orcarouter_help">Visit orcarouter.ai for open-source and paid models</string>
+    <string name="ai_provider_groq_help">Visit console.groq.com/keys for free API keys</string>
+    <string name="ai_provider_puter_help">Visit puter.com/dashboard to get an auth token</string>
+    <string name="ai_recommendations">AI Recommendations</string>
+    <string name="ai_recommendations_desc">Daily update of a custom playlist based on your taste</string>
+    <string name="ai_recommendations_summary">Daily update of a custom playlist based on your taste</string>
+    <string name="ai_recommendations_refresh">Refresh Recommendations</string>
+    <string name="refresh_ai_recommendation">Refresh Recommendations</string>
+    <string name="refresh_ai_recommendation_summary">Force immediate update of your AI recommendations playlist</string>
+    <string name="refreshing_recommendations">Refreshing Recommendations</string>
+    <string name="recommended_by_ai">Recommended by AI</string>
+    <string name="ai_model">AI Model</string>
+    <string name="ai_base_url">Custom Base URL</string>
+    <string name="ai_api_key">API Key</string>
 </resources>
 

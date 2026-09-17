@@ -2,6 +2,7 @@ package com.darkxvenom.airbeats.ui.screens
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.graphics.Color
+import com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground
+import com.darkxvenom.airbeats.ui.component.SettingsTopAppBar
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -47,6 +51,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
 import com.darkxvenom.airbeats.LocalPlayerConnection
@@ -115,182 +120,229 @@ fun ListenTogetherScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.listen_together)) },
-                navigationIcon = {
-                    IconButton(onClick = navController::navigateUp) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = null
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .windowInsetsPadding(
-                        LocalPlayerAwareWindowInsets.current.only(
-                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
-                        )
-                    )
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.listen_together_description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        ScreenAdaptiveBackground(
+            artworkUrl = mediaMetadata?.thumbnailUrl
+        )
 
-            CurrentSessionCard(
-                session = session,
-                isHost = isHost,
-                songTitle = mediaMetadata?.title ?: session?.state?.title,
-                subtitle = mediaMetadata?.artists?.joinToString { it.name }
-                    ?: session?.state?.artists?.joinToString(),
-            )
-
-            OutlinedTextField(
-                value = displayName,
-                onValueChange = { displayName = it },
-                label = { Text(stringResource(R.string.display_name)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    enabled = !isLoading && mediaMetadata != null,
-                    onClick = {
-                        val metadata = mediaMetadata ?: return@Button
-                        isLoading = true
-                        scope.launch {
-                            try {
-                                session =
-                                    ListenTogetherClient.createSession(
-                                        displayName = displayName,
-                                        state =
-                                            ListenTogetherPlaybackState(
-                                                songId = metadata.id,
-                                                title = metadata.title,
-                                                artists = metadata.artists.map { it.name },
-                                                thumbnailUrl = metadata.thumbnailUrl,
-                                                positionMs = currentPosition,
-                                                isPlaying = isPlaying,
-                                            )
-                                )
-                                isHost = true
-                                session?.let {
-                                    ListenTogetherSync.adoptSession(context, it, displayName, true)
-                                }
-                                message = sessionCreatedMessage
-                            } catch (e: Exception) {
-                                message = e.message
-                            } finally {
-                                isLoading = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.create_session))
-                }
-
-                OutlinedButton(
-                    enabled = session?.joinUrl?.isNotBlank() == true,
-                    onClick = {
-                        val shareText =
-                            "${session?.joinUrl}\n$listenTogetherCodeLabel: ${session?.code}"
-                        context.startActivity(
-                            Intent.createChooser(
-                                Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, shareText)
-                                },
-                                null
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            topBar = {
+                SettingsTopAppBar(
+                    title = stringResource(R.string.listen_together),
+                    navController = navController,
+                    scrollBehavior = scrollBehavior
+                )
+            }
+        ) { paddingValues ->
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .windowInsetsPadding(
+                            LocalPlayerAwareWindowInsets.current.only(
+                                WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
                             )
                         )
-                    },
-                    modifier = Modifier.weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.listen_together_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+                CurrentSessionCard(
+                    session = session,
+                    isHost = isHost,
+                    songTitle = mediaMetadata?.title ?: session?.state?.title,
+                    subtitle = mediaMetadata?.artists?.joinToString { it.name }
+                        ?: session?.state?.artists?.joinToString(),
+                )
+
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(stringResource(R.string.share))
-                }
-            }
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(18.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.create_session),
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        )
 
-            OutlinedTextField(
-                value = joinCode,
-                onValueChange = { joinCode = it.uppercase() },
-                label = { Text(stringResource(R.string.session_code)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+                        OutlinedTextField(
+                            value = displayName,
+                            onValueChange = { displayName = it },
+                            label = { Text(stringResource(R.string.display_name)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
-            Button(
-                enabled = !isLoading && joinCode.isNotBlank(),
-                onClick = {
-                    isLoading = true
-                    scope.launch {
-                        try {
-                            session = ListenTogetherClient.joinSession(joinCode, displayName)
-                            isHost = false
-                            session?.let {
-                                ListenTogetherSync.adoptSession(context, it, displayName, false)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                enabled = !isLoading && mediaMetadata != null,
+                                onClick = {
+                                    val metadata = mediaMetadata ?: return@Button
+                                    isLoading = true
+                                    scope.launch {
+                                        try {
+                                            session =
+                                                ListenTogetherClient.createSession(
+                                                    displayName = displayName,
+                                                    state =
+                                                        ListenTogetherPlaybackState(
+                                                            songId = metadata.id,
+                                                            title = metadata.title,
+                                                            artists = metadata.artists.map { it.name },
+                                                            thumbnailUrl = metadata.thumbnailUrl,
+                                                            positionMs = currentPosition,
+                                                            isPlaying = isPlaying,
+                                                        )
+                                            )
+                                            isHost = true
+                                            session?.let {
+                                                ListenTogetherSync.adoptSession(context, it, displayName, true)
+                                            }
+                                            message = sessionCreatedMessage
+                                        } catch (e: Exception) {
+                                            message = e.message
+                                        } finally {
+                                            isLoading = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(R.string.create_session))
                             }
-                            message = joinedSessionMessage
-                        } catch (e: Exception) {
-                            message = e.message
-                        } finally {
-                            isLoading = false
+
+                            OutlinedButton(
+                                enabled = session?.joinUrl?.isNotBlank() == true,
+                                onClick = {
+                                    val shareText =
+                                        "${session?.joinUrl}\n$listenTogetherCodeLabel: ${session?.code}"
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_TEXT, shareText)
+                                            },
+                                            null
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(R.string.share))
+                            }
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.join_session))
-            }
+                }
 
-            session?.let { activeSession ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(activeSession.code))
-                            message = context.getString(R.string.session_code_copied)
-                        },
-                        modifier = Modifier.weight(1f)
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(18.dp)
                     ) {
-                        Text(stringResource(R.string.copy_session_code))
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            ListenTogetherSync.leaveSession()
-                            session = null
-                            isHost = false
-                            message = leftSessionMessage
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(stringResource(R.string.leave_session))
+                        Text(
+                            text = stringResource(R.string.join_session),
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        )
+
+                        OutlinedTextField(
+                            value = joinCode,
+                            onValueChange = { joinCode = it.uppercase() },
+                            label = { Text(stringResource(R.string.session_code)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Button(
+                            enabled = !isLoading && joinCode.isNotBlank(),
+                            onClick = {
+                                isLoading = true
+                                scope.launch {
+                                    try {
+                                        session = ListenTogetherClient.joinSession(joinCode, displayName)
+                                        isHost = false
+                                        session?.let {
+                                            ListenTogetherSync.adoptSession(context, it, displayName, false)
+                                        }
+                                        message = joinedSessionMessage
+                                    } catch (e: Exception) {
+                                        message = e.message
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.join_session))
+                        }
                     }
                 }
 
-                ParticipantsSection(activeSession)
-            }
+                session?.let { activeSession ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(activeSession.code))
+                                message = context.getString(R.string.session_code_copied)
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.copy_session_code))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                ListenTogetherSync.leaveSession()
+                                session = null
+                                isHost = false
+                                message = leftSessionMessage
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.leave_session))
+                        }
+                    }
 
-            message?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                    ParticipantsSection(activeSession)
+                }
+
+                message?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                }
             }
         }
     }
@@ -298,28 +350,39 @@ fun ListenTogetherScreen(
 
 @Composable
 private fun ParticipantsSection(session: ListenTogetherSession) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Card(
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+        ),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = stringResource(R.string.session_users),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        session.participantList.forEach { participant ->
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(18.dp)
+        ) {
             Text(
-                text = if (participant.isHost) {
-                    stringResource(R.string.created_by_name, participant.name)
-                } else {
-                    participant.name
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 4.dp)
+                text = stringResource(R.string.session_users),
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
+                ),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
             )
+            session.participantList.forEach { participant ->
+                Text(
+                    text = if (participant.isHost) {
+                        stringResource(R.string.created_by_name, participant.name)
+                    } else {
+                        participant.name
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
         }
     }
 }
@@ -332,11 +395,10 @@ private fun CurrentSessionCard(
     subtitle: String?,
 ) {
     Card(
-        shape = RoundedCornerShape(22.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-            ),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+        ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
