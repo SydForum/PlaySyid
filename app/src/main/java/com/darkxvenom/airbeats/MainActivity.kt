@@ -1690,18 +1690,37 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
 
-                                updateInfoState?.let { info ->
-                                    UpdateAvailableDialog(
-                                        updateInfo = info,
-                                        onDismiss = { updateInfoState = null }
-                                    )
+                                val currentRoute = navBackStackEntry?.destination?.route
+                                val isOnboardingOrAuth = isNameSet != true ||
+                                    currentRoute == null ||
+                                    currentRoute == "onboarding" ||
+                                    currentRoute == "guest_profile_setup" ||
+                                    currentRoute == "discord_login"
+
+                                var hasSettledOnMainScreen by rememberSaveable { mutableStateOf(false) }
+                                LaunchedEffect(isOnboardingOrAuth) {
+                                    if (!isOnboardingOrAuth) {
+                                        delay(600)
+                                        hasSettledOnMainScreen = true
+                                    } else {
+                                        hasSettledOnMainScreen = false
+                                    }
                                 }
 
-                                com.darkxvenom.airbeats.ui.component.DeveloperNewsPopupDialog(
-                                    onNavigateToNews = {
-                                        navController.navigate("settings/developer_news")
+                                if (hasSettledOnMainScreen && !isOnboardingOrAuth) {
+                                    updateInfoState?.let { info ->
+                                        UpdateAvailableDialog(
+                                            updateInfo = info,
+                                            onDismiss = { updateInfoState = null }
+                                        )
                                     }
-                                )
+
+                                    com.darkxvenom.airbeats.ui.component.DeveloperNewsPopupDialog(
+                                        onNavigateToNews = {
+                                            navController.navigate("settings/developer_news")
+                                        }
+                                    )
+                                }
                             }
 
                             LaunchedEffect(shouldShowSearchBar, openSearchImmediately) {
