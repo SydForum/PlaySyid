@@ -290,6 +290,11 @@ class MusicService :
 
     private var consecutivePlaybackErr = 0
 
+    private var playbackTrackingJob: Job? = null
+    private var activeTrackingSongId: String? = null
+    private var lastTrackedPositionMs: Long = 0L
+    private var pendingPlayTimeMs: Long = 0L
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate() {
         super.onCreate()
@@ -1374,6 +1379,13 @@ class MusicService :
     ) {
         lastPlaybackSpeed = -1.0f // forzar actualización de canción
 
+        flushPendingPlayTime(activeTrackingSongId)
+        activeTrackingSongId = mediaItem?.mediaId?.takeIf { it.isNotBlank() }
+        lastTrackedPositionMs = player.currentPosition.coerceAtLeast(0L)
+        if (player.isPlaying) {
+            startPlaybackTracking()
+        }
+
         setupLoudnessEnhancer()
         setupEqualizer()
 
@@ -1426,13 +1438,21 @@ class MusicService :
             }
         }
 
+        if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
+            playbackTrackingJob?.cancel()
+            flushPendingPlayTime()
+        }
+
         // Automatic advance / repeat handling to guarantee playback continuity
         if (playbackState == Player.STATE_ENDED) {
             // 1. Si el modo de repetición es REPEAT_MODE_ONE, reiniciar la misma canción
             if (player.repeatMode == Player.REPEAT_MODE_ONE) {
+                flushPendingPlayTime()
+                lastTrackedPositionMs = 0L
                 player.seekTo(0)
                 player.prepare()
                 player.play()
+                startPlaybackTracking()
                 return
             }
 
@@ -1534,19 +1554,23 @@ class MusicService :
             }
         }
 
-        // Actualización de Discord RPC
+        // Actualización de Discord RPC & Playback Tracking
         if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED)) {
             if (player.isPlaying) {
+                startPlaybackTracking()
                 currentSong.value?.let { song ->
                     scope.launch {
                         discordRpc?.updateSong(song, player.currentPosition, player.playbackParameters.speed, dataStore.get(DiscordUseDetailsKey, false))
                     }
                 }
-            }
-            // Send empty activity to the Discord RPC if the player is not playing
-            else if (!events.containsAny(Player.EVENT_POSITION_DISCONTINUITY, Player.EVENT_MEDIA_ITEM_TRANSITION)){
-                scope.launch {
-                    discordRpc?.stopActivity()
+            } else {
+                playbackTrackingJob?.cancel()
+                flushPendingPlayTime()
+                // Send empty activity to the Discord RPC if the player is not playing
+                if (!events.containsAny(Player.EVENT_POSITION_DISCONTINUITY, Player.EVENT_MEDIA_ITEM_TRANSITION)){
+                    scope.launch {
+                        discordRpc?.stopActivity()
+                    }
                 }
             }
         }
@@ -1917,6 +1941,85 @@ class MusicService :
                 ).build()
         }
 
+    private fun startPlaybackTracking() {
+        playbackTrackingJob?.cancel()
+        val mediaItem = player.currentMediaItem ?: return
+        val songId = mediaItem.mediaId.takeIf { it.isNotBlank() } ?: return
+        activeTrackingSongId = songId
+        lastTrackedPositionMs = player.currentPosition.coerceAtLeast(0L)
+
+        playbackTrackingJob = scope.launch(Dispatchers.Main) {
+            while (isActive && player.isPlaying) {
+                delay(3000L)
+                if (!player.isPlaying) break
+
+                val currentItem = player.currentMediaItem
+                val currentSongId = currentItem?.mediaId?.takeIf { it.isNotBlank() }
+                if (currentSongId == null) break
+
+                if (currentSongId != activeTrackingSongId) {
+                    flushPendingPlayTime(activeTrackingSongId)
+                    activeTrackingSongId = currentSongId
+                    lastTrackedPositionMs = player.currentPosition.coerceAtLeast(0L)
+                    continue
+                }
+
+                val currentPos = player.currentPosition.coerceAtLeast(0L)
+                val delta = currentPos - lastTrackedPositionMs
+                lastTrackedPositionMs = currentPos
+
+                // Only accumulate continuous forward playback within realistic bounds (1 to 10000 ms)
+                if (delta in 1..10000) {
+                    pendingPlayTimeMs += delta
+                }
+
+                // Periodically flush every 15 seconds of playback to disk/database
+                if (pendingPlayTimeMs >= 15000L) {
+                    flushPendingPlayTime(currentSongId)
+                }
+            }
+        }
+    }
+
+    private fun flushPendingPlayTime(targetSongId: String? = activeTrackingSongId) {
+        val playTime = pendingPlayTimeMs
+        val songId = targetSongId ?: player.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() }
+        pendingPlayTimeMs = 0L
+
+        if (playTime <= 0L || songId.isNullOrBlank()) return
+        if (dataStore.get(PauseListenHistoryKey, false)) return
+
+        val currentItem = player.currentMediaItem
+        val meta = if (currentItem?.mediaId == songId) currentItem.metadata else null
+        val mediaMetadata = if (currentItem?.mediaId == songId) currentItem.mediaMetadata else null
+
+        database.query {
+            try {
+                if (meta != null) {
+                    insert(meta)
+                } else {
+                    insert(
+                        SongEntity(
+                            id = songId,
+                            title = mediaMetadata?.title?.toString() ?: "Unknown",
+                            thumbnailUrl = mediaMetadata?.artworkUri?.toString(),
+                        ),
+                    )
+                }
+                incrementTotalPlayTime(songId, playTime)
+                insert(
+                    Event(
+                        songId = songId,
+                        timestamp = LocalDateTime.now(),
+                        playTime = playTime,
+                    ),
+                )
+            } catch (e: Exception) {
+                reportException(e)
+            }
+        }
+    }
+
     override fun onPlaybackStatsReady(
         eventTime: AnalyticsListener.EventTime,
         playbackStats: PlaybackStats,
@@ -1927,50 +2030,19 @@ class MusicService :
             } else null
         } ?: player.currentMediaItem ?: return
 
-        if (playbackStats.totalPlayTimeMs >= (
-                    dataStore[HistoryDuration]?.times(1000f)
-                        ?: 30000f
-                    ) &&
-            !dataStore.get(PauseListenHistoryKey, false)
-        ) {
-            database.query {
-                try {
-                    val meta = mediaItem.metadata
-                    if (meta != null) {
-                        insert(meta)
-                    } else {
-                        insert(
-                            SongEntity(
-                                id = mediaItem.mediaId,
-                                title = mediaItem.mediaMetadata.title?.toString() ?: "Unknown",
-                                thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString(),
-                            ),
-                        )
-                    }
-                    incrementTotalPlayTime(mediaItem.mediaId, playbackStats.totalPlayTimeMs)
-                    insert(
-                        Event(
-                            songId = mediaItem.mediaId,
-                            timestamp = LocalDateTime.now(),
-                            playTime = playbackStats.totalPlayTimeMs,
-                        ),
-                    )
-                } catch (e: Exception) {
-                    reportException(e)
-                }
-            }
-            val PauseRemoteListenHistoryKey = booleanPreferencesKey("pauseRemoteListenHistory")
-            if (!dataStore.get(PauseRemoteListenHistoryKey, false)) {
-                scope.launch(Dispatchers.IO) {
-                    val playbackUrl = database.format(mediaItem.mediaId).first()?.playbackUrl
-                        ?: YTPlayerUtils.playerResponseForMetadata(mediaItem.mediaId, null)
-                            .getOrNull()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
-                    playbackUrl?.let {
-                        YouTube.registerPlayback(null, playbackUrl)
-                            .onFailure {
-                                reportException(it)
-                            }
-                    }
+        flushPendingPlayTime(mediaItem.mediaId)
+
+        val PauseRemoteListenHistoryKey = booleanPreferencesKey("pauseRemoteListenHistory")
+        if (!dataStore.get(PauseRemoteListenHistoryKey, false)) {
+            scope.launch(Dispatchers.IO) {
+                val playbackUrl = database.format(mediaItem.mediaId).first()?.playbackUrl
+                    ?: YTPlayerUtils.playerResponseForMetadata(mediaItem.mediaId, null)
+                        .getOrNull()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
+                playbackUrl?.let {
+                    YouTube.registerPlayback(null, playbackUrl)
+                        .onFailure {
+                            reportException(it)
+                        }
                 }
             }
         }
@@ -2051,6 +2123,8 @@ class MusicService :
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onDestroy() {
+        playbackTrackingJob?.cancel()
+        flushPendingPlayTime()
         if (dataStore.get(PersistentQueueKey, true)) {
             saveQueueToDisk()
         }

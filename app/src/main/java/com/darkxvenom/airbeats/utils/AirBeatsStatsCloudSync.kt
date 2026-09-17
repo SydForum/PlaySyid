@@ -79,8 +79,8 @@ object AirBeatsStatsCloudSync {
                 .atStartOfDay()
                 .toInstant(ZoneOffset.UTC)
                 .toEpochMilli()
-        val allSongs = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = now).first()
-        val weekSongs = database.mostPlayedSongsStats(weekStart, limit = -1, toTimeStamp = now).first()
+        val allSongs = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
+        val weekSongs = database.mostPlayedSongsStats(weekStart, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
         val totalListenMs = allSongs.sumOf { it.timeListened?.toLong() ?: 0L }
         val weeklyListenMs = weekSongs.sumOf { it.timeListened?.toLong() ?: 0L }
         val name = namePreferenceManager.userName.first().ifBlank { android.os.Build.MODEL ?: "AirBeats User" }
@@ -287,7 +287,7 @@ object AirBeatsStatsCloudSync {
     ) {
         if (cloudTotalListenMs <= 0L) return
         val now = LocalDateTime.now().toInstant(ZoneOffset.UTC).toEpochMilli()
-        val allSongs = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = now).first()
+        val allSongs = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
         val localTotalListenMs = allSongs.sumOf { it.timeListened?.toLong() ?: 0L }
 
         if (cloudTotalListenMs <= localTotalListenMs) {
@@ -301,7 +301,7 @@ object AirBeatsStatsCloudSync {
             .atStartOfDay()
             .toInstant(ZoneOffset.UTC)
             .toEpochMilli()
-        val weekSongs = database.mostPlayedSongsStats(weekStart, limit = -1, toTimeStamp = now).first()
+        val weekSongs = database.mostPlayedSongsStats(weekStart, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
         val localWeeklyListenMs = weekSongs.sumOf { it.timeListened?.toLong() ?: 0L }
 
         val deltaWeekly = if (cloudWeeklyListenMs > localWeeklyListenMs) {

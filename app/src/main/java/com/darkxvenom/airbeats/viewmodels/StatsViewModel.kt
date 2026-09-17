@@ -87,11 +87,7 @@ constructor(
                         limit = -1,
                         toTimeStamp =
                             if (selection == OptionStats.CONTINUOUS || t == 0) {
-                                LocalDateTime
-                                    .now()
-                                    .toInstant(
-                                        ZoneOffset.UTC,
-                                    ).toEpochMilli()
+                                Long.MAX_VALUE
                             } else {
                                 statToPeriod(selection, t - 1)
                             },
@@ -110,11 +106,7 @@ constructor(
                         limit = -1,
                         toTimeStamp =
                             if (selection == OptionStats.CONTINUOUS || t == 0) {
-                                LocalDateTime
-                                    .now()
-                                    .toInstant(
-                                        ZoneOffset.UTC,
-                                    ).toEpochMilli()
+                                Long.MAX_VALUE
                             } else {
                                 statToPeriod(selection, t - 1)
                             },
@@ -133,11 +125,7 @@ constructor(
                         limit = -1,
                         toTimeStamp =
                             if (selection == OptionStats.CONTINUOUS || t == 0) {
-                                LocalDateTime
-                                    .now()
-                                    .toInstant(
-                                        ZoneOffset.UTC,
-                                    ).toEpochMilli()
+                                Long.MAX_VALUE
                             } else {
                                 statToPeriod(selection, t - 1)
                             },
@@ -157,11 +145,7 @@ constructor(
                     limit = -1,
                     toTimeStamp =
                         if (selection == OptionStats.CONTINUOUS || t == 0) {
-                            LocalDateTime
-                                .now()
-                                .toInstant(
-                                    ZoneOffset.UTC,
-                                ).toEpochMilli()
+                            Long.MAX_VALUE
                         } else {
                             statToPeriod(selection, t - 1)
                         },
@@ -328,8 +312,8 @@ constructor(
                 .atStartOfDay()
                 .toInstant(ZoneOffset.UTC)
                 .toEpochMilli()
-        val allSongs = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = now).first()
-        val weekSongs = database.mostPlayedSongsStats(weekStart, limit = -1, toTimeStamp = now).first()
+        val allSongs = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
+        val weekSongs = database.mostPlayedSongsStats(weekStart, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
         val totalListenMs = allSongs.sumOf { it.timeListened?.toLong() ?: 0L }
         val weeklyListenMs = weekSongs.sumOf { it.timeListened?.toLong() ?: 0L }
         val name = namePreferenceManager.userName.first().ifBlank { android.os.Build.MODEL ?: "AirBeats User" }

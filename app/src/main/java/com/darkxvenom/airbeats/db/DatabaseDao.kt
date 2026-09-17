@@ -292,7 +292,7 @@ interface DatabaseDao {
         fromTimeStamp: Long,
         limit: Int = 6,
         offset: Int = 0,
-        toTimeStamp: Long? = LocalDateTime.now().toInstant(ZoneOffset.UTC).toEpochMilli(),
+        toTimeStamp: Long = Long.MAX_VALUE,
     ): Flow<List<SongWithStats>>
 
     @Transaction
@@ -324,7 +324,7 @@ interface DatabaseDao {
         fromTimeStamp: Long,
         limit: Int = 6,
         offset: Int = 0,
-        toTimeStamp: Long? = LocalDateTime.now().toInstant(ZoneOffset.UTC).toEpochMilli(),
+        toTimeStamp: Long = Long.MAX_VALUE,
     ): Flow<List<Song>>
 
     @Transaction
@@ -361,7 +361,7 @@ interface DatabaseDao {
         fromTimeStamp: Long,
         limit: Int = 6,
         offset: Int = 0,
-        toTimeStamp: Long? = LocalDateTime.now().toInstant(ZoneOffset.UTC).toEpochMilli(),
+        toTimeStamp: Long = Long.MAX_VALUE,
     ): Flow<List<Artist>>
 
     @Transaction
@@ -401,7 +401,7 @@ interface DatabaseDao {
         fromTimeStamp: Long,
         limit: Int = 6,
         offset: Int = 0,
-        toTimeStamp: Long? = LocalDateTime.now().toInstant(ZoneOffset.UTC).toEpochMilli(),
+        toTimeStamp: Long = Long.MAX_VALUE,
     ): Flow<List<Album>>
 
     @Query("SELECT sum(count) from playCount WHERE song = :songId")
