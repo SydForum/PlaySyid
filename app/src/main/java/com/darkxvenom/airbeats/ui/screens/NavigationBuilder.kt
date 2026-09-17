@@ -410,6 +410,9 @@ fun NavGraphBuilder.navigationBuilder(
     composable("settings/lyrics") {
         com.darkxvenom.airbeats.ui.screens.settings.LyricsSettings(navController, scrollBehavior)
     }
+    composable("settings/ai") {
+        com.darkxvenom.airbeats.ui.screens.settings.AiSettings(navController, scrollBehavior)
+    }
     composable("settings/player") {
         PlayerSettings(navController, scrollBehavior)
     }

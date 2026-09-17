@@ -1,0 +1,235 @@
+package com.darkxvenom.airbeats.lyrics
+
+import android.content.Context
+import com.darkxvenom.airbeats.ai.AiTranslationService
+import com.darkxvenom.airbeats.constants.AiTranslationLanguages
+import com.darkxvenom.airbeats.db.entities.LyricsEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import timber.log.Timber
+import java.io.File
+
+object LyricsTranslationHelper {
+    sealed class TranslationStatus {
+        object Idle : TranslationStatus()
+        data class Translating(val logs: List<String> = emptyList()) : TranslationStatus()
+        object Success : TranslationStatus()
+        data class Error(val message: String) : TranslationStatus()
+    }
+
+    private val _status = MutableStateFlow<TranslationStatus>(TranslationStatus.Idle)
+    val status: StateFlow<TranslationStatus> = _status.asStateFlow()
+
+    private val _hasActiveTranslations = MutableStateFlow(false)
+    val hasActiveTranslations: StateFlow<Boolean> = _hasActiveTranslations.asStateFlow()
+
+    private val _currentLanguageCode = MutableStateFlow("hi-Latn")
+    val currentLanguageCode: StateFlow<String> = _currentLanguageCode.asStateFlow()
+
+    private val _translationVersion = MutableStateFlow(0)
+    val translationVersion: StateFlow<Int> = _translationVersion.asStateFlow()
+
+    private var translationJob: Job? = null
+    private val memoryCache = mutableMapOf<String, List<String>>()
+
+    fun getCacheKey(lyricsText: String, lang: String): String =
+        "${lyricsText.hashCode()}_$lang"
+
+    fun getCacheFile(context: Context, songId: String, lang: String): File {
+        val dir = File(context.filesDir, "lyrics_translations")
+        if (!dir.exists()) dir.mkdirs()
+        val safeSongId = songId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        return File(dir, "${safeSongId}_${lang}.json")
+    }
+
+    fun hasCachedTranslation(context: Context, songId: String, lang: String): Boolean {
+        if (songId.isBlank()) return false
+        val file = getCacheFile(context, songId, lang)
+        return file.exists() && file.length() > 2
+    }
+
+    fun parseLyricsToEntries(lyrics: String?): List<LyricsEntry> {
+        if (lyrics.isNullOrBlank() || lyrics == LyricsEntity.LYRICS_NOT_FOUND) return emptyList()
+        return when {
+            AirBeatsLyricsUtils.isTtml(lyrics) -> AirBeatsLyricsUtils.parseTtml(lyrics)
+            lyrics.startsWith("[") -> AirBeatsLyricsUtils.parseLyrics(lyrics)
+            else -> lyrics.lines().filter { it.isNotBlank() }.mapIndexed { index, line ->
+                LyricsEntry(time = -1L, text = line.trim())
+            }
+        }
+    }
+
+    fun isTranslating(): Boolean = _status.value is TranslationStatus.Translating
+
+    fun cancelTranslation() {
+        translationJob?.cancel()
+        translationJob = null
+        _status.value = TranslationStatus.Idle
+    }
+
+    fun resetStatus() {
+        _status.value = TranslationStatus.Idle
+    }
+
+    fun clearTranslations(lyrics: List<LyricsEntry>? = null, context: Context? = null, songId: String? = null) {
+        cancelTranslation()
+        lyrics?.forEach { it.translatedTextFlow.value = null }
+        _hasActiveTranslations.value = false
+        _status.value = TranslationStatus.Idle
+
+        if (context != null && !songId.isNullOrBlank()) {
+            runCatching {
+                val lang = _currentLanguageCode.value
+                val file = getCacheFile(context, songId, lang)
+                if (file.exists()) file.delete()
+            }
+        }
+        _translationVersion.value += 1
+    }
+
+    fun loadTranslationsFromCache(
+        lyrics: List<LyricsEntry>,
+        context: Context,
+        songId: String,
+        targetLanguageCode: String
+    ): Boolean {
+        _currentLanguageCode.value = targetLanguageCode
+        val nonEmptyEntries = lyrics.mapIndexedNotNull { index, entry ->
+            if (entry.text.isNotBlank()) index to entry else null
+        }
+        if (nonEmptyEntries.isEmpty()) return false
+
+        val fullText = nonEmptyEntries.joinToString("\n") { it.second.text }
+        val memKey = getCacheKey(fullText, targetLanguageCode)
+
+        // 1. Check memory cache
+        val cachedMem = memoryCache[memKey]
+        if (cachedMem != null && cachedMem.size >= nonEmptyEntries.size) {
+            nonEmptyEntries.forEachIndexed { idx, (originalIndex, _) ->
+                lyrics[originalIndex].translatedTextFlow.value = cachedMem.getOrNull(idx)
+            }
+            _hasActiveTranslations.value = true
+            return true
+        }
+
+        // 2. Check disk cache
+        if (songId.isNotBlank()) {
+            val file = getCacheFile(context, songId, targetLanguageCode)
+            if (file.exists()) {
+                val list = runCatching {
+                    val jsonArray = JSONArray(file.readText())
+                    (0 until jsonArray.length()).map { jsonArray.optString(it) }
+                }.getOrNull()
+
+                if (list != null && list.size >= nonEmptyEntries.size) {
+                    memoryCache[memKey] = list
+                    nonEmptyEntries.forEachIndexed { idx, (originalIndex, _) ->
+                        lyrics[originalIndex].translatedTextFlow.value = list.getOrNull(idx)
+                    }
+                    _hasActiveTranslations.value = true
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    fun translateLyrics(
+        lyrics: List<LyricsEntry>? = null,
+        rawLyrics: String? = null,
+        targetLanguageCode: String,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        mode: String = "Literal",
+        customPrompt: String? = null,
+        provider: String = "OpenRouter",
+        context: Context,
+        songId: String = "",
+        scope: CoroutineScope
+    ) {
+        cancelTranslation()
+        _currentLanguageCode.value = targetLanguageCode
+        _status.value = TranslationStatus.Translating(listOf("Initializing AI translation engine..."))
+
+        val targetEntries = if (!lyrics.isNullOrEmpty()) {
+            lyrics
+        } else if (!rawLyrics.isNullOrBlank()) {
+            parseLyricsToEntries(rawLyrics)
+        } else {
+            emptyList()
+        }
+
+        val nonEmptyEntries = targetEntries.mapIndexedNotNull { index, entry ->
+            if (entry.text.isNotBlank()) index to entry else null
+        }
+
+        if (nonEmptyEntries.isEmpty()) {
+            _status.value = TranslationStatus.Error("No lyrics available to translate.")
+            return
+        }
+
+        val linesToTranslate = nonEmptyEntries.map { it.second.text }
+        val targetLanguageName = AiTranslationLanguages[targetLanguageCode] ?: targetLanguageCode
+
+        translationJob = scope.launch(Dispatchers.IO) {
+            val result = AiTranslationService.translate(
+                lines = linesToTranslate,
+                targetLanguageCode = targetLanguageCode,
+                targetLanguageName = targetLanguageName,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
+                model = model,
+                mode = mode,
+                customPrompt = customPrompt,
+                provider = provider,
+                onLog = { logMsg ->
+                    val cur = _status.value
+                    if (cur is TranslationStatus.Translating) {
+                        _status.value = cur.copy(logs = cur.logs + logMsg)
+                    }
+                }
+            )
+
+            withContext(Dispatchers.Main) {
+                result.onSuccess { translatedLines ->
+                    nonEmptyEntries.forEachIndexed { idx, (originalIndex, _) ->
+                        if (idx < translatedLines.size && originalIndex < targetEntries.size) {
+                            targetEntries[originalIndex].translatedTextFlow.value = translatedLines[idx]
+                        }
+                    }
+
+                    // Save to memory cache
+                    val fullText = linesToTranslate.joinToString("\n")
+                    val memKey = getCacheKey(fullText, targetLanguageCode)
+                    memoryCache[memKey] = translatedLines
+
+                    // Save to disk cache
+                    if (songId.isNotBlank()) {
+                        runCatching {
+                            val file = getCacheFile(context, songId, targetLanguageCode)
+                            val jsonArray = JSONArray()
+                            translatedLines.forEach { jsonArray.put(it) }
+                            file.writeText(jsonArray.toString())
+                        }
+                    }
+
+                    _hasActiveTranslations.value = true
+                    _status.value = TranslationStatus.Success
+                    _translationVersion.value += 1
+                }.onFailure { error ->
+                    Timber.e(error, "Lyrics translation failed")
+                    _status.value = TranslationStatus.Error(error.message ?: "Translation error occurred.")
+                }
+            }
+        }
+    }
+}

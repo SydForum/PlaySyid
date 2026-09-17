@@ -637,3 +637,70 @@ val VoiceAssistantAutoStartOnBootKey = booleanPreferencesKey("voice_auto_start_b
 val VoiceAssistantDirectCommandsKey = booleanPreferencesKey("voice_direct_commands")
 val VoiceAssistantTtsFeedbackKey = booleanPreferencesKey("voice_tts_feedback")
 
+// ==================== AI INTEGRATION & LYRICS TRANSLATION KEYS ====================
+val AiProviderKey = stringPreferencesKey("aiProvider")
+val OpenRouterApiKey = stringPreferencesKey("openRouterApiKey")
+val OpenRouterBaseUrlKey = stringPreferencesKey("openRouterBaseUrl")
+val OpenRouterModelKey = stringPreferencesKey("openRouterModel")
+val TranslateLanguageKey = stringPreferencesKey("translateLanguage")
+val TranslateModeKey = stringPreferencesKey("translateMode")
+val CustomPromptKey = stringPreferencesKey("customPrompt")
+val AutoTranslateKey = booleanPreferencesKey("autoTranslate")
+val DeeplApiKey = stringPreferencesKey("deeplApiKey")
+val DeeplFormalityKey = stringPreferencesKey("deeplFormality")
+
+val AiTranslationLanguages = linkedMapOf(
+    "hi-Latn" to "Hinglish (Hindi in English)",
+    "en" to "English (US)",
+    "en-GB" to "English (UK)",
+    "hi" to "हिन्दी (Hindi)",
+    "es" to "Español (Spanish)",
+    "fr" to "Français (French)",
+    "de" to "Deutsch (German)",
+    "ja" to "日本語 (Japanese)",
+    "ko" to "한국어 (Korean)",
+    "zh" to "中文 (Chinese)",
+    "ar" to "العربية (Arabic)",
+    "ru" to "Русский (Russian)",
+    "pt" to "Português (Portuguese)",
+    "it" to "Italiano (Italian)",
+    "tr" to "Türkçe (Turkish)",
+    "ur" to "اردو (Urdu)",
+    "pa" to "ਪੰਜਾਬੀ (Punjabi)",
+    "bn" to "বাংলা (Bengali)",
+    "mr" to "मराठी (Marathi)",
+    "gu" to "ગુજરાતી (Gujarati)",
+    "ta" to "தமிழ் (Tamil)",
+    "te" to "తెలుగు (Telugu)",
+    "kn" to "ಕನ್ನಡ (Kannada)",
+    "ml" to "മലയാളം (Malayalam)",
+    "id" to "Bahasa Indonesia",
+    "ms" to "Bahasa Malaysia",
+    "vi" to "Tiếng Việt",
+    "th" to "ไทย (Thai)",
+    "pl" to "Polski",
+    "nl" to "Nederlands",
+    "sv" to "Svenska",
+    "no" to "Norsk",
+    "da" to "Dansk",
+    "fi" to "Suomi",
+    "el" to "Ελληνικά (Greek)",
+    "he" to "עברית (Hebrew)",
+    "fa" to "فارسی (Persian)",
+    "ro" to "Română",
+    "hu" to "Magyar",
+    "cs" to "Čeština",
+    "sk" to "Slovenčina",
+    "uk" to "Українська",
+    "bg" to "Български",
+    "hr" to "Hrvatski",
+    "sr" to "Српски",
+    "sl" to "Slovenščina",
+    "et" to "Eesti",
+    "lv" to "Latviešu",
+    "lt" to "Lietuvių",
+    "fil" to "Filipino",
+    "sw" to "Kiswahili",
+    "af" to "Afrikaans",
+)
+

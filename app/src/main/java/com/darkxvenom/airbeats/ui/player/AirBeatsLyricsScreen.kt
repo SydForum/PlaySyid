@@ -258,6 +258,7 @@ fun AirBeatsLyricsScreen(
                                         LyricsMenu(
                                             lyricsProvider = { currentLyrics },
                                             mediaMetadataProvider = { mediaMetadata },
+                                            navController = navController,
                                             onDismiss = menuState::dismiss
                                         )
                                     }
@@ -568,6 +569,7 @@ fun AirBeatsLyricsScreen(
                                         LyricsMenu(
                                             lyricsProvider = { currentLyrics },
                                             mediaMetadataProvider = { mediaMetadata },
+                                            navController = navController,
                                             onDismiss = menuState::dismiss
                                         )
                                     }

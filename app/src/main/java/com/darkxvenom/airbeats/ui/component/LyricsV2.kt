@@ -100,6 +100,16 @@ import com.darkxvenom.airbeats.constants.LyricsTextSizeKey
 import com.darkxvenom.airbeats.constants.PlayerBackgroundStyle
 import com.darkxvenom.airbeats.constants.PlayerBackgroundStyleKey
 import com.darkxvenom.airbeats.constants.UseSystemFontKey
+import com.darkxvenom.airbeats.constants.AiProviderKey
+import com.darkxvenom.airbeats.constants.AutoTranslateKey
+import com.darkxvenom.airbeats.constants.CustomPromptKey
+import com.darkxvenom.airbeats.constants.DeeplApiKey
+import com.darkxvenom.airbeats.constants.OpenRouterApiKey
+import com.darkxvenom.airbeats.constants.OpenRouterBaseUrlKey
+import com.darkxvenom.airbeats.constants.OpenRouterModelKey
+import com.darkxvenom.airbeats.constants.TranslateLanguageKey
+import com.darkxvenom.airbeats.constants.TranslateModeKey
+import com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper
 import com.darkxvenom.airbeats.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.darkxvenom.airbeats.lyrics.LyricsEntry
 import com.darkxvenom.airbeats.lyrics.AirBeatsLyricsUtils.findCurrentLineIndex
@@ -179,6 +189,17 @@ fun LyricsV2(
         if (useSystemFont) null else FontFamily(Font(R.font.sfprodisplaybold))
     }
     val playerBackground by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.DEFAULT)
+
+    val (targetLanguage) = rememberPreference(TranslateLanguageKey, defaultValue = "hi-Latn")
+    val (autoTranslate) = rememberPreference(AutoTranslateKey, defaultValue = false)
+    val (aiProvider) = rememberPreference(AiProviderKey, defaultValue = "OpenRouter")
+    val (openRouterApiKey) = rememberPreference(OpenRouterApiKey, defaultValue = "")
+    val (deeplApiKey) = rememberPreference(DeeplApiKey, defaultValue = "")
+    val (openRouterBaseUrl) = rememberPreference(OpenRouterBaseUrlKey, defaultValue = "https://openrouter.ai/api/v1/chat/completions")
+    val (openRouterModel) = rememberPreference(OpenRouterModelKey, defaultValue = "google/gemini-2.5-flash-lite")
+    val (translateMode) = rememberPreference(TranslateModeKey, defaultValue = "Literal")
+    val (customPrompt) = rememberPreference(CustomPromptKey, defaultValue = "")
+    val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
 
     // ── Text colour derived from background style ──
     val textColor = if (playerBackground == PlayerBackgroundStyle.DEFAULT)
@@ -311,6 +332,39 @@ fun LyricsV2(
                     currentOffsetMs += wordDurMs
                 }
                 entry.copy(words = words)
+            }
+        }
+    }
+
+    // ── AI Lyrics Translation Sync ──
+    LaunchedEffect(entriesWithWords, mediaMetadata?.id, targetLanguage, translationVersion) {
+        val songId = mediaMetadata?.id ?: return@LaunchedEffect
+        if (entriesWithWords.isEmpty()) return@LaunchedEffect
+
+        val hasLoaded = LyricsTranslationHelper.loadTranslationsFromCache(
+            lyrics = entriesWithWords,
+            context = context,
+            songId = songId,
+            targetLanguageCode = targetLanguage
+        )
+
+        // Auto-translate if enabled and not already translated or translating
+        if (!hasLoaded && autoTranslate && !LyricsTranslationHelper.isTranslating()) {
+            val key = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey
+            if (key.isNotBlank()) {
+                LyricsTranslationHelper.translateLyrics(
+                    lyrics = entriesWithWords,
+                    targetLanguageCode = targetLanguage,
+                    apiKey = key,
+                    baseUrl = openRouterBaseUrl,
+                    model = openRouterModel,
+                    mode = translateMode,
+                    customPrompt = customPrompt.takeIf { it.isNotBlank() },
+                    provider = aiProvider,
+                    context = context,
+                    songId = songId,
+                    scope = scope
+                )
             }
         }
     }
@@ -608,6 +662,26 @@ fun LyricsV2(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = (lyricsTextSize * 0.3f).dp),
+                        )
+                    }
+
+                    // ── AI Lyrics Translation ──
+                    val translatedText by item.translatedTextFlow.collectAsState()
+                    if (!translatedText.isNullOrBlank()) {
+                        Text(
+                            text = translatedText!!,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = (lyricsTextSize * 0.65f).sp,
+                                lineHeight = (lyricsTextSize * 0.85f).sp,
+                                fontWeight = FontWeight.Medium,
+                                fontStyle = if (isAllBackground) FontStyle.Italic else FontStyle.Normal,
+                                fontFamily = lyricsFontFamily ?: MaterialTheme.typography.bodyMedium.fontFamily,
+                            ),
+                            color = textColor.copy(alpha = if (isActive) 0.90f else inactiveAlpha * 0.75f),
+                            textAlign = textAlign,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = (lyricsTextSize * 0.25f).dp),
                         )
                     }
                 }

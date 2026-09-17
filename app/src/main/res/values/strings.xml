@@ -914,5 +914,18 @@
     <!-- Animation Preferences -->
     <string name="reduce_animations">Reduce animations</string>
     <string name="reduce_animations_desc">Disable most transitions and motion effects for faster performance</string>
+
+    <!-- AI Lyrics Translation -->
+    <string name="ai_integration">AI Integration</string>
+    <string name="ai_integration_desc">Configure AI providers, models, and lyrics translation</string>
+    <string name="lyrics_translation">Lyrics Translation</string>
+    <string name="lyrics_translation_desc">Translate lyrics using AI with word or line synchronization</string>
+    <string name="translate_to">Translate to</string>
+    <string name="custom_prompt">Custom Prompt</string>
+    <string name="custom_prompt_desc">Custom instructions for the AI translator</string>
+    <string name="clear_translation">Clear Translation</string>
+    <string name="retranslate">Re-translate</string>
+    <string name="ai_settings">AI Settings</string>
+    <string name="api_key_required_desc">Configure your AI provider and API key in AI settings to enable lyrics translation.</string>
 </resources>
 

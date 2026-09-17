@@ -138,6 +138,16 @@ import com.darkxvenom.airbeats.constants.RotateBackgroundKey
 import com.darkxvenom.airbeats.constants.ShowLyricsKey
 import com.darkxvenom.airbeats.constants.SliderStyle
 import com.darkxvenom.airbeats.constants.SliderStyleKey
+import com.darkxvenom.airbeats.constants.AiProviderKey
+import com.darkxvenom.airbeats.constants.AutoTranslateKey
+import com.darkxvenom.airbeats.constants.CustomPromptKey
+import com.darkxvenom.airbeats.constants.DeeplApiKey
+import com.darkxvenom.airbeats.constants.OpenRouterApiKey
+import com.darkxvenom.airbeats.constants.OpenRouterBaseUrlKey
+import com.darkxvenom.airbeats.constants.OpenRouterModelKey
+import com.darkxvenom.airbeats.constants.TranslateLanguageKey
+import com.darkxvenom.airbeats.constants.TranslateModeKey
+import com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper
 import com.darkxvenom.airbeats.db.entities.LyricsEntity
 import com.darkxvenom.airbeats.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.darkxvenom.airbeats.extensions.togglePlayPause
@@ -262,6 +272,17 @@ fun Lyrics(
         defaultValue = PlayerBackgroundStyle.DEFAULT
     )
 
+    val targetLanguage by rememberPreference(TranslateLanguageKey, defaultValue = "hi-Latn")
+    val autoTranslate by rememberPreference(AutoTranslateKey, defaultValue = false)
+    val aiProvider by rememberPreference(AiProviderKey, defaultValue = "OpenRouter")
+    val openRouterApiKey by rememberPreference(OpenRouterApiKey, defaultValue = "")
+    val deeplApiKey by rememberPreference(DeeplApiKey, defaultValue = "")
+    val openRouterBaseUrl by rememberPreference(OpenRouterBaseUrlKey, defaultValue = "https://openrouter.ai/api/v1/chat/completions")
+    val openRouterModel by rememberPreference(OpenRouterModelKey, defaultValue = "google/gemini-2.5-flash-lite")
+    val translateMode by rememberPreference(TranslateModeKey, defaultValue = "Literal")
+    val customPrompt by rememberPreference(CustomPromptKey, defaultValue = "")
+    val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
+
     val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
     val isSystemInDarkTheme = isSystemInDarkTheme()
     val useDarkTheme = remember(darkTheme, isSystemInDarkTheme) {
@@ -371,6 +392,38 @@ fun Lyrics(
         initialScrollDone = false
         shouldScrollToFirstLine = true
         isAutoScrollEnabled = true
+    }
+
+    // ── AI Lyrics Translation Sync ──
+    LaunchedEffect(lines, currentSongId, targetLanguage, translationVersion) {
+        val songId = currentSongId ?: return@LaunchedEffect
+        if (lines.isEmpty()) return@LaunchedEffect
+
+        val hasLoaded = LyricsTranslationHelper.loadTranslationsFromCache(
+            lyrics = lines,
+            context = context,
+            songId = songId,
+            targetLanguageCode = targetLanguage
+        )
+
+        if (!hasLoaded && autoTranslate && !LyricsTranslationHelper.isTranslating()) {
+            val key = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey
+            if (key.isNotBlank()) {
+                LyricsTranslationHelper.translateLyrics(
+                    lyrics = lines,
+                    targetLanguageCode = targetLanguage,
+                    apiKey = key,
+                    baseUrl = openRouterBaseUrl,
+                    model = openRouterModel,
+                    mode = translateMode,
+                    customPrompt = customPrompt.takeIf { it.isNotBlank() },
+                    provider = aiProvider,
+                    context = context,
+                    songId = songId,
+                    scope = scope
+                )
+            }
+        }
     }
 
     val isSynced = remember(lyrics) {
@@ -1338,6 +1391,27 @@ fun Lyrics(
                                             LyricsPosition.RIGHT -> TextAlign.Right
                                         },
                                         fontWeight = FontWeight.Bold,
+                                    )
+                                }
+
+                                // ── AI Lyrics Translation ──
+                                val translatedText by item.translatedTextFlow.collectAsState()
+                                if (!translatedText.isNullOrBlank()) {
+                                    Text(
+                                        text = translatedText!!,
+                                        fontSize = if (isFullscreen) 16.sp else 15.sp,
+                                        color = if (isActiveLine) {
+                                            expressiveAccent.copy(alpha = 0.9f)
+                                        } else {
+                                            (if (isFullscreen) MaterialTheme.colorScheme.onSurface else expressiveAccent).copy(alpha = 0.55f)
+                                        },
+                                        textAlign = when (lyricsTextPosition) {
+                                            LyricsPosition.LEFT -> TextAlign.Left
+                                            LyricsPosition.CENTER -> TextAlign.Center
+                                            LyricsPosition.RIGHT -> TextAlign.Right
+                                        },
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(top = 4.dp)
                                     )
                                 }
                             }
