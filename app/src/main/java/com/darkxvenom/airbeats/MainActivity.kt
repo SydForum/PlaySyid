@@ -427,11 +427,39 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+        // 🔥 Version-specific FCM topic synchronization & auto-cleanup of outdated versions
         val versionName = BuildConfig.VERSION_NAME
+        val fcmPrefs = getSharedPreferences("airbeats_fcm_prefs", Context.MODE_PRIVATE)
+        val lastSubscribedVersion = fcmPrefs.getString("last_subscribed_version", null)
+
+        if (!lastSubscribedVersion.isNullOrBlank() && lastSubscribedVersion != versionName) {
+            FirebaseMessaging.getInstance().unsubscribeFromTopic(lastSubscribedVersion)
+                .addOnSuccessListener {
+                    Log.d("FCM", "Unsubscribed from outdated version topic: $lastSubscribedVersion")
+                }
+            FirebaseMessaging.getInstance().unsubscribeFromTopic("v$lastSubscribedVersion")
+            FirebaseMessaging.getInstance().unsubscribeFromTopic("${lastSubscribedVersion}-nightly")
+            FirebaseMessaging.getInstance().unsubscribeFromTopic("v${lastSubscribedVersion}-nightly")
+        }
+
+        // Proactively unsubscribe from legacy version tags if updating from older releases
+        val legacyVersions = listOf(
+            "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.1.0", "6.1.1", "6.1.2"
+        )
+        for (legacy in legacyVersions) {
+            if (legacy != versionName) {
+                FirebaseMessaging.getInstance().unsubscribeFromTopic(legacy)
+                FirebaseMessaging.getInstance().unsubscribeFromTopic("v$legacy")
+                FirebaseMessaging.getInstance().unsubscribeFromTopic("$legacy-nightly")
+                FirebaseMessaging.getInstance().unsubscribeFromTopic("v$legacy-nightly")
+            }
+        }
+
         FirebaseMessaging.getInstance().subscribeToTopic(versionName)
             .addOnCompleteListener {
                 if (it.isSuccessful) {
                     Log.d("FCM", "Subscribed to $versionName")
+                    fcmPrefs.edit().putString("last_subscribed_version", versionName).apply()
                 }
             }
 

@@ -31,6 +31,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import me.saket.squiggles.SquigglySlider
+import com.darkxvenom.airbeats.ui.component.PlayerSliderTrack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -116,6 +120,7 @@ fun AirBeatsLyricsScreen(
     
     val currentLyrics by playerConnection.currentLyrics.collectAsState(initial = null)
     val useLyricsV2 = true
+    val sliderStyle by rememberEnumPreference(SliderStyleKey, SliderStyle.SQUIGGLY)
 
     // Auto-fetch lyrics when no lyrics found (same logic as refetch)
     LaunchedEffect(mediaMetadata.id, currentLyrics) {
@@ -317,12 +322,14 @@ fun AirBeatsLyricsScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             // Slider
-                            androidx.compose.material3.Slider(
-                                value = (sliderPosition ?: position).toFloat(),
-                                valueRange = 0f..(if (duration == C.TIME_UNSET) 0f else duration.toFloat()),
-                                onValueChange = {
-                                    sliderPosition = it.toLong()
-                                },
+                            LyricsSlider(
+                                sliderStyle = sliderStyle,
+                                sliderPosition = sliderPosition,
+                                position = position,
+                                duration = duration,
+                                isPlaying = isPlaying,
+                                textBackgroundColor = textBackgroundColor,
+                                onValueChange = { sliderPosition = it },
                                 onValueChangeFinished = {
                                     sliderPosition?.let {
                                         player.seekTo(it)
@@ -330,10 +337,6 @@ fun AirBeatsLyricsScreen(
                                     }
                                     sliderPosition = null
                                 },
-                                colors = androidx.compose.material3.SliderDefaults.colors(
-                                    activeTrackColor = textBackgroundColor,
-                                    thumbColor = textBackgroundColor
-                                ),
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -610,12 +613,14 @@ fun AirBeatsLyricsScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 48.dp, vertical = 16.dp)
                     ) {
-                        androidx.compose.material3.Slider(
-                            value = (sliderPosition ?: position).toFloat(),
-                            valueRange = 0f..(if (duration == C.TIME_UNSET) 0f else duration.toFloat()),
-                            onValueChange = {
-                                sliderPosition = it.toLong()
-                            },
+                        LyricsSlider(
+                            sliderStyle = sliderStyle,
+                            sliderPosition = sliderPosition,
+                            position = position,
+                            duration = duration,
+                            isPlaying = isPlaying,
+                            textBackgroundColor = textBackgroundColor,
+                            onValueChange = { sliderPosition = it },
                             onValueChangeFinished = {
                                 sliderPosition?.let {
                                     player.seekTo(it)
@@ -623,10 +628,6 @@ fun AirBeatsLyricsScreen(
                                 }
                                 sliderPosition = null
                             },
-                            colors = androidx.compose.material3.SliderDefaults.colors(
-                                activeTrackColor = textBackgroundColor,
-                                thumbColor = textBackgroundColor
-                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -797,6 +798,75 @@ fun AirBeatsLyricsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LyricsSlider(
+    sliderStyle: SliderStyle,
+    sliderPosition: Long?,
+    position: Long,
+    duration: Long,
+    isPlaying: Boolean,
+    textBackgroundColor: Color,
+    onValueChange: (Long) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val sliderColors = SliderDefaults.colors(
+        activeTrackColor = textBackgroundColor,
+        inactiveTrackColor = textBackgroundColor.copy(alpha = 0.3f),
+        thumbColor = textBackgroundColor
+    )
+    val sliderValue = (sliderPosition ?: position).toFloat()
+    val sliderRange = 0f..(if (duration == C.TIME_UNSET) 0f else duration.toFloat())
+
+    when (sliderStyle) {
+        SliderStyle.DEFAULT -> {
+            Slider(
+                value = sliderValue,
+                valueRange = sliderRange,
+                onValueChange = { onValueChange(it.toLong()) },
+                onValueChangeFinished = onValueChangeFinished,
+                colors = sliderColors,
+                modifier = modifier
+            )
+        }
+
+        SliderStyle.SQUIGGLY -> {
+            SquigglySlider(
+                value = sliderValue,
+                valueRange = sliderRange,
+                onValueChange = { onValueChange(it.toLong()) },
+                onValueChangeFinished = onValueChangeFinished,
+                colors = sliderColors,
+                modifier = modifier,
+                squigglesSpec = SquigglySlider.SquigglesSpec(
+                    amplitude = if (isPlaying) 2.dp else 0.dp,
+                    strokeWidth = 3.dp,
+                )
+            )
+        }
+
+        SliderStyle.SLIM -> {
+            Slider(
+                value = sliderValue,
+                valueRange = sliderRange,
+                onValueChange = { onValueChange(it.toLong()) },
+                onValueChangeFinished = onValueChangeFinished,
+                thumb = { Spacer(modifier = Modifier.size(0.dp)) },
+                track = { sliderState ->
+                    PlayerSliderTrack(
+                        sliderState = sliderState,
+                        colors = sliderColors,
+                        trackHeight = 6.dp
+                    )
+                },
+                colors = sliderColors,
+                modifier = modifier
+            )
         }
     }
 }
