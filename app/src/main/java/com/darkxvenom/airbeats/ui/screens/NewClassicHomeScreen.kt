@@ -159,9 +159,6 @@ fun NewClassicHomeScreen(
         }
     }
 
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-
-    // Hero playlist or fallback to recommended song / quick picks
     val effectiveHero: HeroPlaylistData = remember(heroPlaylist, quickPicks) {
         heroPlaylist ?: quickPicks?.firstOrNull()?.let { firstSong ->
             val topArtist = firstSong.artists.firstOrNull()?.name ?: "Top Hits"
@@ -203,8 +200,6 @@ fun NewClassicHomeScreen(
             item(key = "hero_section") {
                 NewClassicHeroSection(
                     heroData = effectiveHero,
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it },
                     onNotificationClick = { navController.navigate("history") },
                     onSettingsClick = { navController.navigate("settings") },
                     onPlayNowClick = {
@@ -442,8 +437,6 @@ fun NewClassicHomeScreen(
 @Composable
 private fun NewClassicHeroSection(
     heroData: HeroPlaylistData,
-    selectedTab: Int,
-    onTabSelected: (Int) -> Unit,
     onNotificationClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onPlayNowClick: () -> Unit,
@@ -565,29 +558,6 @@ private fun NewClassicHeroSection(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CategoryChip(
-                    label = "Music",
-                    prefix = "40m+",
-                    isSelected = selectedTab == 0,
-                    onClick = { onTabSelected(0) }
-                )
-                Spacer(Modifier.width(12.dp))
-                CategoryChip(
-                    label = "Podcast",
-                    prefix = "5m+",
-                    isSelected = selectedTab == 1,
-                    onClick = { onTabSelected(1) }
-                )
-            }
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -681,60 +651,6 @@ private fun NewClassicHeroSection(
     }
 }
 
-@Composable
-private fun CategoryChip(
-    label: String,
-    prefix: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.94f else 1f,
-        label = "chipScale"
-    )
-
-    Row(
-        modifier = Modifier
-            .scale(scale)
-            .clip(CircleShape)
-            .background(
-                if (isSelected) Color.White.copy(alpha = 0.18f)
-                else Color.Black.copy(alpha = 0.35f)
-            )
-            .border(
-                width = 1.dp,
-                color = if (isSelected) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.12f),
-                shape = CircleShape
-            )
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = prefix,
-            style = MaterialTheme.typography.bodySmall.copy(
-                color = Color.White.copy(alpha = 0.55f),
-                fontWeight = FontWeight.Medium,
-                fontSize = 11.sp
-            )
-        )
-        Spacer(Modifier.width(5.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                color = Color.White,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                fontSize = 13.sp
-            )
-        )
-    }
-}
 
 @Composable
 private fun NewClassicSectionHeader(
