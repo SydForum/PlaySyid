@@ -205,12 +205,17 @@ private fun DeveloperNewsListScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+                    .clip(
+                        RoundedCornerShape(
+                            bottomStart = 30.dp,
+                            bottomEnd = 30.dp
+                        )
+                    )
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
                             )
                         )
                     )
@@ -218,12 +223,15 @@ private fun DeveloperNewsListScreen(
                         width = 0.6.dp,
                         brush = Brush.horizontalGradient(
                             listOf(
-                                Color.White.copy(alpha = 0.25f),
-                                Color.White.copy(alpha = 0.08f),
-                                Color.White.copy(alpha = 0.25f)
+                                Color.White.copy(alpha = 0.3f),
+                                Color.White.copy(alpha = 0.1f),
+                                Color.White.copy(alpha = 0.3f)
                             )
                         ),
-                        shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
+                        shape = RoundedCornerShape(
+                            bottomStart = 30.dp,
+                            bottomEnd = 30.dp
+                        )
                     )
             ) {
                 TopAppBar(
@@ -575,34 +583,80 @@ private fun DeveloperNewsDetailScreen(
         modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        painter = painterResource(R.drawable.arrow_back),
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                if (!item.actionUrl.isNullOrBlank()) {
-                    IconButton(onClick = {
-                        try { uriHandler.openUri(item.actionUrl) } catch (_: Exception) {}
-                    }) {
-                        Icon(
-                            painter = painterResource(R.drawable.open_in_new),
-                            contentDescription = "Open Link",
-                            tint = MaterialTheme.colorScheme.primary
+            TopAppBar(
+                title = {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = item.tag?.takeIf { it.isNotBlank() } ?: "Announcement",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-            }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            painter = painterResource(R.drawable.arrow_back),
+                            contentDescription = stringResource(R.string.back),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                actions = {
+                    if (!item.actionUrl.isNullOrBlank()) {
+                        IconButton(onClick = {
+                            try { uriHandler.openUri(item.actionUrl) } catch (_: Exception) {}
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.open_in_new),
+                                contentDescription = "Open Link",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(48.dp))
+                    }
+                },
+                modifier = Modifier
+                    .clip(
+                        RoundedCornerShape(
+                            bottomStart = 30.dp,
+                            bottomEnd = 30.dp
+                        )
+                    )
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 0.6.dp,
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.3f),
+                                Color.White.copy(alpha = 0.1f),
+                                Color.White.copy(alpha = 0.3f)
+                            )
+                        ),
+                        shape = RoundedCornerShape(
+                            bottomStart = 30.dp,
+                            bottomEnd = 30.dp
+                        )
+                    ),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                )
+            )
         }
     ) { padding ->
         Column(
@@ -610,7 +664,12 @@ private fun DeveloperNewsDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 6.dp)
+                .windowInsetsPadding(
+                    LocalPlayerAwareWindowInsets.current.only(
+                        WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+                    )
+                )
+                .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             // Article Headline
             Text(
