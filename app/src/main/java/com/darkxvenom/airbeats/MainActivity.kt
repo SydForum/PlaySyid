@@ -689,7 +689,6 @@ class MainActivity : ComponentActivity() {
                                     NavBarStyle.SPOTIFY -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
                                     NavBarStyle.APPLE -> listOf(Screens.Home, Screens.Stats, Screens.Explore, Screens.Library, Screens.Search)
                                     NavBarStyle.NEW_CLASSIC -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
-                                    else -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
                                 }
                             }
                             val (slimNav) = rememberPreference(SlimNavBarKey, defaultValue = false)
@@ -714,7 +713,6 @@ class MainActivity : ComponentActivity() {
                                     Screens.Library.route,
                                     Screens.Search.route,
                                     Screens.Stats.route,
-                                    "neon_search",
                                     "settings",
                                 )
 
@@ -1371,9 +1369,9 @@ class MainActivity : ComponentActivity() {
                                                 Box(
                                                     modifier = Modifier
                                                         .align(Alignment.BottomCenter)
-                                                        .then(if (navBarStyle != NavBarStyle.SPOTIFY && navBarStyle != NavBarStyle.NEON) Modifier.navigationBarsPadding() else Modifier)
+                                                        .then(if (navBarStyle != NavBarStyle.SPOTIFY) Modifier.navigationBarsPadding() else Modifier)
                                                         .then(
-                                                            if (navBarStyle == NavBarStyle.SPOTIFY || navBarStyle == NavBarStyle.NEON) {
+                                                            if (navBarStyle == NavBarStyle.SPOTIFY) {
                                                                 Modifier.fillMaxWidth()
                                                                     .height(NavigationBarHeight - 16.dp + bottomInset)
                                                             } else {
@@ -1480,17 +1478,6 @@ class MainActivity : ComponentActivity() {
                                                              selectedIndex = selectedIndex,
                                                              onItemSelected = onItemSelectedAction,
                                                              onNavigateRoute = { route -> navController.navigate(route) },
-                                                             modifier = Modifier
-                                                                 .fillMaxSize()
-                                                                 .offset(y = offsetY)
-                                                                 .scale(scale)
-                                                                 .alpha(alpha)
-                                                         )
-                                                     } else if (navBarStyle == NavBarStyle.NEON) {
-                                                         com.darkxvenom.airbeats.ui.component.NeonBottomNavigationBar(
-                                                             items = curvedItems,
-                                                             selectedIndex = selectedIndex,
-                                                             onItemSelected = onItemSelectedAction,
                                                              modifier = Modifier
                                                                  .fillMaxSize()
                                                                  .offset(y = offsetY)

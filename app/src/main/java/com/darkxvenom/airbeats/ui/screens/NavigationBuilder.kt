@@ -67,8 +67,6 @@ fun NavGraphBuilder.navigationBuilder(
 
         if (homeScreenStyle == HomeScreenStyle.PLAYFUL) {
             PlayfulHomeScreen(navController = navController, playerBottomSheetState = playerBottomSheetState, onSearchClick = onSearchClick)
-        } else if (homeScreenStyle == HomeScreenStyle.NEON) {
-            NeonHomeScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.SPOTIFY) {
             SpotifyHomeScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.APPLE) {
@@ -92,8 +90,6 @@ fun NavGraphBuilder.navigationBuilder(
                 playerBottomSheetState = playerBottomSheetState,
                 onSearchClick = onSearchClick
             )
-        } else if (homeScreenStyle == HomeScreenStyle.NEON) {
-            com.darkxvenom.airbeats.ui.screens.library.NeonLibraryScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.SPOTIFY) {
             SpotifyLibraryScreen(navController)
         } else if (homeScreenStyle == HomeScreenStyle.APPLE) {
@@ -114,8 +110,6 @@ fun NavGraphBuilder.navigationBuilder(
                 playerBottomSheetState = playerBottomSheetState,
                 onSearchClick = onSearchClick
             )
-        } else if (homeScreenStyle == HomeScreenStyle.NEON) {
-            NeonExploreScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.SPOTIFY) {
             SpotifyExploreScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.APPLE) {
@@ -134,12 +128,9 @@ fun NavGraphBuilder.navigationBuilder(
             defaultValue = HomeScreenStyle.CLASSIC
         )
         
-        val useNeon = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.NEON || (navBarStyle !in listOf(com.darkxvenom.airbeats.constants.NavBarStyle.APPLE, com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY) && homeScreenStyle == HomeScreenStyle.NEON)
-        val useApple = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE || (navBarStyle !in listOf(com.darkxvenom.airbeats.constants.NavBarStyle.NEON, com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY) && homeScreenStyle == HomeScreenStyle.APPLE)
+        val useApple = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE || (navBarStyle != com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY && homeScreenStyle == HomeScreenStyle.APPLE)
 
-        if (useNeon) {
-            com.darkxvenom.airbeats.ui.screens.search.NeonSearchScreen(navController = navController)
-        } else if (useApple) {
+        if (useApple) {
             com.darkxvenom.airbeats.ui.screens.apple.AppleSearchScreen(navController = navController)
         } else {
             SpotifySearchScreen(navController = navController)
@@ -155,12 +146,9 @@ fun NavGraphBuilder.navigationBuilder(
             defaultValue = HomeScreenStyle.CLASSIC
         )
         
-        val useNeon = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.NEON || (navBarStyle !in listOf(com.darkxvenom.airbeats.constants.NavBarStyle.APPLE, com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY) && homeScreenStyle == HomeScreenStyle.NEON)
-        val useApple = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE || (navBarStyle !in listOf(com.darkxvenom.airbeats.constants.NavBarStyle.NEON, com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY) && homeScreenStyle == HomeScreenStyle.APPLE)
+        val useApple = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE || (navBarStyle != com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY && homeScreenStyle == HomeScreenStyle.APPLE)
 
-        if (useNeon) {
-            com.darkxvenom.airbeats.ui.screens.search.NeonSearchScreen(navController = navController)
-        } else if (useApple) {
+        if (useApple) {
             com.darkxvenom.airbeats.ui.screens.apple.AppleSearchScreen(navController = navController)
         } else {
             SpotifySearchScreen(navController = navController)
@@ -176,9 +164,6 @@ fun NavGraphBuilder.navigationBuilder(
     }
     composable("guest_profile_setup") {
         com.darkxvenom.airbeats.ui.screens.onboarding.GuestProfileSetupScreen(navController = navController)
-    }
-    composable("neon_search") {
-        com.darkxvenom.airbeats.ui.screens.search.NeonSearchScreen(navController = navController)
     }
     composable("stats") {
         val (homeScreenStyle, _) = rememberEnumPreference(

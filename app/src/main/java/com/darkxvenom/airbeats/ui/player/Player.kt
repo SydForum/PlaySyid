@@ -872,12 +872,10 @@ fun BottomSheetPlayer(
         com.darkxvenom.airbeats.constants.NavBarStyleKey,
         defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC
     )
-    val isNeon = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.NEON
-
     BottomSheet(
         state = state,
         modifier = modifier,
-        shape = if (isNeon) androidx.compose.ui.graphics.RectangleShape else RoundedCornerShape(
+        shape = RoundedCornerShape(
             topStart = if (!state.isExpanded) 16.dp else 0.dp,
             topEnd = if (!state.isExpanded) 16.dp else 0.dp
         ),
@@ -973,8 +971,6 @@ fun BottomSheetPlayer(
                     state = state,
                     navController = navController,
                 )
-            } else if (navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.NEON) {
-                NeonMiniPlayer(state = state)
             } else if (navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE) {
                 AppleMiniPlayer(
                     position = position,

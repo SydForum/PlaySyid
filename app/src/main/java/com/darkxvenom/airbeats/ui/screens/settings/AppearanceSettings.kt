@@ -519,7 +519,6 @@ fun AppearanceSettings(
                                 when (it) {
                                     HomeScreenStyle.CLASSIC -> "Classic"
                                     HomeScreenStyle.PLAYFUL -> "Playful"
-                                    HomeScreenStyle.NEON -> "Neon"
                                     HomeScreenStyle.SPOTIFY -> "Spotify"
                                     HomeScreenStyle.APPLE -> "Apple"
                                 }
@@ -536,7 +535,6 @@ fun AppearanceSettings(
                                     NavBarStyle.LIQUID_GLASS -> "Liquid Glass"
                                     NavBarStyle.SPOTIFY -> "Spotify"
                                     NavBarStyle.APPLE -> "Apple"
-                                    NavBarStyle.NEON -> "Neon"
                                 }
                             },
                         )},
