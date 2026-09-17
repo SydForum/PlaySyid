@@ -99,7 +99,7 @@ import com.darkxvenom.airbeats.ui.menu.SongMenu
 import com.darkxvenom.airbeats.ui.menu.YouTubeSongMenu
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
 import com.darkxvenom.airbeats.utils.rememberPreference
-import com.darkxvenom.airbeats.viewmodels.HeroAlbumData
+import com.darkxvenom.airbeats.viewmodels.HeroPlaylistData
 import com.darkxvenom.airbeats.viewmodels.HomeViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -107,7 +107,6 @@ import kotlinx.coroutines.launch
 
 private val NewClassicDarkBg = Color.Black // 100% Pure OLED Black
 private val NewClassicSurface = Color(0xFF141414)
-private val NewClassicAccentYellow = Color(0xFFFFDE03)
 private val NewClassicTextPrimary = Color(0xFFFFFFFF)
 private val NewClassicTextSecondary = Color(0xFF909AA8)
 private val NewClassicSeeAllBg = Color(0xFF1C1C1C)
@@ -127,7 +126,7 @@ fun NewClassicHomeScreen(
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
 
-    val heroAlbum by viewModel.heroAlbum.collectAsState()
+    val heroPlaylist by viewModel.heroPlaylist.collectAsState()
     val quickPicks by viewModel.quickPicks.collectAsState()
     val forgottenFavorites by viewModel.forgottenFavorites.collectAsState()
     val keepListening by viewModel.keepListening.collectAsState()
@@ -157,23 +156,24 @@ fun NewClassicHomeScreen(
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
-    // Retrieve most listened album, falling back to top explore release album or default
-    val effectiveHeroAlbum: HeroAlbumData = remember(heroAlbum, explorePage) {
-        heroAlbum ?: explorePage?.newReleaseAlbums?.firstOrNull()?.let { albumItem ->
-            HeroAlbumData(
-                id = albumItem.id,
-                title = albumItem.title,
-                artistName = albumItem.artists?.joinToString { it.name } ?: "AirBeats Featured",
-                year = albumItem.year,
-                thumbnailUrl = albumItem.thumbnail,
-                playlistId = albumItem.playlistId
+    // Hero playlist or fallback to recommended song / quick picks
+    val effectiveHero: HeroPlaylistData = remember(heroPlaylist, quickPicks) {
+        heroPlaylist ?: quickPicks?.firstOrNull()?.let { firstSong ->
+            val topArtist = firstSong.artists.firstOrNull()?.name ?: "Top Hits"
+            HeroPlaylistData(
+                title = firstSong.song.title.ifBlank { "$topArtist Soundtracks" },
+                subtitle = firstSong.artists.joinToString { it.name }.ifEmpty { "Based on your last listening habits and artists..." },
+                tag = "RECOMMENDED",
+                thumbnailUrl = firstSong.thumbnailUrl,
+                songs = quickPicks.orEmpty(),
+                playlistId = null
             )
-        } ?: HeroAlbumData(
-            id = "default_album",
+        } ?: HeroPlaylistData(
             title = "90s HipHop Soundtracks",
-            artistName = "Featured Album",
-            year = 1996,
+            subtitle = "Based on your last listening habits and artists...",
+            tag = "HIPHOP",
             thumbnailUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
+            songs = emptyList(),
             playlistId = null
         )
     }
@@ -197,49 +197,27 @@ fun NewClassicHomeScreen(
         ) {
             item(key = "hero_section") {
                 NewClassicHeroSection(
-                    heroAlbum = effectiveHeroAlbum,
+                    heroData = effectiveHero,
                     selectedTab = selectedTab,
                     onTabSelected = { selectedTab = it },
                     onNotificationClick = { navController.navigate("history") },
                     onSettingsClick = { navController.navigate("settings") },
                     onPlayNowClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val localAlbum = effectiveHeroAlbum.albumWithSongs
-                        if (localAlbum != null && localAlbum.songs.isNotEmpty()) {
+                        if (effectiveHero.songs.isNotEmpty()) {
                             playerConnection.playQueue(
                                 ListQueue(
-                                    title = effectiveHeroAlbum.title,
-                                    items = localAlbum.songs.map { it.toMediaItem() }
+                                    title = effectiveHero.title,
+                                    items = effectiveHero.songs.map { it.toMediaItem() }
                                 )
                             )
-                        } else if (effectiveHeroAlbum.songs.isNotEmpty()) {
+                        } else if (!effectiveHero.playlistId.isNullOrBlank()) {
                             playerConnection.playQueue(
-                                ListQueue(
-                                    title = effectiveHeroAlbum.title,
-                                    items = effectiveHeroAlbum.songs.map { it.toMediaItem() }
-                                )
+                                YouTubeAlbumRadio(effectiveHero.playlistId)
                             )
-                        } else if (!effectiveHeroAlbum.playlistId.isNullOrBlank()) {
-                            playerConnection.playQueue(
-                                YouTubeAlbumRadio(effectiveHeroAlbum.playlistId)
-                            )
-                        } else if (effectiveHeroAlbum.id.isNotBlank()) {
-                            scope.launch(Dispatchers.IO) {
-                                val loadedAlbum = database.albumWithSongs(effectiveHeroAlbum.id).first()
-                                if (loadedAlbum != null && loadedAlbum.songs.isNotEmpty()) {
-                                    playerConnection.playQueue(
-                                        ListQueue(
-                                            title = effectiveHeroAlbum.title,
-                                            items = loadedAlbum.songs.map { it.toMediaItem() }
-                                        )
-                                    )
-                                } else {
-                                    val ytAlbum = runCatching { com.darkxvenom.airbeats.innertube.YouTube.album(effectiveHeroAlbum.id).getOrNull() }.getOrNull()
-                                    val playlistId = ytAlbum?.album?.playlistId
-                                    if (!playlistId.isNullOrBlank()) {
-                                        playerConnection.playQueue(YouTubeAlbumRadio(playlistId))
-                                    }
-                                }
+                        } else {
+                            quickPicks?.firstOrNull()?.let { song ->
+                                playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
                             }
                         }
                     }
@@ -458,7 +436,7 @@ fun NewClassicHomeScreen(
 
 @Composable
 private fun NewClassicHeroSection(
-    heroAlbum: HeroAlbumData,
+    heroData: HeroPlaylistData,
     selectedTab: Int,
     onTabSelected: (Int) -> Unit,
     onNotificationClick: () -> Unit,
@@ -476,10 +454,10 @@ private fun NewClassicHeroSection(
     ) {
         AsyncImage(
             model = ImageRequest.Builder(context)
-                .data(heroAlbum.thumbnailUrl)
+                .data(heroData.thumbnailUrl)
                 .crossfade(true)
                 .build(),
-            contentDescription = heroAlbum.title,
+            contentDescription = heroData.title,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
@@ -599,9 +577,9 @@ private fun NewClassicHeroSection(
                     .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "MOST LISTENED ALBUM",
+                    text = heroData.tag.uppercase(),
                     style = MaterialTheme.typography.labelMedium.copy(
-                        color = NewClassicAccentYellow,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.6.sp
                     )
@@ -610,7 +588,7 @@ private fun NewClassicHeroSection(
                 Spacer(Modifier.height(6.dp))
 
                 Text(
-                    text = heroAlbum.title,
+                    text = heroData.title,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
@@ -622,13 +600,8 @@ private fun NewClassicHeroSection(
 
                 Spacer(Modifier.height(4.dp))
 
-                val subtitleText = remember(heroAlbum) {
-                    val yearStr = if (heroAlbum.year != null && heroAlbum.year > 0) " • ${heroAlbum.year}" else ""
-                    "${heroAlbum.artistName}$yearStr"
-                }
-
                 Text(
-                    text = subtitleText,
+                    text = heroData.subtitle,
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = Color.White.copy(alpha = 0.72f),
                         fontSize = 12.5.sp
@@ -655,8 +628,8 @@ private fun NewClassicHeroSection(
                     interactionSource = interactionSource,
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = NewClassicAccentYellow,
-                        contentColor = Color(0xFF101216)
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     contentPadding = PaddingValues(horizontal = 28.dp, vertical = 11.dp),
                     modifier = Modifier
@@ -669,7 +642,7 @@ private fun NewClassicHeroSection(
                         Icon(
                             painter = painterResource(R.drawable.play),
                             contentDescription = null,
-                            tint = Color(0xFF101216),
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -678,7 +651,7 @@ private fun NewClassicHeroSection(
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Black,
                                 letterSpacing = 0.8.sp,
-                                color = Color(0xFF101216)
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         )
                     }

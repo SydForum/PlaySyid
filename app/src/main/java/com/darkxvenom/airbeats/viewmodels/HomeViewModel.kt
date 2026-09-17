@@ -46,16 +46,6 @@ data class HeroPlaylistData(
     val playlistId: String? = null,
 )
 
-data class HeroAlbumData(
-    val id: String,
-    val title: String,
-    val artistName: String,
-    val year: Int? = null,
-    val thumbnailUrl: String? = null,
-    val songs: List<Song> = emptyList(),
-    val albumWithSongs: com.darkxvenom.airbeats.db.entities.AlbumWithSongs? = null,
-    val playlistId: String? = null,
-)
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -110,45 +100,6 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    val heroAlbum = database.mostPlayedAlbums(fromTimeStamp = 0L, limit = 10)
-        .flatMapLatest { albums ->
-            val topAlbum = albums.firstOrNull()
-            if (topAlbum != null) {
-                database.albumWithSongs(topAlbum.id).map { albumWithSongs ->
-                    HeroAlbumData(
-                        id = topAlbum.id,
-                        title = topAlbum.title,
-                        artistName = topAlbum.artists.joinToString { it.name }.ifEmpty { "AirBeats" },
-                        year = topAlbum.album.year,
-                        thumbnailUrl = topAlbum.thumbnailUrl ?: albumWithSongs?.songs?.firstOrNull()?.thumbnailUrl,
-                        songs = albumWithSongs?.songs.orEmpty(),
-                        albumWithSongs = albumWithSongs,
-                        playlistId = null,
-                    )
-                }
-            } else {
-                database.recentAlbums(limit = 10).flatMapLatest { recentAlbums ->
-                    val recentTop = recentAlbums.firstOrNull()
-                    if (recentTop != null) {
-                        database.albumWithSongs(recentTop.id).map { albumWithSongs ->
-                            HeroAlbumData(
-                                id = recentTop.id,
-                                title = recentTop.title,
-                                artistName = recentTop.artists.joinToString { it.name }.ifEmpty { "AirBeats" },
-                                year = recentTop.album.year,
-                                thumbnailUrl = recentTop.thumbnailUrl ?: albumWithSongs?.songs?.firstOrNull()?.thumbnailUrl,
-                                songs = albumWithSongs?.songs.orEmpty(),
-                                albumWithSongs = albumWithSongs,
-                                playlistId = null,
-                            )
-                        }
-                    } else {
-                        flowOf(null)
-                    }
-                }
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     val allLocalItems = MutableStateFlow<List<LocalItem>>(emptyList())
     val allYtItems = MutableStateFlow<List<YTItem>>(emptyList())
