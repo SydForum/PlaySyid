@@ -348,7 +348,7 @@ fun UpdateAvailableDialog(
                                     com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleasePageUrl()
                                 }
                             }
-                            updateStarted = context.packageManager.canRequestPackageInstalls()
+                            updateStarted = true
                             AppUpdateService.start(context, directApkUrl)
                         },
                         enabled = !updateStarted,
