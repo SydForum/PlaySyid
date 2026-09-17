@@ -549,15 +549,6 @@ private fun NewClassicHeroSection(
                     )
                 }
 
-                Text(
-                    text = "AirBeats",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        color = Color.White
-                    )
-                )
-
                 IconButton(
                     onClick = onSettingsClick,
                     modifier = Modifier
