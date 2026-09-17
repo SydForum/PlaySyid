@@ -929,5 +929,9 @@
     <string name="api_key_required_desc">Configure your AI provider and API key in AI settings to enable lyrics translation.</string>
     <string name="replace_original_lyrics">Replace original lyrics</string>
     <string name="replace_original_lyrics_desc">Show translated lyrics directly with sync timing instead of subtitles</string>
+
+    <!-- Crossfade Audio -->
+    <string name="crossfade">Crossfade</string>
+    <string name="crossfade_desc">Overlap and fade smoothly between consecutive songs</string>
 </resources>
 

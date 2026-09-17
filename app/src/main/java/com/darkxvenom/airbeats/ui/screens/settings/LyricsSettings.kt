@@ -22,7 +22,7 @@ fun LyricsSettings(navController: NavController, scrollBehavior: TopAppBarScroll
     val (position, setPosition) = rememberEnumPreference(LyricsTextPositionKey, LyricsPosition.CENTER)
     val (clickToSeek, setClickToSeek) = rememberPreference(LyricsClickKey, true)
     val (animate, setAnimate) = rememberPreference(AnimateLyricsKey, true)
-    val (newScreen, setNewScreen) = rememberPreference(EnableNewLyricsScreenKey, true)
+    val (lyricsScreenStyle, setLyricsScreenStyle) = rememberEnumPreference(LyricsScreenStyleKey, LyricsScreenStyle.LYRICS_2)
     val (preferred, setPreferred) = rememberEnumPreference(PreferredLyricsProviderKey, PreferredLyricsProvider.LRCLIB)
     val providers = listOf(
         LyricsProviderPreference("LRC Lib", EnableLrcLibKey, R.drawable.lyrics_provider_lrclib),
@@ -42,7 +42,20 @@ fun LyricsSettings(navController: NavController, scrollBehavior: TopAppBarScroll
             { EnumListPreference(title = { Text("Text position") }, icon = { Icon(painterResource(R.drawable.lyrics), null) }, selectedValue = position, onValueSelected = setPosition, valueText = { it.name.lowercase().replaceFirstChar(Char::uppercase) }) },
             { SwitchPreference(title = { Text("Tap lyrics to seek") }, icon = { Icon(painterResource(R.drawable.lyrics), null) }, checked = clickToSeek, onCheckedChange = setClickToSeek) },
             { SwitchPreference(title = { Text("Animate lyrics") }, icon = { Icon(painterResource(R.drawable.lyrics), null) }, checked = animate, onCheckedChange = setAnimate) },
-            { SwitchPreference(title = { Text("Enhanced lyrics screen") }, icon = { Icon(painterResource(R.drawable.lyrics), null) }, checked = newScreen, onCheckedChange = setNewScreen) },
+            {
+                EnumListPreference(
+                    title = { Text("Lyrics Screen Style") },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    selectedValue = lyricsScreenStyle,
+                    onValueSelected = setLyricsScreenStyle,
+                    valueText = {
+                        when (it) {
+                            LyricsScreenStyle.LYRICS_1 -> "Lyrics 1 (Classic)"
+                            LyricsScreenStyle.LYRICS_2 -> "Lyrics 2 (Modern / Apple Style)"
+                        }
+                    }
+                )
+            },
         ))
         SettingsGeneralCategory(title = "Lookup order", items = listOf(
             { EnumListPreference(title = { Text("Prefer provider") }, icon = { Icon(painterResource(R.drawable.lyrics), null) }, selectedValue = preferred, onValueSelected = setPreferred, valueText = { it.displayName() + " first" }) },

@@ -532,12 +532,11 @@ fun AppearanceSettings(
                             onValueSelected = onNavBarStyleChange,
                             valueText = {
                                 when (it) {
-                                    NavBarStyle.CLASSIC -> "Classic"
+                                    NavBarStyle.NEW_CLASSIC -> "New Classic"
                                     NavBarStyle.LIQUID_GLASS -> "Liquid Glass"
                                     NavBarStyle.SPOTIFY -> "Spotify"
                                     NavBarStyle.APPLE -> "Apple"
                                     NavBarStyle.NEON -> "Neon"
-                                    NavBarStyle.NEW_CLASSIC -> "New Classic"
                                 }
                             },
                         )},

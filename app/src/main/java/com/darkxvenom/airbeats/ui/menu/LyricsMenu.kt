@@ -3,13 +3,18 @@ package com.darkxvenom.airbeats.ui.menu
 import android.app.SearchManager
 import android.content.Intent
 import android.widget.Toast
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -811,40 +816,289 @@ fun LyricsMenu(
         }
     }
 
-    GridMenu(
-        contentPadding =
-            PaddingValues(
-                start = 8.dp,
-                top = 8.dp,
-                end = 8.dp,
-                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
-            ),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 16.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding())
     ) {
-        GridMenuItem(
-            icon = R.drawable.edit,
-            title = R.string.edit,
-        ) {
-            showEditDialog = true
+        // Drag handle indicator
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(vertical = 10.dp)
+                .size(width = 36.dp, height = 4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+        )
+
+        val mediaMetadata = mediaMetadataProvider()
+        val currentLyricsEntity = lyricsProvider()
+        val isSynced = currentLyricsEntity?.lyrics?.startsWith("[") == true
+        val isCached = remember(selectedTargetLanguage, mediaMetadata.id) {
+            LyricsTranslationHelper.hasCachedTranslation(context, mediaMetadata.id, selectedTargetLanguage)
         }
-        GridMenuItem(
-            icon = R.drawable.cached,
-            title = R.string.refetch,
+
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 14.dp)
         ) {
-            viewModel.refetchLyrics(mediaMetadataProvider(), lyricsProvider())
-            onLyricsUpdated()
-            onDismiss()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(if (hasTranslations || isCached) R.drawable.auto_awesome else R.drawable.lyrics),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = mediaMetadata.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Text(
+                            text = mediaMetadata.artists.joinToString { it.name }.ifBlank { "AirBeats" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = if (hasTranslations || isCached) MaterialTheme.colorScheme.primaryContainer else if (isSynced) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = if (hasTranslations || isCached) "Translated" else if (isSynced) "Synced" else "Plain",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (hasTranslations || isCached) MaterialTheme.colorScheme.onPrimaryContainer else if (isSynced) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
-        GridMenuItem(
-            icon = R.drawable.search,
-            title = R.string.search,
-        ) {
-            showSearchDialog = true
+
+        // Active Translation Banner with Quick Clear
+        if (hasTranslations || isCached) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.auto_awesome),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "AI Translation Active",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = AiTranslationLanguages[selectedTargetLanguage] ?: selectedTargetLanguage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            LyricsTranslationHelper.clearTranslations(context = context, songId = mediaMetadata.id)
+                            onLyricsUpdated()
+                            Toast.makeText(context, "Translation cleared", Toast.LENGTH_SHORT).show()
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.delete),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Clear",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
         }
-        GridMenuItem(
-            icon = R.drawable.translate,
-            title = R.string.Translate,
+
+        // Modern 2x2 Action Cards
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            showTranslateDialog = true
+            EnhancedMenuActionCard(
+                title = stringResource(R.string.Translate),
+                subtitle = if (hasTranslations || isCached) "Retranslate" else "AI Translation",
+                icon = R.drawable.translate,
+                isPrimary = true,
+                badge = if (hasTranslations || isCached) "Active" else "AI",
+                modifier = Modifier.weight(1f),
+                onClick = { showTranslateDialog = true }
+            )
+
+            EnhancedMenuActionCard(
+                title = stringResource(R.string.search),
+                subtitle = "Search online",
+                icon = R.drawable.search,
+                modifier = Modifier.weight(1f),
+                onClick = { showSearchDialog = true }
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            EnhancedMenuActionCard(
+                title = stringResource(R.string.refetch),
+                subtitle = "Reload lyrics",
+                icon = R.drawable.cached,
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    viewModel.refetchLyrics(mediaMetadataProvider(), lyricsProvider())
+                    onLyricsUpdated()
+                    onDismiss()
+                }
+            )
+
+            EnhancedMenuActionCard(
+                title = stringResource(R.string.edit),
+                subtitle = "Edit lyrics text",
+                icon = R.drawable.edit,
+                modifier = Modifier.weight(1f),
+                onClick = { showEditDialog = true }
+            )
+        }
+    }
+}
+
+@Composable
+private fun EnhancedMenuActionCard(
+    title: String,
+    subtitle: String,
+    @DrawableRes icon: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isPrimary: Boolean = false,
+    badge: String? = null,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isPrimary) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = if (isPrimary) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+        else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isPrimary) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(icon),
+                            contentDescription = null,
+                            tint = if (isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                if (badge != null) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = badge,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = if (isPrimary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

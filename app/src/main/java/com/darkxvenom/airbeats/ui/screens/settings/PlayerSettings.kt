@@ -25,6 +25,7 @@ import com.darkxvenom.airbeats.constants.AudioQualityKey
 import com.darkxvenom.airbeats.constants.AutoLoadMoreKey
 import com.darkxvenom.airbeats.constants.DownloadQualityKey
 import com.darkxvenom.airbeats.constants.AutoSkipNextOnErrorKey
+import com.darkxvenom.airbeats.constants.CrossfadeKey
 import com.darkxvenom.airbeats.constants.PermanentShuffleKey
 import com.darkxvenom.airbeats.constants.PersistentQueueKey
 import com.darkxvenom.airbeats.constants.SimilarContent
@@ -32,6 +33,7 @@ import com.darkxvenom.airbeats.constants.SkipSilenceKey
 import com.darkxvenom.airbeats.constants.SkipUncachedPartKey
 import com.darkxvenom.airbeats.constants.StopMusicOnTaskClearKey
 import com.darkxvenom.airbeats.ui.component.EnumListPreference
+import com.darkxvenom.airbeats.ui.component.ListPreference
 import com.darkxvenom.airbeats.ui.component.IconButton
 import com.darkxvenom.airbeats.ui.component.PreferenceGroupTitle
 import com.darkxvenom.airbeats.ui.component.SettingsGeneralCategory
@@ -90,6 +92,10 @@ fun PlayerSettings(
     val (stopMusicOnTaskClear, onStopMusicOnTaskClearChange) = rememberPreference(
         StopMusicOnTaskClearKey,
         defaultValue = false
+    )
+    val (crossfadeSeconds, onCrossfadeSecondsChange) = rememberPreference(
+        CrossfadeKey,
+        defaultValue = 0
     )
 
     SettingsPage(
@@ -153,6 +159,17 @@ fun PlayerSettings(
                     icon = { Icon(painterResource(R.drawable.volume_up), null) },
                     checked = audioNormalization,
                     onCheckedChange = onAudioNormalizationChange
+                )},
+
+                {ListPreference(
+                    title = { Text(stringResource(R.string.crossfade)) },
+                    icon = { Icon(painterResource(R.drawable.sync), null) },
+                    selectedValue = crossfadeSeconds,
+                    values = listOf(0, 2, 4, 6, 8, 10, 12),
+                    onValueSelected = onCrossfadeSecondsChange,
+                    valueText = { seconds ->
+                        if (seconds == 0) "Off" else "$seconds seconds"
+                    }
                 )},
             )
         )

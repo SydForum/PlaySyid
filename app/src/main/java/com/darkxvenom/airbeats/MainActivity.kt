@@ -203,7 +203,6 @@ import com.darkxvenom.airbeats.ui.component.AvatarSelection
 import com.darkxvenom.airbeats.ui.component.BottomSheet
 import com.darkxvenom.airbeats.ui.component.BottomSheetMenu
 import com.darkxvenom.airbeats.ui.component.IconButton
-import com.darkxvenom.airbeats.ui.component.CurvedBottomNavigationBar
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
 import com.darkxvenom.airbeats.constants.UseSystemFontKey
 import com.darkxvenom.airbeats.constants.AppFont
@@ -537,6 +536,7 @@ class MainActivity : ComponentActivity() {
             val homeScreenStyle by rememberEnumPreference(HomeScreenStyleKey, defaultValue = HomeScreenStyle.CLASSIC)
             val navBarStyle by rememberEnumPreference(NavBarStyleKey, defaultValue = NavBarStyle.APPLE)
             val enableNewLyricsScreen by rememberPreference(com.darkxvenom.airbeats.constants.EnableNewLyricsScreenKey, defaultValue = true)
+            val lyricsScreenStyle by rememberEnumPreference(com.darkxvenom.airbeats.constants.LyricsScreenStyleKey, defaultValue = com.darkxvenom.airbeats.constants.LyricsScreenStyle.LYRICS_2)
 
             val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
             val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
@@ -661,12 +661,11 @@ class MainActivity : ComponentActivity() {
 
                             val navigationItems = remember(homeScreenStyle, navBarStyle, enableLiquidGlass) { 
                                 when (navBarStyle) {
-                                    NavBarStyle.CLASSIC -> listOf(Screens.Home, Screens.Explore, Screens.Library)
                                     NavBarStyle.LIQUID_GLASS -> listOf(Screens.Home, Screens.Explore, Screens.Library)
                                     NavBarStyle.SPOTIFY -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
                                     NavBarStyle.APPLE -> listOf(Screens.Home, Screens.Stats, Screens.Explore, Screens.Library, Screens.Search)
                                     NavBarStyle.NEW_CLASSIC -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
-                                    else -> listOf(Screens.Home, Screens.Explore, Screens.Library)
+                                    else -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
                                 }
                             }
                             val (slimNav) = rememberPreference(SlimNavBarKey, defaultValue = false)
@@ -1305,7 +1304,7 @@ class MainActivity : ComponentActivity() {
                                                             },
                                                             modifier = Modifier.fillMaxSize()
                                                         )
-                                                    } else if (enableNewLyricsScreen && playerScreenStyle != PlayerScreenStyle.GALAXY) {
+                                                    } else if (lyricsScreenStyle == com.darkxvenom.airbeats.constants.LyricsScreenStyle.LYRICS_2 && playerScreenStyle != PlayerScreenStyle.GALAXY) {
                                                         com.darkxvenom.airbeats.ui.player.AirBeatsLyricsScreen(
                                                             mediaMetadata = mediaMetadata!!,
                                                             navController = navController,
@@ -1509,7 +1508,8 @@ class MainActivity : ComponentActivity() {
                                                                  .alpha(alpha)
                                                          )
                                                      } else {
-                                                         CurvedBottomNavigationBar(
+                                                          com.darkxvenom.airbeats.ui.component.NewClassicBottomNavigationBar(
+                                                              onNavigateRoute = { route -> navController.navigate(route) },
                                                              items = curvedItems,
                                                              selectedIndex = selectedIndex,
                                                              onItemSelected = onItemSelectedAction,

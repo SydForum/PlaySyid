@@ -52,7 +52,12 @@ enum class HomeScreenStyle {
 }
 
 enum class NavBarStyle {
-    CLASSIC, LIQUID_GLASS, SPOTIFY, APPLE, NEON, NEW_CLASSIC
+    LIQUID_GLASS, SPOTIFY, APPLE, NEON, NEW_CLASSIC
+}
+
+enum class LyricsScreenStyle {
+    LYRICS_1,
+    LYRICS_2
 }
 
 enum class PlayerScreenStyle {
@@ -193,6 +198,7 @@ val LyricFontSizeKey = intPreferencesKey("lyricFontSize")
 val fullScreenLyricsKey = booleanPreferencesKey("fullScreenLyrics")
 val AnimateLyricsKey = booleanPreferencesKey("animate_lyrics")
 val EnableNewLyricsScreenKey = booleanPreferencesKey("enable_new_lyrics_screen")
+val LyricsScreenStyleKey = stringPreferencesKey("lyrics_screen_style")
 
 
 val PlayPauseButtonShapeKey = stringPreferencesKey("playPauseButtonShape")

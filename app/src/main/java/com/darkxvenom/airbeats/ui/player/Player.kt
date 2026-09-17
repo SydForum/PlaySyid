@@ -870,7 +870,7 @@ fun BottomSheetPlayer(
 
     val navBarStyle by rememberEnumPreference(
         com.darkxvenom.airbeats.constants.NavBarStyleKey,
-        defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.CLASSIC
+        defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC
     )
     val isNeon = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.NEON
 
@@ -964,7 +964,7 @@ fun BottomSheetPlayer(
         collapsedContent = {
             val (navBarStyle, _) = com.darkxvenom.airbeats.utils.rememberEnumPreference<com.darkxvenom.airbeats.constants.NavBarStyle>(
                 com.darkxvenom.airbeats.constants.NavBarStyleKey,
-                defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.CLASSIC
+                defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC
             )
             if (navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC) {
                 NewClassicMiniPlayer(

@@ -119,7 +119,11 @@ fun AirBeatsLyricsScreen(
     val playerVolume = playerConnection.service.playerVolume.collectAsState()
     
     val currentLyrics by playerConnection.currentLyrics.collectAsState(initial = null)
-    val useLyricsV2 = true
+    val lyricsScreenStyle by rememberEnumPreference(
+        com.darkxvenom.airbeats.constants.LyricsScreenStyleKey,
+        com.darkxvenom.airbeats.constants.LyricsScreenStyle.LYRICS_2
+    )
+    val useLyricsV2 = lyricsScreenStyle == com.darkxvenom.airbeats.constants.LyricsScreenStyle.LYRICS_2
     val sliderStyle by rememberEnumPreference(SliderStyleKey, SliderStyle.SQUIGGLY)
 
     // Auto-fetch lyrics when no lyrics found (same logic as refetch)

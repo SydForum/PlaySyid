@@ -72,6 +72,7 @@ import com.darkxvenom.airbeats.constants.AudioNormalizationKey
 import com.darkxvenom.airbeats.constants.AudioQualityKey
 import com.darkxvenom.airbeats.constants.AutoLoadMoreKey
 import com.darkxvenom.airbeats.constants.AutoSkipNextOnErrorKey
+import com.darkxvenom.airbeats.constants.CrossfadeKey
 import com.darkxvenom.airbeats.constants.DisableLoadMoreWhenRepeatAllKey
 import com.darkxvenom.airbeats.constants.DiscordTokenKey
 import com.darkxvenom.airbeats.constants.DiscordUseDetailsKey
@@ -259,6 +260,11 @@ class MusicService :
         }
 
     val playerVolume = MutableStateFlow(dataStore.get(PlayerVolumeKey, 1f).coerceIn(0f, 1f))
+    private val audioFocusVolumeFactor = MutableStateFlow(1f)
+    private val playbackFadeFactor = MutableStateFlow(1f)
+    private val crossfadeDurationMs = MutableStateFlow(0)
+    private val audioNormalizationEnabled = MutableStateFlow(true)
+    private var crossfadeAudio: CrossfadeAudio? = null
 
     lateinit var sleepTimer: SleepTimer
 
@@ -386,9 +392,50 @@ class MusicService :
             }
         }
 
-        playerVolume.collectLatest(scope) {
-            player.volume = it
+        combine(playerVolume, audioFocusVolumeFactor, playbackFadeFactor) { vol, focus, fade ->
+            vol * focus * fade
+        }.collectLatest(scope) { finalVolume ->
+            player.volume = finalVolume
         }
+
+        dataStore.data
+            .map { (it[CrossfadeKey] ?: 0) * 1000 }
+            .distinctUntilChanged()
+            .collectLatest(scope) {
+                crossfadeDurationMs.value = it
+            }
+
+        crossfadeAudio =
+            CrossfadeAudio(
+                player = player,
+                database = database,
+                crossfadeDurationMs = crossfadeDurationMs,
+                playbackFadeFactor = playbackFadeFactor,
+                playerVolume = playerVolume,
+                audioFocusVolumeFactor = audioFocusVolumeFactor,
+                audioNormalizationEnabled = audioNormalizationEnabled,
+                overlapPlayerFactory = {
+                    ExoPlayer
+                        .Builder(this)
+                        .setMediaSourceFactory(createMediaSourceFactory())
+                        .setRenderersFactory(createRenderersFactory())
+                        .setHandleAudioBecomingNoisy(false)
+                        .setWakeMode(C.WAKE_MODE_NETWORK)
+                        .setAudioAttributes(
+                            AudioAttributes
+                                .Builder()
+                                .setUsage(C.USAGE_MEDIA)
+                                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                                .build(),
+                            false,
+                        ).setSeekBackIncrementMs(5000)
+                        .setSeekForwardIncrementMs(5000)
+                        .build()
+                },
+                onCrossfadeStart = { mediaItem ->
+                    currentMediaMetadata.value = mediaItem.metadata
+                }
+            ).also { it.start(scope) }
 
         playerVolume.debounce(1000).collect(scope) { volume ->
             dataStore.edit { settings ->
@@ -461,6 +508,7 @@ class MusicService :
         ) { format, normalizeAudio ->
             format to normalizeAudio
         }.collectLatest(scope) { (format, normalizeAudio) ->
+            audioNormalizationEnabled.value = normalizeAudio
             setupLoudnessEnhancer()
         }
 
@@ -601,7 +649,7 @@ class MusicService :
                     player.play()
                 }
 
-                player.volume = playerVolume.value
+                audioFocusVolumeFactor.value = 1f
                 lastAudioFocusState = focusChange
             }
 
@@ -639,7 +687,7 @@ class MusicService :
                 if (!isVoiceAssistantRunning) {
                     wasPlayingBeforeAudioFocusLoss = player.isPlaying
                     if (player.isPlaying) {
-                        player.volume = (playerVolume.value * 0.2f)
+                        audioFocusVolumeFactor.value = 0.2f
                     }
                 } else {
                     wasPlayingBeforeAudioFocusLoss = false
@@ -1377,6 +1425,7 @@ class MusicService :
         mediaItem: MediaItem?,
         reason: Int,
     ) {
+        crossfadeAudio?.onMediaItemTransition(mediaItem, reason)
         lastPlaybackSpeed = -1.0f // forzar actualización de canción
 
         flushPendingPlayTime(activeTrackingSongId)
@@ -1439,6 +1488,7 @@ class MusicService :
         }
 
         if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
+            crossfadeAudio?.stop(resetMainFade = true)
             playbackTrackingJob?.cancel()
             flushPendingPlayTime()
         }
@@ -1546,7 +1596,9 @@ class MusicService :
         }
 
         if (events.containsAny(EVENT_TIMELINE_CHANGED, EVENT_POSITION_DISCONTINUITY)) {
-            currentMediaMetadata.value = player.currentMetadata
+            if (crossfadeAudio?.isCrossfading() != true) {
+                currentMediaMetadata.value = player.currentMetadata
+            }
             // Forzar actualización de notificación para asegurar que la imagen se cargue
             scope.launch {
                 delay(200)
@@ -2133,6 +2185,10 @@ class MusicService :
         }
         discordRpc = null
         abandonAudioFocus()
+        try {
+            crossfadeAudio?.release()
+            crossfadeAudio = null
+        } catch (_: Exception) {}
         releaseLoudnessEnhancer()
         releaseEqualizer()
         mediaController?.release()

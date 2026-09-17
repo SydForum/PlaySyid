@@ -127,7 +127,7 @@ fun NavGraphBuilder.navigationBuilder(
     composable(Screens.Search.route) {
         val (navBarStyle, _) = rememberEnumPreference(
             com.darkxvenom.airbeats.constants.NavBarStyleKey,
-            defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.CLASSIC
+            defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC
         )
         val (homeScreenStyle, _) = rememberEnumPreference(
             HomeScreenStyleKey,
@@ -148,7 +148,7 @@ fun NavGraphBuilder.navigationBuilder(
     composable("search/") {
         val (navBarStyle, _) = rememberEnumPreference(
             com.darkxvenom.airbeats.constants.NavBarStyleKey,
-            defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.CLASSIC
+            defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC
         )
         val (homeScreenStyle, _) = rememberEnumPreference(
             HomeScreenStyleKey,
