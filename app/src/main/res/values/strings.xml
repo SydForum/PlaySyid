@@ -960,5 +960,33 @@
     <string name="ai_model">AI Model</string>
     <string name="ai_base_url">Custom Base URL</string>
     <string name="ai_api_key">API Key</string>
+
+    <!-- Lyrics Share Carousel Sheet -->
+    <string name="lyrics_share_layout">Layout</string>
+    <string name="lyrics_share_style">Style</string>
+    <string name="lyrics_share_customization">Customization</string>
+    <string name="lyrics_share_text_size">Text size</string>
+    <string name="lyrics_share_alignment">Alignment</string>
+    <string name="lyrics_align_left">Left</string>
+    <string name="lyrics_align_center">Center</string>
+    <string name="lyrics_align_right">Right</string>
+    <string name="lyrics_share_visibility">Visibility</string>
+    <string name="lyrics_share_show_title">Show title</string>
+    <string name="lyrics_share_show_artist">Show artist</string>
+    <string name="lyrics_share_show_cover_art">Show cover art</string>
+    <string name="lyrics_share_show_branding">Show branding</string>
+    <string name="lyrics_share_spacing">Spacing</string>
+    <string name="lyrics_layout_glass_card">Glass Card</string>
+    <string name="lyrics_layout_minimal">Minimal</string>
+    <string name="lyrics_layout_cover_focus">Cover Focus</string>
+    <string name="lyrics_layout_centered">Centered</string>
+    <string name="lyrics_layout_blur_wash">Blur Wash</string>
+    <string name="lyrics_layout_streaming">Streaming</string>
+    <string name="lyrics_glass_frosted_dark">Frosted Dark</string>
+    <string name="lyrics_glass_frosted_light">Frosted Light</string>
+    <string name="lyrics_glass_clear_glass">Clear Glass</string>
+    <string name="lyrics_glass_deep_blur">Deep Blur</string>
+    <string name="lyrics_glass_vivid_glow">Vivid Glow</string>
+    <string name="lyrics_glass_album_tint">Album Tint</string>
 </resources>
 
