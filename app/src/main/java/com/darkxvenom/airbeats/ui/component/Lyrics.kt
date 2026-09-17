@@ -145,6 +145,7 @@ import com.darkxvenom.airbeats.constants.DeeplApiKey
 import com.darkxvenom.airbeats.constants.OpenRouterApiKey
 import com.darkxvenom.airbeats.constants.OpenRouterBaseUrlKey
 import com.darkxvenom.airbeats.constants.OpenRouterModelKey
+import com.darkxvenom.airbeats.constants.ReplaceOriginalLyricsWithTranslationKey
 import com.darkxvenom.airbeats.constants.TranslateLanguageKey
 import com.darkxvenom.airbeats.constants.TranslateModeKey
 import com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper
@@ -281,6 +282,7 @@ fun Lyrics(
     val openRouterModel by rememberPreference(OpenRouterModelKey, defaultValue = "google/gemini-2.5-flash-lite")
     val translateMode by rememberPreference(TranslateModeKey, defaultValue = "Literal")
     val customPrompt by rememberPreference(CustomPromptKey, defaultValue = "")
+    val replaceOriginalLyrics by rememberPreference(ReplaceOriginalLyricsWithTranslationKey, defaultValue = false)
     val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
 
     val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
@@ -380,6 +382,13 @@ fun Lyrics(
             lyrics.lines().mapIndexed { index, line ->
                 LyricsEntry(index * 100L, line)
             }
+        }
+    }
+
+    DisposableEffect(lines) {
+        LyricsTranslationHelper.registerLyrics(lines)
+        onDispose {
+            LyricsTranslationHelper.unregisterLyrics(lines)
         }
     }
 
@@ -1334,6 +1343,10 @@ fun Lyrics(
                                         1.0f to expressiveAccent.copy(alpha = if (fill >= 1f) 1f else 0.3f)
                                     )
 
+                                    val translatedText by item.translatedTextFlow.collectAsState()
+                                    val showDirectTranslation = replaceOriginalLyrics && !translatedText.isNullOrBlank()
+                                    val displayText = if (showDirectTranslation) translatedText!! else item.text
+
                                     val styledText = buildAnnotatedString {
                                         withStyle(
                                             style = SpanStyle(
@@ -1345,7 +1358,7 @@ fun Lyrics(
                                                 brush = glowBrush
                                             )
                                         ) {
-                                            append(item.text)
+                                            append(displayText)
                                         }
                                     }
 
@@ -1371,6 +1384,10 @@ fun Lyrics(
                                             }
                                     )
                                 } else {
+                                    val translatedText by item.translatedTextFlow.collectAsState()
+                                    val showDirectTranslation = replaceOriginalLyrics && !translatedText.isNullOrBlank()
+                                    val displayText = if (showDirectTranslation) translatedText!! else item.text
+
                                     // Línea inactiva con color expresivo
                                     val lineColor = if (isFullscreen) {
                                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
@@ -1379,7 +1396,7 @@ fun Lyrics(
                                     }
 
                                     Text(
-                                        text = item.text,
+                                        text = displayText,
                                         fontSize = if (isFullscreen) 25.sp else 24.sp,
                                         color = animateColorAsState(
                                             targetValue = lineColor,
@@ -1394,9 +1411,10 @@ fun Lyrics(
                                     )
                                 }
 
-                                // ── AI Lyrics Translation ──
+                                // ── AI Lyrics Translation (subtitle - only if NOT replacing original) ──
                                 val translatedText by item.translatedTextFlow.collectAsState()
-                                if (!translatedText.isNullOrBlank()) {
+                                val showDirectTranslation = replaceOriginalLyrics && !translatedText.isNullOrBlank()
+                                if (!showDirectTranslation && !translatedText.isNullOrBlank()) {
                                     Text(
                                         text = translatedText!!,
                                         fontSize = if (isFullscreen) 16.sp else 15.sp,

@@ -45,6 +45,7 @@ import com.darkxvenom.airbeats.constants.AiTranslationLanguages
 import com.darkxvenom.airbeats.constants.OpenRouterApiKey
 import com.darkxvenom.airbeats.constants.OpenRouterBaseUrlKey
 import com.darkxvenom.airbeats.constants.OpenRouterModelKey
+import com.darkxvenom.airbeats.constants.ReplaceOriginalLyricsWithTranslationKey
 import com.darkxvenom.airbeats.constants.TranslateLanguageKey
 import com.darkxvenom.airbeats.constants.TranslateModeKey
 import com.darkxvenom.airbeats.ui.component.EditTextPreference
@@ -72,6 +73,7 @@ fun AiSettings(
     var translateMode by rememberPreference(TranslateModeKey, "Literal")
     var customPrompt by rememberPreference(CustomPromptKey, "")
     var autoTranslate by rememberPreference(AutoTranslateKey, false)
+    var replaceOriginalLyrics by rememberPreference(ReplaceOriginalLyricsWithTranslationKey, false)
     var deeplApiKey by rememberPreference(DeeplApiKey, "")
 
     val aiProviders = listOf("OpenRouter", "OpenAI", "Groq", "Gemini", "Claude", "DeepL", "Custom")
@@ -428,6 +430,15 @@ fun AiSettings(
                         icon = { Icon(painterResource(R.drawable.cached), contentDescription = null) },
                         checked = autoTranslate,
                         onCheckedChange = { autoTranslate = it }
+                    )
+                },
+                {
+                    SwitchPreference(
+                        title = { Text("Replace Original Lyrics") },
+                        description = "Show translated lyrics directly with sync timing instead of subtitles",
+                        icon = { Icon(painterResource(R.drawable.sync), contentDescription = null) },
+                        checked = replaceOriginalLyrics,
+                        onCheckedChange = { replaceOriginalLyrics = it }
                     )
                 }
             )

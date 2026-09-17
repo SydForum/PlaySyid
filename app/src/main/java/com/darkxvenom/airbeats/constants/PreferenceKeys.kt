@@ -646,6 +646,7 @@ val TranslateLanguageKey = stringPreferencesKey("translateLanguage")
 val TranslateModeKey = stringPreferencesKey("translateMode")
 val CustomPromptKey = stringPreferencesKey("customPrompt")
 val AutoTranslateKey = booleanPreferencesKey("autoTranslate")
+val ReplaceOriginalLyricsWithTranslationKey = booleanPreferencesKey("replaceOriginalLyricsWithTranslation")
 val DeeplApiKey = stringPreferencesKey("deeplApiKey")
 val DeeplFormalityKey = stringPreferencesKey("deeplFormality")
 

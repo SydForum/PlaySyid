@@ -107,6 +107,7 @@ import com.darkxvenom.airbeats.constants.DeeplApiKey
 import com.darkxvenom.airbeats.constants.OpenRouterApiKey
 import com.darkxvenom.airbeats.constants.OpenRouterBaseUrlKey
 import com.darkxvenom.airbeats.constants.OpenRouterModelKey
+import com.darkxvenom.airbeats.constants.ReplaceOriginalLyricsWithTranslationKey
 import com.darkxvenom.airbeats.constants.TranslateLanguageKey
 import com.darkxvenom.airbeats.constants.TranslateModeKey
 import com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper
@@ -199,6 +200,7 @@ fun LyricsV2(
     val (openRouterModel) = rememberPreference(OpenRouterModelKey, defaultValue = "google/gemini-2.5-flash-lite")
     val (translateMode) = rememberPreference(TranslateModeKey, defaultValue = "Literal")
     val (customPrompt) = rememberPreference(CustomPromptKey, defaultValue = "")
+    val (replaceOriginalLyrics) = rememberPreference(ReplaceOriginalLyricsWithTranslationKey, defaultValue = false)
     val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
 
     // ── Text colour derived from background style ──
@@ -333,6 +335,13 @@ fun LyricsV2(
                 }
                 entry.copy(words = words)
             }
+        }
+    }
+
+    DisposableEffect(entriesWithWords) {
+        LyricsTranslationHelper.registerLyrics(entriesWithWords)
+        onDispose {
+            LyricsTranslationHelper.unregisterLyrics(entriesWithWords)
         }
     }
 
@@ -614,7 +623,10 @@ fun LyricsV2(
                         ),
                     horizontalAlignment = horizontalAlignment,
                 ) {
-                    if (item.words != null && isSynced) {
+                    val translatedText by item.translatedTextFlow.collectAsState()
+                    val showDirectTranslation = replaceOriginalLyrics && !translatedText.isNullOrBlank()
+
+                    if (item.words != null && isSynced && !showDirectTranslation) {
                         // ── Word-synced rendering ──
                         LyricsLineV2(
                             words = item.words!!,
@@ -631,7 +643,7 @@ fun LyricsV2(
                     } else {
                         // ── Plain text rendering ──
                         Text(
-                            text = item.text,
+                            text = if (showDirectTranslation) translatedText!! else item.text,
                             style = MaterialTheme.typography.headlineMedium.copy(
                                 fontSize = if (isAllBackground) (lyricsTextSize * 0.82f).sp else lyricsTextSize.sp,
                                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
@@ -647,7 +659,7 @@ fun LyricsV2(
 
                     // ── Romanization ──
                     val romanizedText by item.romanizedTextFlow.collectAsState()
-                    if (romanizedText != null) {
+                    if (!showDirectTranslation && romanizedText != null) {
                         Text(
                             text = romanizedText!!,
                             style = MaterialTheme.typography.bodyMedium.copy(
@@ -666,8 +678,7 @@ fun LyricsV2(
                     }
 
                     // ── AI Lyrics Translation ──
-                    val translatedText by item.translatedTextFlow.collectAsState()
-                    if (!translatedText.isNullOrBlank()) {
+                    if (!showDirectTranslation && !translatedText.isNullOrBlank()) {
                         Text(
                             text = translatedText!!,
                             style = MaterialTheme.typography.bodyMedium.copy(

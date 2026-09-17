@@ -927,5 +927,7 @@
     <string name="retranslate">Re-translate</string>
     <string name="ai_settings">AI Settings</string>
     <string name="api_key_required_desc">Configure your AI provider and API key in AI settings to enable lyrics translation.</string>
+    <string name="replace_original_lyrics">Replace original lyrics</string>
+    <string name="replace_original_lyrics_desc">Show translated lyrics directly with sync timing instead of subtitles</string>
 </resources>
 

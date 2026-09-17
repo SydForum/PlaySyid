@@ -65,9 +65,14 @@ import androidx.palette.graphics.Palette
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.runtime.DisposableEffect
 import com.darkxvenom.airbeats.LocalDatabase
 import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
+import com.darkxvenom.airbeats.constants.ReplaceOriginalLyricsWithTranslationKey
+import com.darkxvenom.airbeats.constants.TranslateLanguageKey
+import com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper
+import com.darkxvenom.airbeats.utils.rememberPreference
 import com.darkxvenom.airbeats.db.entities.LyricsEntity
 import com.darkxvenom.airbeats.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.darkxvenom.airbeats.extensions.togglePlayPause
@@ -127,6 +132,28 @@ fun SpotifyLyrics(
                 .mapIndexed { index, line -> LyricsEntry(index * 2500L, line) }
         }
     }
+    val replaceOriginalLyrics by rememberPreference(ReplaceOriginalLyricsWithTranslationKey, false)
+    val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
+    val targetLanguage by rememberPreference(TranslateLanguageKey, "hi-Latn")
+
+    DisposableEffect(lines) {
+        LyricsTranslationHelper.registerLyrics(lines)
+        onDispose {
+            LyricsTranslationHelper.unregisterLyrics(lines)
+        }
+    }
+
+    LaunchedEffect(lines, mediaMetadata?.id, targetLanguage, translationVersion) {
+        val songId = mediaMetadata?.id ?: return@LaunchedEffect
+        if (lines.isEmpty()) return@LaunchedEffect
+        LyricsTranslationHelper.loadTranslationsFromCache(
+            lyrics = lines,
+            context = context,
+            songId = songId,
+            targetLanguageCode = targetLanguage
+        )
+    }
+
     val activeLineIndex = remember(lines, position) {
         lines.indexOfLast { it.time <= position }.coerceAtLeast(0)
     }
@@ -301,8 +328,11 @@ fun SpotifyLyrics(
                         items(lines.size) { index ->
                             val isCurrent = index == activeLineIndex
                             val isPast = index < activeLineIndex
+                            val item = lines[index]
+                            val translatedText by item.translatedTextFlow.collectAsState()
+                            val displayText = if (replaceOriginalLyrics && !translatedText.isNullOrBlank()) translatedText!! else item.text
                             Text(
-                                text = lines[index].text,
+                                text = displayText,
                                 style = if (isCurrent) {
                                     MaterialTheme.typography.displaySmall.copy(fontFamily = SpotifyLyricsFontFamily, fontSize = 34.sp, fontWeight = FontWeight.Bold)
                                 } else {
@@ -316,8 +346,8 @@ fun SpotifyLyrics(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable(enabled = lines[index].time > 0) {
-                                        playerConnection.player.seekTo(lines[index].time)
+                                    .clickable(enabled = item.time > 0) {
+                                        playerConnection.player.seekTo(item.time)
                                     }
                             )
                         }

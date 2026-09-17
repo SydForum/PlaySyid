@@ -66,6 +66,18 @@ object LyricsTranslationHelper {
         }
     }
 
+    private var activeLyricsList: List<LyricsEntry>? = null
+
+    fun registerLyrics(lyrics: List<LyricsEntry>) {
+        activeLyricsList = lyrics
+    }
+
+    fun unregisterLyrics(lyrics: List<LyricsEntry>) {
+        if (activeLyricsList === lyrics) {
+            activeLyricsList = null
+        }
+    }
+
     fun isTranslating(): Boolean = _status.value is TranslationStatus.Translating
 
     fun cancelTranslation() {
@@ -80,17 +92,19 @@ object LyricsTranslationHelper {
 
     fun clearTranslations(lyrics: List<LyricsEntry>? = null, context: Context? = null, songId: String? = null) {
         cancelTranslation()
-        lyrics?.forEach { it.translatedTextFlow.value = null }
+        val targetLyrics = lyrics ?: activeLyricsList
+        targetLyrics?.forEach { it.translatedTextFlow.value = null }
         _hasActiveTranslations.value = false
         _status.value = TranslationStatus.Idle
 
         if (context != null && !songId.isNullOrBlank()) {
             runCatching {
-                val lang = _currentLanguageCode.value
-                val file = getCacheFile(context, songId, lang)
-                if (file.exists()) file.delete()
+                val dir = File(context.filesDir, "lyrics_translations")
+                val safeSongId = songId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                dir.listFiles { _, name -> name.startsWith("${safeSongId}_") }?.forEach { it.delete() }
             }
         }
+        memoryCache.clear()
         _translationVersion.value += 1
     }
 
@@ -100,6 +114,7 @@ object LyricsTranslationHelper {
         songId: String,
         targetLanguageCode: String
     ): Boolean {
+        registerLyrics(lyrics)
         _currentLanguageCode.value = targetLanguageCode
         val nonEmptyEntries = lyrics.mapIndexedNotNull { index, entry ->
             if (entry.text.isNotBlank()) index to entry else null
@@ -162,11 +177,14 @@ object LyricsTranslationHelper {
 
         val targetEntries = if (!lyrics.isNullOrEmpty()) {
             lyrics
+        } else if (!activeLyricsList.isNullOrEmpty()) {
+            activeLyricsList!!
         } else if (!rawLyrics.isNullOrBlank()) {
             parseLyricsToEntries(rawLyrics)
         } else {
             emptyList()
         }
+        registerLyrics(targetEntries)
 
         val nonEmptyEntries = targetEntries.mapIndexedNotNull { index, entry ->
             if (entry.text.isNotBlank()) index to entry else null

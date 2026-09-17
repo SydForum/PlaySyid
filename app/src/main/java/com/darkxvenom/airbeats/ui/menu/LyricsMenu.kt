@@ -25,8 +25,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -67,6 +70,7 @@ import com.darkxvenom.airbeats.constants.AiTranslationLanguages
 import com.darkxvenom.airbeats.constants.OpenRouterApiKey
 import com.darkxvenom.airbeats.constants.OpenRouterBaseUrlKey
 import com.darkxvenom.airbeats.constants.OpenRouterModelKey
+import com.darkxvenom.airbeats.constants.ReplaceOriginalLyricsWithTranslationKey
 import com.darkxvenom.airbeats.constants.TranslateLanguageKey
 import com.darkxvenom.airbeats.constants.TranslateModeKey
 import com.darkxvenom.airbeats.db.entities.LyricsEntity
@@ -104,6 +108,7 @@ fun LyricsMenu(
 
     var selectedTargetLanguage by rememberPreference(TranslateLanguageKey, "hi-Latn")
     var customPromptText by rememberPreference(CustomPromptKey, "")
+    var replaceOriginalLyrics by rememberPreference(ReplaceOriginalLyricsWithTranslationKey, false)
 
     val hasApiKey = if (aiProvider == "DeepL") deeplApiKey.isNotBlank() else openRouterApiKey.isNotBlank()
 
@@ -460,62 +465,73 @@ fun LyricsMenu(
             },
             title = { Text(stringResource(R.string.lyrics_translation)) },
             buttons = {
-                TextButton(
-                    onClick = { showTranslateDialog = false }
-                ) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-
-                if (hasTranslations || isCached) {
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
+                if (translationStatus is LyricsTranslationHelper.TranslationStatus.Success) {
+                    Button(
                         onClick = {
-                            LyricsTranslationHelper.clearTranslations(
-                                context = context,
-                                songId = mediaMetadataProvider().id
-                            )
-                            Toast.makeText(context, "Translation cleared", Toast.LENGTH_SHORT).show()
+                            LyricsTranslationHelper.resetStatus()
                             showTranslateDialog = false
                         }
                     ) {
-                        Text(
-                            stringResource(R.string.clear_translation),
-                            color = MaterialTheme.colorScheme.error
-                        )
+                        Text(stringResource(R.string.done))
                     }
-                }
+                } else {
+                    TextButton(
+                        onClick = { showTranslateDialog = false }
+                    ) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
 
-                Spacer(Modifier.width(8.dp))
-
-                TextButton(
-                    enabled = !isTranslating && rawLyrics.isNotBlank(),
-                    onClick = {
-                        if (!hasApiKey) {
-                            showTranslateDialog = false
-                            onDismiss()
-                            navController?.navigate("settings/ai")
-                            Toast.makeText(context, "Please configure your AI API key first", Toast.LENGTH_LONG).show()
-                            return@TextButton
+                    if (hasTranslations || isCached) {
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(
+                            onClick = {
+                                LyricsTranslationHelper.clearTranslations(
+                                    context = context,
+                                    songId = mediaMetadataProvider().id
+                                )
+                                Toast.makeText(context, "Translation cleared", Toast.LENGTH_SHORT).show()
+                                showTranslateDialog = false
+                            }
+                        ) {
+                            Text(
+                                stringResource(R.string.clear_translation),
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
+                    }
 
-                        LyricsTranslationHelper.translateLyrics(
-                            rawLyrics = rawLyrics,
-                            targetLanguageCode = selectedTargetLanguage,
-                            apiKey = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey,
-                            baseUrl = openRouterBaseUrl,
-                            model = openRouterModel,
-                            mode = translateMode,
-                            customPrompt = customPromptText.takeIf { it.isNotBlank() },
-                            provider = aiProvider,
-                            context = context,
-                            songId = mediaMetadataProvider().id,
-                            scope = coroutineScope
+                    Spacer(Modifier.width(8.dp))
+
+                    TextButton(
+                        enabled = !isTranslating && rawLyrics.isNotBlank(),
+                        onClick = {
+                            if (!hasApiKey) {
+                                showTranslateDialog = false
+                                onDismiss()
+                                navController?.navigate("settings/ai")
+                                Toast.makeText(context, "Please configure your AI API key first", Toast.LENGTH_LONG).show()
+                                return@TextButton
+                            }
+
+                            LyricsTranslationHelper.translateLyrics(
+                                rawLyrics = rawLyrics,
+                                targetLanguageCode = selectedTargetLanguage,
+                                apiKey = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey,
+                                baseUrl = openRouterBaseUrl,
+                                model = openRouterModel,
+                                mode = translateMode,
+                                customPrompt = customPromptText.takeIf { it.isNotBlank() },
+                                provider = aiProvider,
+                                context = context,
+                                songId = mediaMetadataProvider().id,
+                                scope = coroutineScope
+                            )
+                        }
+                    ) {
+                        Text(
+                            if (hasTranslations || isCached) stringResource(R.string.retranslate) else stringResource(R.string.Translate)
                         )
                     }
-                ) {
-                    Text(
-                        if (hasTranslations || isCached) stringResource(R.string.retranslate) else stringResource(R.string.Translate)
-                    )
                 }
             }
         ) {
@@ -626,6 +642,43 @@ fun LyricsMenu(
 
                 Spacer(Modifier.height(12.dp))
 
+                // Replace Original Lyrics Checkmark / Toggle
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { replaceOriginalLyrics = !replaceOriginalLyrics }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = replaceOriginalLyrics,
+                            onCheckedChange = { replaceOriginalLyrics = it },
+                            colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.replace_original_lyrics),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = stringResource(R.string.replace_original_lyrics_desc),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
                 // Status & Progress Feedback
                 when (val status = translationStatus) {
                     is LyricsTranslationHelper.TranslationStatus.Translating -> {
@@ -710,8 +763,19 @@ fun LyricsMenu(
                                 Text(
                                     text = "Translation applied successfully!",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                Button(
+                                    onClick = {
+                                        LyricsTranslationHelper.resetStatus()
+                                        showTranslateDialog = false
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(stringResource(R.string.done), style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }
