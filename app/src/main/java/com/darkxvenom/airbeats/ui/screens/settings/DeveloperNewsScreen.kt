@@ -46,11 +46,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -59,6 +60,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +68,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
@@ -96,7 +99,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DeveloperNewsScreen(
     navController: NavController,
@@ -104,6 +107,22 @@ fun DeveloperNewsScreen(
 ) {
     val newsList by DeveloperNewsManager.newsList.collectAsState()
     val isSyncing by DeveloperNewsManager.isSyncing.collectAsState()
+
+    var isInitialLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        isInitialLoading = true
+        DeveloperNewsManager.refresh()
+        delay(4000)
+        isInitialLoading = false
+    }
+
+    LaunchedEffect(isSyncing) {
+        if (!isSyncing && isInitialLoading) {
+            delay(250)
+            isInitialLoading = false
+        }
+    }
 
     val playerConnection = LocalPlayerConnection.current
     val mediaMetadata by playerConnection?.mediaMetadata?.collectAsState()
@@ -163,6 +182,7 @@ fun DeveloperNewsScreen(
                 DeveloperNewsListScreen(
                     newsList = filteredNews,
                     totalCount = newsList.size,
+                    isInitialLoading = isInitialLoading,
                     isSyncing = isSyncing,
                     rotation = rotation,
                     isSearchActive = isSearchActive,
@@ -182,11 +202,12 @@ fun DeveloperNewsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DeveloperNewsListScreen(
     newsList: List<DeveloperNewsItem>,
     totalCount: Int,
+    isInitialLoading: Boolean,
     isSyncing: Boolean,
     rotation: Float,
     isSearchActive: Boolean,
@@ -357,7 +378,26 @@ private fun DeveloperNewsListScreen(
                     )
                 )
         ) {
-            if (newsList.isEmpty()) {
+            if (isInitialLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        LoadingIndicator()
+                        Text(
+                            text = "Loading announcements...",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else if (newsList.isEmpty()) {
                 DeveloperNewsEmptyState(isSyncing = isSyncing, hasQuery = searchQuery.isNotBlank())
             } else {
                 LazyColumn(
@@ -1052,11 +1092,7 @@ private fun DeveloperNewsEmptyState(isSyncing: Boolean, hasQuery: Boolean = fals
             )
 
             if (isSyncing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(44.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp
-                )
+                LoadingIndicator()
             } else {
                 Icon(
                     painter = painterResource(R.drawable.newspaper),

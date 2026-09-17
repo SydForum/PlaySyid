@@ -37,8 +37,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.pullToRefresh
@@ -464,6 +466,7 @@ fun AppleSectionTitle(title: String) {
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppleHomeScreen(
     navController: NavController,
@@ -475,6 +478,7 @@ fun AppleHomeScreen(
     val accountPlaylists by viewModel.accountPlaylists.collectAsState()
     val similarRecommendations by viewModel.similarRecommendations.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
     
     val accountImageUrl by viewModel.accountImageUrl.collectAsState()
     val innerTubeCookie by com.darkxvenom.airbeats.utils.rememberPreference(com.darkxvenom.airbeats.constants.InnerTubeCookieKey, "")
@@ -483,6 +487,12 @@ fun AppleHomeScreen(
     }
     val url = if (isLoggedIn) accountImageUrl else null
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+
+    val isContentEmpty = (quickPicks == null || quickPicks?.isEmpty() == true) &&
+        (accountPlaylists == null || accountPlaylists?.isEmpty() == true) &&
+        (forgottenFavorites == null || forgottenFavorites?.isEmpty() == true) &&
+        similarRecommendations.isNullOrEmpty() &&
+        homePage?.sections.isNullOrEmpty()
     
     AppleScaffold(
         title = "Listen Now",
@@ -491,6 +501,19 @@ fun AppleHomeScreen(
         isRefreshing = isRefreshing,
         onRefresh = viewModel::refresh
     ) {
+        if (isLoading && isContentEmpty) {
+            item(key = "apple_home_center_loading") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillParentMaxHeight(0.6f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LoadingIndicator()
+                }
+            }
+        }
+
         quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
             item {
                 AppleSectionTitle("Made for You")
@@ -525,9 +548,23 @@ fun AppleHomeScreen(
                 AppleYtRow(section.items.take(12), navController, playerConnection)
             }
         }
+
+        if (isLoading && !isContentEmpty) {
+            item(key = "apple_home_bottom_loading") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LoadingIndicator()
+                }
+            }
+        }
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppleExploreScreen(
     navController: NavController,
@@ -538,10 +575,25 @@ fun AppleExploreScreen(
     val explorePage by homeViewModel.explorePage.collectAsState()
     val playerConnection = LocalPlayerConnection.current ?: return
 
+    val isExploringLoading = (explorePage == null || explorePage?.newReleaseAlbums.isNullOrEmpty()) && moodAndGenres.isNullOrEmpty()
+
     AppleScaffold(
         title = "Browse",
         navController = navController
     ) {
+        if (isExploringLoading) {
+            item(key = "apple_explore_loading") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillParentMaxHeight(0.6f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LoadingIndicator()
+                }
+            }
+        }
+
         item {
             AppleSectionTitle("New releases")
             AppleYtRow(explorePage?.newReleaseAlbums.orEmpty(), navController, playerConnection)

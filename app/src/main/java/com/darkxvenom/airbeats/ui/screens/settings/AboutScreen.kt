@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.*
@@ -357,7 +359,7 @@ fun SocialIconRow(uriHandler: UriHandler) {
 
 // ==================== MAIN ABOUT SCREEN ====================
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AboutScreen(
     navController: NavController,
@@ -700,10 +702,14 @@ fun AboutScreen(
                     // Dynamic Contributors Section
 
                     if (isLoadingContributors) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(16.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            LoadingIndicator()
+                        }
                     } else if (contributors.isNotEmpty()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(painterResource(R.drawable.github), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
