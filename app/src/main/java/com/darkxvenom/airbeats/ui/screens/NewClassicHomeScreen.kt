@@ -59,11 +59,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -444,14 +449,30 @@ private fun NewClassicHeroSection(
     onPlayNowClick: () -> Unit,
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val heroHeight = 420.dp + statusBarHeight
+    val heroHeight = (configuration.screenHeightDp.dp * 0.58f).coerceAtLeast(490.dp) + statusBarHeight
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(heroHeight)
     ) {
+        // Layer 1: Ambient blurred glow backdrop from the thumbnail
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(heroData.thumbnailUrl)
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .scale(1.28f)
+                .blur(32.dp)
+        )
+
+        // Layer 2: Main sharp zoomed image, fading smoothly into the blur at the middle
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(heroData.thumbnailUrl)
@@ -459,35 +480,43 @@ private fun NewClassicHeroSection(
                 .build(),
             contentDescription = heroData.title,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-
-        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .blur(22.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.35f to Color.Transparent,
-                        0.60f to Color.Black.copy(alpha = 0.55f),
-                        0.85f to Color.Black.copy(alpha = 0.95f),
-                        1.0f to Color.Black
+                .scale(1.16f)
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithCache {
+                    val alphaMask = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.0f to Color.Black,
+                            0.42f to Color.Black,
+                            0.74f to Color.Transparent,
+                            1.0f to Color.Transparent
+                        )
                     )
-                )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(brush = alphaMask, blendMode = BlendMode.DstIn)
+                    }
+                }
         )
 
+        // Layer 3: Master vignette & seamless gradient dissolve into pure black
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to Color.Black.copy(alpha = 0.55f),
-                        0.25f to Color.Black.copy(alpha = 0.2f),
-                        0.50f to Color.Transparent,
-                        0.72f to Color.Black.copy(alpha = 0.65f),
-                        0.92f to Color.Black.copy(alpha = 0.95f),
-                        1.0f to Color.Black
+                        colorStops = arrayOf(
+                            0.0f to Color.Black.copy(alpha = 0.55f),
+                            0.14f to Color.Black.copy(alpha = 0.12f),
+                            0.30f to Color.Transparent,
+                            0.48f to Color.Transparent,
+                            0.64f to Color.Black.copy(alpha = 0.40f),
+                            0.76f to Color.Black.copy(alpha = 0.72f),
+                            0.88f to Color.Black.copy(alpha = 0.94f),
+                            0.94f to Color.Black,
+                            1.0f to Color.Black
+                        )
                     )
                 )
         )
