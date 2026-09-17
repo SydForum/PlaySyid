@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -113,7 +114,11 @@ private val NewClassicTextSecondary = Color(0xFF909AA8)
 private val NewClassicSeeAllBg = Color(0xFF1C1C1C)
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class,
+    ExperimentalMaterial3ExpressiveApi::class
+)
 @Composable
 fun NewClassicHomeScreen(
     navController: NavController,
@@ -424,10 +429,14 @@ fun NewClassicHomeScreen(
             }
         }
 
-        PullToRefreshDefaults.Indicator(
-            state = pullRefreshState,
+        PullToRefreshDefaults.LoadingIndicator(
             isRefreshing = isRefreshing,
-            modifier = Modifier.align(Alignment.TopCenter)
+            state = pullRefreshState,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues()),
         )
     }
 }
