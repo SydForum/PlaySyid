@@ -72,6 +72,12 @@ android {
     buildTypes {
         create("nightly") {
             initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            signingConfig = if (!localSigningFile.isNullOrBlank() && file(localSigningFile).exists()) {
+                signingConfigs.getByName("flappy")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             buildConfigField("boolean", "IS_NIGHTLY", "true")
             isMinifyEnabled = true
             isShrinkResources = true
