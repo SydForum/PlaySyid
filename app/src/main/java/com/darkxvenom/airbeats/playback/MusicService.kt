@@ -95,6 +95,7 @@ import com.darkxvenom.airbeats.constants.SkipUncachedPartKey
 import com.darkxvenom.airbeats.constants.StopMusicOnTaskClearKey
 import com.darkxvenom.airbeats.db.MusicDatabase
 import com.darkxvenom.airbeats.db.entities.Event
+import com.darkxvenom.airbeats.db.entities.SongEntity
 import com.darkxvenom.airbeats.db.entities.FormatEntity
 import com.darkxvenom.airbeats.db.entities.LyricsEntity
 import com.darkxvenom.airbeats.db.entities.RelatedSongMap
@@ -1920,8 +1921,11 @@ class MusicService :
         eventTime: AnalyticsListener.EventTime,
         playbackStats: PlaybackStats,
     ) {
-        val mediaItem =
-            eventTime.timeline.getWindow(eventTime.windowIndex, Timeline.Window()).mediaItem
+        val mediaItem = tryOrNull {
+            if (!eventTime.timeline.isEmpty && eventTime.windowIndex in 0 until eventTime.timeline.windowCount) {
+                eventTime.timeline.getWindow(eventTime.windowIndex, Timeline.Window()).mediaItem
+            } else null
+        } ?: player.currentMediaItem ?: return
 
         if (playbackStats.totalPlayTimeMs >= (
                     dataStore[HistoryDuration]?.times(1000f)
@@ -1930,8 +1934,20 @@ class MusicService :
             !dataStore.get(PauseListenHistoryKey, false)
         ) {
             database.query {
-                incrementTotalPlayTime(mediaItem.mediaId, playbackStats.totalPlayTimeMs)
                 try {
+                    val meta = mediaItem.metadata
+                    if (meta != null) {
+                        insert(meta)
+                    } else {
+                        insert(
+                            SongEntity(
+                                id = mediaItem.mediaId,
+                                title = mediaItem.mediaMetadata.title?.toString() ?: "Unknown",
+                                thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString(),
+                            ),
+                        )
+                    }
+                    incrementTotalPlayTime(mediaItem.mediaId, playbackStats.totalPlayTimeMs)
                     insert(
                         Event(
                             songId = mediaItem.mediaId,
@@ -1939,7 +1955,8 @@ class MusicService :
                             playTime = playbackStats.totalPlayTimeMs,
                         ),
                     )
-                } catch (_: SQLException) {
+                } catch (e: Exception) {
+                    reportException(e)
                 }
             }
             val PauseRemoteListenHistoryKey = booleanPreferencesKey("pauseRemoteListenHistory")

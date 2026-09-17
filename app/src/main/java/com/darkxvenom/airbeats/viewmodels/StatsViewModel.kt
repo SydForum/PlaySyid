@@ -237,12 +237,50 @@ constructor(
         val currentName = runCatching { namePreferenceManager.userName.first().trim() }.getOrDefault("")
         globalStats.value = globalStats.value.copy(isLoading = true, error = null, currentUserName = currentName)
         val userId = AirBeatsStatsCloudSync.resolveStableUserId(context, namePreferenceManager, statsPreferences)
+
+        // Read leaderboard first to reconcile if cloud has recorded higher listen time than local DB
+        val boardResult = cloudClient.readBoard()
+        val initialBoard = boardResult.getOrNull()
+        if (initialBoard != null) {
+            val userNumber = AirBeatsStatsCloudSync.getUserNumber(context)
+            val matchedUser = initialBoard.users.firstOrNull { it.id == userId }
+                ?: (if (currentName.isNotBlank() && !currentName.equals("AirBeats User", ignoreCase = true))
+                    initialBoard.users.firstOrNull { it.name.trim().equals(currentName, ignoreCase = true) }
+                else null)
+                ?: (if (!userNumber.isNullOrBlank())
+                    initialBoard.users.firstOrNull { it.user == userNumber }
+                else null)
+
+            if (matchedUser != null) {
+                AirBeatsStatsCloudSync.reconcileCloudListenTime(
+                    database = database,
+                    cloudTotalListenMs = matchedUser.totalListenMs,
+                    cloudWeeklyListenMs = matchedUser.weeklyListenMs,
+                )
+            }
+        }
+
         if (forceUpload || shouldUploadToday()) {
             buildUpload(userId)?.let { upload ->
                 cloudClient
                     .uploadDaily(upload)
                     .onSuccess { board ->
                         statsPreferences.edit().putString(KEY_LAST_UPLOAD_DAY, LocalDate.now().toString()).apply()
+                        val userNumber = AirBeatsStatsCloudSync.getUserNumber(context)
+                        val matchedUser = board.users.firstOrNull { it.id == userId }
+                            ?: (if (currentName.isNotBlank() && !currentName.equals("AirBeats User", ignoreCase = true))
+                                board.users.firstOrNull { it.name.trim().equals(currentName, ignoreCase = true) }
+                            else null)
+                            ?: (if (!userNumber.isNullOrBlank())
+                                board.users.firstOrNull { it.user == userNumber }
+                            else null)
+                        if (matchedUser != null) {
+                            AirBeatsStatsCloudSync.reconcileCloudListenTime(
+                                database = database,
+                                cloudTotalListenMs = matchedUser.totalListenMs,
+                                cloudWeeklyListenMs = matchedUser.weeklyListenMs,
+                            )
+                        }
                         globalStats.value =
                             GlobalStatsUiState(
                                 isLoading = false,
@@ -258,25 +296,24 @@ constructor(
             }
         }
 
-        cloudClient
-            .readBoard()
-            .onSuccess { board ->
-                globalStats.value =
-                    GlobalStatsUiState(
-                        isLoading = false,
-                        board = board,
-                        currentUserId = userId,
-                        currentUserName = currentName,
-                    )
-            }.onFailure { error ->
-                globalStats.value =
-                    globalStats.value.copy(
-                        isLoading = false,
-                        error = error.message,
-                        currentUserId = userId,
-                        currentUserName = currentName,
-                    )
-            }
+        if (initialBoard != null) {
+            globalStats.value =
+                GlobalStatsUiState(
+                    isLoading = false,
+                    board = initialBoard,
+                    currentUserId = userId,
+                    currentUserName = currentName,
+                )
+        } else {
+            val error = boardResult.exceptionOrNull()
+            globalStats.value =
+                globalStats.value.copy(
+                    isLoading = false,
+                    error = error?.message,
+                    currentUserId = userId,
+                    currentUserName = currentName,
+                )
+        }
     }
 
     private suspend fun buildUpload(userId: String): LocalStatsUpload? {
@@ -327,6 +364,7 @@ constructor(
 
         return LocalStatsUpload(
             userId = userId,
+            user = AirBeatsStatsCloudSync.getUserNumber(context),
             name = name,
             profileUrl = profileUrl,
             email = email,
