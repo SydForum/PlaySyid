@@ -37,6 +37,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import javax.inject.Inject
 
+data class HeroPlaylistData(
+    val title: String,
+    val subtitle: String,
+    val tag: String,
+    val thumbnailUrl: String?,
+    val songs: List<Song>,
+    val playlistId: String? = null,
+)
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -62,6 +71,27 @@ class HomeViewModel @Inject constructor(
             if (playlist != null && playlist.songCount > 0) {
                 database.playlistSongs(playlist.playlist.id).map { playlistSongs ->
                     playlist to playlistSongs.map { it.song }
+                }
+            } else {
+                flowOf(null)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+
+    val heroPlaylist = database.playlists(com.darkxvenom.airbeats.constants.PlaylistSortType.LAST_UPDATED, descending = true)
+        .flatMapLatest { playlists ->
+            val topPlaylist = playlists.firstOrNull { it.songCount > 0 }
+            if (topPlaylist != null) {
+                database.playlistSongs(topPlaylist.playlist.id).map { playlistSongs ->
+                    val songs = playlistSongs.map { it.song }
+                    HeroPlaylistData(
+                        title = topPlaylist.playlist.name,
+                        subtitle = "Based on your last listening habits and artists...",
+                        tag = "TOP PLAYLIST",
+                        thumbnailUrl = topPlaylist.thumbnails.firstOrNull() ?: songs.firstOrNull()?.thumbnailUrl,
+                        songs = songs,
+                        playlistId = topPlaylist.playlist.id,
+                    )
                 }
             } else {
                 flowOf(null)

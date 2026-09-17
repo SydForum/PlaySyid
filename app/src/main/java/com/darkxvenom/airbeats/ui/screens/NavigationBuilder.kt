@@ -71,6 +71,8 @@ fun NavGraphBuilder.navigationBuilder(
             SpotifyHomeScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.APPLE) {
             com.darkxvenom.airbeats.ui.screens.apple.AppleHomeScreen(navController = navController)
+        } else if (homeScreenStyle == HomeScreenStyle.NEW_CLASSIC) {
+            NewClassicHomeScreen(navController = navController, onSearchClick = onSearchClick)
         } else {
             HomeScreen(navController = navController, onSearchClick = onSearchClick)
         }

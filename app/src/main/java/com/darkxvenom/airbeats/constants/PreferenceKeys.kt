@@ -48,7 +48,7 @@ enum class SliderStyle {
 }
 
 enum class HomeScreenStyle {
-    CLASSIC, PLAYFUL, SPOTIFY, APPLE
+    CLASSIC, PLAYFUL, SPOTIFY, APPLE, NEW_CLASSIC
 }
 
 enum class NavBarStyle {

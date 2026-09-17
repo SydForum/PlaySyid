@@ -517,6 +517,7 @@ fun AppearanceSettings(
                             onValueSelected = onHomeScreenStyleChange,
                             valueText = {
                                 when (it) {
+                                    HomeScreenStyle.NEW_CLASSIC -> "New Classic"
                                     HomeScreenStyle.CLASSIC -> "Classic"
                                     HomeScreenStyle.PLAYFUL -> "Playful"
                                     HomeScreenStyle.SPOTIFY -> "Spotify"
