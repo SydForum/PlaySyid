@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -890,9 +891,10 @@ private fun NewClassicHeroSection(
                     interactionSource = interactionSource,
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        containerColor = Color.White.copy(alpha = 0.10f),
+                        contentColor = Color.White
                     ),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
                     contentPadding = PaddingValues(horizontal = 28.dp, vertical = 11.dp),
                     modifier = Modifier
                         .scale(buttonScale)
@@ -904,16 +906,16 @@ private fun NewClassicHeroSection(
                         Icon(
                             painter = painterResource(R.drawable.play),
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
+                            tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "PLAY NOW",
                             style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Black,
+                                fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.8.sp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = Color.White
                             )
                         )
                     }
