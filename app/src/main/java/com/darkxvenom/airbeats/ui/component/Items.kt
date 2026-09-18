@@ -1220,8 +1220,12 @@ fun LibraryPlaylistFeatureCard(
         extractedGlowColor = withContext(Dispatchers.Default) { bitmap.extractThemeColor() }
     }
 
+    val isFrosted = isFrostedGlassUiEnabled()
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isFrosted) settingsCardContainerColor() else MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        border = if (isFrosted) settingsCardBorder() else null,
         shape = shape,
         modifier = modifier,
     ) {
@@ -1307,6 +1311,7 @@ fun LibraryHeroFavoriteTile(
     accentColor: Color = MaterialTheme.colorScheme.primary,
 ) {
     val animatedColor by animateColorAsState(accentColor, spring(), label = "heroPlaylistTile")
+    val isFrosted = isFrostedGlassUiEnabled()
 
     Card(
         shape = RoundedCornerShape(
@@ -1316,9 +1321,9 @@ fun LibraryHeroFavoriteTile(
             bottomStart = 38.dp
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            containerColor = if (isFrosted) settingsCardContainerColor() else MaterialTheme.colorScheme.surfaceContainerHigh
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        border = if (isFrosted) settingsCardBorder() else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
         modifier = modifier
     ) {
         Row(
@@ -1366,9 +1371,9 @@ fun LibraryHeroFavoriteTile(
                     },
                     shape = CircleShape,
                     colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        containerColor = if (isFrosted) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainerHighest
                     ),
-                    border = null,
+                    border = if (isFrosted) BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)) else null,
                     modifier = Modifier.height(24.dp)
                 )
 
@@ -1408,6 +1413,7 @@ fun LibraryPinnedCollectionTile(
     accentColor: Color = MaterialTheme.colorScheme.primary,
 ) {
     val animatedColor by animateColorAsState(accentColor, spring(), label = "pinnedPlaylistTile")
+    val isFrosted = isFrostedGlassUiEnabled()
 
     val expressiveCardShape = when (gridPosition) {
         GridPosition.LEFT -> RoundedCornerShape(
@@ -1428,9 +1434,9 @@ fun LibraryPinnedCollectionTile(
     Card(
         shape = expressiveCardShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = if (isFrosted) settingsCardContainerColor() else MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        border = if (isFrosted) settingsCardBorder() else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = modifier
     ) {
         Column(

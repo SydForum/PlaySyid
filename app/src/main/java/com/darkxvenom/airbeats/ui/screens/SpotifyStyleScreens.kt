@@ -1,6 +1,7 @@
 package com.darkxvenom.airbeats.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.togetherWith
@@ -1002,10 +1003,27 @@ private fun SpotifyChip(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val isFrosted = com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled()
+    val shape = RoundedCornerShape(32.dp)
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(32.dp))
-            .background(if (isSelected) SpotifyGreen else SpotifyText.copy(alpha = 0.12f))
+            .clip(shape)
+            .then(
+                if (isFrosted) {
+                    Modifier.border(
+                        1.dp,
+                        if (isSelected) SpotifyGreen.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.15f),
+                        shape
+                    )
+                } else Modifier
+            )
+            .background(
+                if (isSelected) {
+                    SpotifyGreen
+                } else {
+                    if (isFrosted) Color.White.copy(alpha = 0.08f) else SpotifyText.copy(alpha = 0.12f)
+                }
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {

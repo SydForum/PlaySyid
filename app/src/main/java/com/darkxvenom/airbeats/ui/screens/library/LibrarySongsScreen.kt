@@ -129,11 +129,21 @@ fun LibrarySongsScreen(
                 contentType = CONTENT_TYPE_HEADER,
             ) {
                 Row {
-                    Spacer(Modifier.width(12.dp))
+                    val isFrosted = com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled()
                     FilterChip(
                         label = { Text(stringResource(R.string.songs)) },
                         selected = true,
-                        colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface),
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = if (isFrosted) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                            selectedContainerColor = if (isFrosted) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface,
+                            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        border = if (isFrosted) {
+                            androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.35f))
+                        } else {
+                            FilterChipDefaults.filterChipBorder(enabled = true, selected = true)
+                        },
                         onClick = onDeselect,
                         shape = RoundedCornerShape(16.dp),
                         leadingIcon = {

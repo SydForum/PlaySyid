@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -665,10 +666,27 @@ fun AppleLibraryScreen(navController: NavController) {
                 )
                 items(filters) { (label, filter) ->
                     val isSelected = filterType == filter
+                    val isFrosted = com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled()
+                    val chipShape = RoundedCornerShape(8.dp)
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) AppleRed else AppleBg.copy(alpha = 0.3f))
+                            .clip(chipShape)
+                            .then(
+                                if (isFrosted) {
+                                    Modifier.border(
+                                        1.dp,
+                                        if (isSelected) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.15f),
+                                        chipShape
+                                    )
+                                } else Modifier
+                            )
+                            .background(
+                                if (isSelected) {
+                                    AppleRed
+                                } else {
+                                    if (isFrosted) Color.White.copy(alpha = 0.08f) else AppleBg.copy(alpha = 0.3f)
+                                }
+                            )
                             .clickable { filterType = filter }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {

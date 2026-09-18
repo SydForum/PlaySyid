@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -300,11 +301,21 @@ private fun SearchBar(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isFrosted = com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled()
+    val barShape = RoundedCornerShape(50.dp)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .clip(RoundedCornerShape(50.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f))
+            .clip(barShape)
+            .then(
+                if (isFrosted) {
+                    Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), barShape)
+                } else Modifier
+            )
+            .background(
+                if (isFrosted) Color.White.copy(alpha = 0.08f)
+                else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f)
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Icon(

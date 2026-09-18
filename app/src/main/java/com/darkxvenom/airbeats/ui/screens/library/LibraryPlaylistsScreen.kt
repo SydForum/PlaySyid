@@ -372,10 +372,12 @@ private fun PlaylistControlCard(
     modifier: Modifier = Modifier,
     controls: @Composable RowScope.() -> Unit,
 ) {
+    val isFrosted = com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled()
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            containerColor = if (isFrosted) com.darkxvenom.airbeats.ui.component.settingsCardContainerColor() else MaterialTheme.colorScheme.surfaceContainerHigh
         ),
+        border = if (isFrosted) com.darkxvenom.airbeats.ui.component.settingsCardBorder() else null,
         shape = MaterialTheme.shapes.large,
         modifier = modifier,
     ) {
@@ -467,10 +469,12 @@ private fun PlaylistSectionHeaderCard(
     supportingText: String,
     modifier: Modifier = Modifier,
 ) {
+    val isFrosted = com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled()
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            containerColor = if (isFrosted) com.darkxvenom.airbeats.ui.component.settingsCardContainerColor() else MaterialTheme.colorScheme.surfaceContainerHigh
         ),
+        border = if (isFrosted) com.darkxvenom.airbeats.ui.component.settingsCardBorder() else null,
         shape = MaterialTheme.shapes.large,
         modifier = modifier,
     ) {
