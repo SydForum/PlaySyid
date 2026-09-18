@@ -85,6 +85,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.luminance
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.ui.component.LocalBackdrop
 import com.darkxvenom.airbeats.ui.component.drawBackdropCustomShape
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
@@ -1005,9 +1008,12 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val equalizerState by playerConnection.service.equalizerState.collectAsState()
     val (enableLiquidGlass) = rememberPreference(LiquidGlassKey, false)
+    val isFrosted = isFrostedGlassUiEnabled()
     val backdrop = LocalBackdrop.current
     val layer = rememberGraphicsLayer()
     val luminanceAnimation = remember { Animatable(0.3f) }
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 
     LaunchedEffect(Unit) {
         playerConnection.service.ensureEqualizer()
@@ -1016,8 +1022,26 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = if (enableLiquidGlass && backdrop != null) Color.Transparent else MaterialTheme.colorScheme.surface,
-        modifier = Modifier.then(if (enableLiquidGlass && backdrop != null) { Modifier.drawBackdropCustomShape(backdrop = backdrop, layer = layer, luminanceAnimation = luminanceAnimation.value, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) } else Modifier),
+        containerColor = if (enableLiquidGlass && !isFrosted && backdrop != null) {
+            Color.Transparent
+        } else if (isFrosted) {
+            if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        shape = sheetShape,
+        modifier = Modifier.then(
+            if (enableLiquidGlass && !isFrosted && backdrop != null) {
+                Modifier.drawBackdropCustomShape(backdrop = backdrop, layer = layer, luminanceAnimation = luminanceAnimation.value, shape = sheetShape)
+            } else if (isFrosted) {
+                Modifier.border(
+                    BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                    sheetShape
+                )
+            } else {
+                Modifier
+            }
+        ),
         dragHandle = {
             Box(
                 modifier = Modifier
