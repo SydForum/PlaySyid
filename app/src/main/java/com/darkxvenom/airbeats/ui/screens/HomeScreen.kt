@@ -448,40 +448,6 @@ fun HomeScreen(
                     )
                 }
 
-                aiRecommendedPlaylist?.let { (playlist, songs) ->
-                    if (songs.isNotEmpty()) {
-                        item(key = "ai_recommended_title") {
-                            NavigationTitle(
-                                title = stringResource(R.string.recommended_by_ai),
-                                label = playlist.playlist.lastUpdateTime?.let {
-                                    "Updated: " + it.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, h:mm a"))
-                                },
-                                onClick = {
-                                    navController.navigate("local_playlist/${playlist.id}")
-                                },
-                                modifier = Modifier.animateItem()
-                            )
-                        }
-
-                        item(key = "ai_recommended_list") {
-                            val distinctSongs = remember(songs) { songs.distinctBy { it.id } }
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateItem()
-                            ) {
-                                items(distinctSongs, key = { it.id }) { song ->
-                                    Box(modifier = Modifier.width(140.dp)) {
-                                        localGridItem(song)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
                     item(key = "quick_picks_title") {
                         NavigationTitle(
@@ -599,6 +565,40 @@ fun HomeScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                aiRecommendedPlaylist?.let { (playlist, songs) ->
+                    if (songs.isNotEmpty()) {
+                        item(key = "ai_recommended_title") {
+                            NavigationTitle(
+                                title = stringResource(R.string.recommended_by_ai),
+                                label = playlist.playlist.lastUpdateTime?.let {
+                                    "Updated: " + it.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, h:mm a"))
+                                },
+                                onClick = {
+                                    navController.navigate("local_playlist/${playlist.id}")
+                                },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+
+                        item(key = "ai_recommended_list") {
+                            val distinctSongs = remember(songs) { songs.distinctBy { it.id } }
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateItem()
+                            ) {
+                                items(distinctSongs, key = { it.id }) { song ->
+                                    Box(modifier = Modifier.width(140.dp)) {
+                                        localGridItem(song)
+                                    }
                                 }
                             }
                         }
