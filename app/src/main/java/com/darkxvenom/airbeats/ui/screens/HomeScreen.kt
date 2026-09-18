@@ -2,6 +2,15 @@ package com.darkxvenom.airbeats.ui.screens
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.ripple
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -26,6 +35,7 @@ import com.darkxvenom.airbeats.checkForUpdates
 import com.darkxvenom.airbeats.isNewerVersion
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Box
@@ -429,36 +439,13 @@ fun HomeScreen(
                 }
 
                 item(key = "home_chips") {
-                    Row(
+                    GlassHomeTagsRow(
+                        navController = navController,
+                        isLoggedIn = isLoggedIn,
                         modifier = Modifier
                             .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
-                            .fillMaxWidth()
                             .animateItem()
-                    ) {
-                        ChipsRow(
-                            chips = listOfNotNull(
-                                Pair("history", stringResource(R.string.history)),
-                                Pair("stats", stringResource(R.string.stats)),
-                                Pair("liked", stringResource(R.string.liked)),
-                                Pair("downloads", stringResource(R.string.offline)),
-                                if (isLoggedIn) Pair(
-                                    "account",
-                                    stringResource(R.string.account)
-                                ) else null
-                            ),
-                            currentValue = "",
-                            onValueUpdate = { value ->
-                                when (value) {
-                                    "history" -> navController.navigate("history")
-                                    "stats" -> navController.navigate("stats")
-                                    "liked" -> navController.navigate("auto_playlist/liked")
-                                    "downloads" -> navController.navigate("auto_playlist/downloaded")
-                                    "account" -> if (isLoggedIn) navController.navigate("account")
-                                }
-                            },
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer
-                        )
-                    }
+                    )
                 }
 
                 aiRecommendedPlaylist?.let { (playlist, songs) ->
@@ -1274,4 +1261,94 @@ fun AnimatedBeatsRing(
         }
     }
 }
+
+@Composable
+private fun GlassHomeTagsRow(
+    navController: NavController,
+    isLoggedIn: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val glassBg = if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    val glassBorder = if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+    val contentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val haptic = LocalHapticFeedback.current
+
+    val tags = remember(isLoggedIn) {
+        listOfNotNull(
+            Triple("history", R.string.history, R.drawable.history),
+            Triple("stats", R.string.stats, R.drawable.trending_up),
+            Triple("liked", R.string.liked, R.drawable.favorite),
+            Triple("downloads", R.string.offline, R.drawable.download),
+            if (isLoggedIn) Triple("account", R.string.account, R.drawable.person) else null
+        )
+    }
+
+    LazyRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp)
+    ) {
+        items(tags, key = { it.first }) { (id, stringRes, iconRes) ->
+            val interactionSource = remember { MutableInteractionSource() }
+            val isPressed by interactionSource.collectIsPressedAsState()
+            val pressScale by animateFloatAsState(
+                targetValue = if (isPressed) 0.93f else 1.0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                ),
+                label = "glassTagScale"
+            )
+
+            Box(
+                modifier = Modifier
+                    .scale(pressScale)
+                    .clip(CircleShape)
+                    .background(glassBg)
+                    .border(BorderStroke(1.dp, glassBorder), CircleShape)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = ripple(bounded = true),
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            when (id) {
+                                "history" -> navController.navigate("history")
+                                "stats" -> navController.navigate("stats")
+                                "liked" -> navController.navigate("auto_playlist/liked")
+                                "downloads" -> navController.navigate("auto_playlist/downloaded")
+                                "account" -> if (isLoggedIn) navController.navigate("account")
+                            }
+                        }
+                    )
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(iconRes),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = contentColor.copy(alpha = 0.90f)
+                    )
+                    Text(
+                        text = stringResource(stringRes),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.5.sp,
+                            letterSpacing = 0.2.sp
+                        ),
+                        color = contentColor
+                    )
+                }
+            }
+        }
+    }
+}
+
 
