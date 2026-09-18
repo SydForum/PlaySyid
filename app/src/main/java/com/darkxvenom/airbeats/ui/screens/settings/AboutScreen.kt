@@ -88,19 +88,28 @@ fun SocialIconBadge(
     iconRes: Int,
     onClick: () -> Unit
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
     Box(
         modifier = Modifier
             .size(32.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), CircleShape)
+            .background(
+                if (isFrosted) Color.White.copy(alpha = 0.08f)
+                else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            )
+            .border(
+                1.dp,
+                if (isFrosted) Color.White.copy(alpha = 0.15f)
+                else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                CircleShape
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = if (isFrosted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(16.dp)
         )
     }
@@ -120,6 +129,7 @@ fun UserCard(
     onClick: () -> Unit
 ) {
     var isPressed by remember { mutableStateOf(false) }
+    val isFrosted = isFrostedGlassUiEnabled()
 
     val borderBrush = Brush.linearGradient(
         colors = listOf(
@@ -129,21 +139,28 @@ fun UserCard(
         )
     )
 
+    val cardBorder = if (isFrosted) {
+        settingsCardBorder(true) ?: androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+    } else {
+        androidx.compose.foundation.BorderStroke(1.dp, borderBrush)
+    }
+
     Card(
         modifier = modifier
             .padding(horizontal = 6.dp, vertical = 8.dp)
             .height(240.dp)
             .scale(if (isPressed) 0.98f else 1f)
-            .shadow(
-                elevation = 16.dp,
-                shape = RoundedCornerShape(24.dp),
-                ambientColor = MaterialTheme.colorScheme.primary,
-                spotColor = MaterialTheme.colorScheme.primary
-            )
-            .border(
-                width = 1.dp,
-                brush = borderBrush,
-                shape = RoundedCornerShape(24.dp)
+            .then(
+                if (isFrosted) {
+                    Modifier
+                } else {
+                    Modifier.shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        ambientColor = MaterialTheme.colorScheme.primary,
+                        spotColor = MaterialTheme.colorScheme.primary
+                    )
+                }
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -154,8 +171,9 @@ fun UserCard(
                 isPressed = false
             },
         shape = RoundedCornerShape(24.dp),
+        border = cardBorder,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            containerColor = if (isFrosted) settingsCardContainerColor(true) else MaterialTheme.colorScheme.surfaceContainer,
         )
     ) {
         Column(
@@ -174,14 +192,29 @@ fun UserCard(
                         .size(76.dp)
                         .clip(CircleShape)
                         .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                            if (isFrosted) {
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.12f),
+                                        Color.White.copy(alpha = 0.04f)
+                                    )
                                 )
-                            )
+                            } else {
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                                    )
+                                )
+                            }
                         )
-                        .border(1.5.dp, borderBrush, CircleShape)
+                        .then(
+                            if (isFrosted) {
+                                Modifier.border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                            } else {
+                                Modifier.border(1.5.dp, borderBrush, CircleShape)
+                            }
+                        )
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
@@ -210,7 +243,8 @@ fun UserCard(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    color = if (isFrosted) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    border = if (isFrosted) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)) else null
                 ) {
                     Text(
                         text = role,
@@ -219,7 +253,7 @@ fun UserCard(
                             vertical = 4.dp
                         ),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = if (isFrosted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -228,7 +262,8 @@ fun UserCard(
                     Spacer(modifier = Modifier.height(4.dp))
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        color = if (isFrosted) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        border = if (isFrosted) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)) else null
                     ) {
                         Text(
                             text = "$commits Commits",
@@ -237,7 +272,7 @@ fun UserCard(
                                 vertical = 4.dp
                             ),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = if (isFrosted) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
                     }
