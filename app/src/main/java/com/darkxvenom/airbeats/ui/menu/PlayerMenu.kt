@@ -90,6 +90,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.luminance
 import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.ui.component.SettingsGlassCard
+import com.darkxvenom.airbeats.ui.component.popupGlassContainerColor
 import com.darkxvenom.airbeats.ui.component.LocalBackdrop
 import com.darkxvenom.airbeats.ui.component.drawBackdropCustomShape
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
@@ -1029,6 +1030,7 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
         } else {
             MaterialTheme.colorScheme.surface
         },
+        scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
         shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
         modifier = Modifier.then(
             if (enableLiquidGlass && !isFrosted && backdrop != null) {
@@ -1119,7 +1121,8 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(28.dp)
+                shape = RoundedCornerShape(28.dp),
+                containerColor = popupGlassContainerColor()
             ) {
                 Column(
                     modifier = Modifier

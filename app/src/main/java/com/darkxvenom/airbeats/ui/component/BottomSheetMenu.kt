@@ -94,6 +94,7 @@ fun BottomSheetMenu(
             },
             containerColor = containerColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
+            scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
             shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
             dragHandle = {
                 Box(
@@ -111,7 +112,8 @@ fun BottomSheetMenu(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(28.dp)
+                    shape = RoundedCornerShape(28.dp),
+                    containerColor = popupGlassContainerColor()
                 ) {
                     Column(
                         modifier = Modifier

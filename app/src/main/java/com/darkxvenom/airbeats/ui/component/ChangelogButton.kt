@@ -137,6 +137,7 @@ fun ChangelogButton(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = if (isFrosted) Color.Transparent else MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
+            scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
             dragHandle = {
                 Box(
                     modifier = Modifier
@@ -153,7 +154,8 @@ fun ChangelogButton(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(28.dp)
+                    shape = RoundedCornerShape(28.dp),
+                    containerColor = popupGlassContainerColor()
                 ) {
                     Column(
                         modifier = Modifier

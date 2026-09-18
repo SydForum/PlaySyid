@@ -33,12 +33,30 @@ fun settingsCardContainerColor(frosted: Boolean = isFrostedGlassUiEnabled()): Co
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     return if (frosted) {
         if (isDark) {
-            Color.White.copy(alpha = 0.08f)
+            Color(0xFF202026).copy(alpha = 0.70f)
         } else {
-            MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.80f)
         }
     } else {
         MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+    }
+}
+
+/**
+ * Resolves popup and bottom sheet glass container color with enhanced opacity and depth
+ * to prevent background content bleeding through while preserving the frosted aesthetic.
+ */
+@Composable
+fun popupGlassContainerColor(frosted: Boolean = isFrostedGlassUiEnabled()): Color {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return if (frosted) {
+        if (isDark) {
+            Color(0xFF16161B).copy(alpha = 0.78f)
+        } else {
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+        }
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
     }
 }
 
@@ -51,7 +69,7 @@ fun settingsCardBorder(frosted: Boolean = isFrostedGlassUiEnabled()): BorderStro
     return if (frosted) {
         BorderStroke(
             1.dp,
-            if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+            if (isDark) Color.White.copy(alpha = 0.14f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
         )
     } else {
         null
@@ -66,16 +84,17 @@ fun settingsCardBorder(frosted: Boolean = isFrostedGlassUiEnabled()): BorderStro
 fun SettingsGlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(28.dp),
+    containerColor: Color = settingsCardContainerColor(),
+    border: BorderStroke? = settingsCardBorder(),
     content: @Composable () -> Unit
 ) {
-    val frosted = isFrostedGlassUiEnabled()
     Card(
         modifier = modifier,
         shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = settingsCardContainerColor(frosted)
+            containerColor = containerColor
         ),
-        border = settingsCardBorder(frosted),
+        border = border,
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()

@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import com.darkxvenom.airbeats.ui.component.SettingsGlassCard
+import com.darkxvenom.airbeats.ui.component.popupGlassContainerColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -588,6 +589,7 @@ fun StatsScreen(
             onDismissRequest = { showInsightBottomSheet = false },
             sheetState = sheetState,
             containerColor = if (isFrosted) Color.Transparent else MaterialTheme.colorScheme.surface,
+            scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
             shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
             dragHandle = {
                 Box(
@@ -605,7 +607,8 @@ fun StatsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(28.dp)
+                    shape = RoundedCornerShape(28.dp),
+                    containerColor = popupGlassContainerColor()
                 ) {
                     InsightBottomSheetContent(
                         onNavigateToFullInsight = {
@@ -867,6 +870,7 @@ private fun WeeklyGlobalStatsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = if (isFrosted) Color.Transparent else MaterialTheme.colorScheme.surface,
+        scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
         shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
         dragHandle = {
             Box(
@@ -884,7 +888,8 @@ private fun WeeklyGlobalStatsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(28.dp)
+                shape = RoundedCornerShape(28.dp),
+                containerColor = popupGlassContainerColor()
             ) {
                 Column(
                     modifier = Modifier
