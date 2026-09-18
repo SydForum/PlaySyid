@@ -73,15 +73,20 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import com.darkxvenom.airbeats.ui.component.ChipsRow
+import com.darkxvenom.airbeats.ui.component.TopFadeBlur
 import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -232,6 +237,20 @@ fun HomeScreen(
             backStackEntry?.savedStateHandle?.set("scrollToTop", false)
         }
     }
+
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val screenBg = if (isDark) Color.Black else MaterialTheme.colorScheme.background
+    val hazeState = remember { HazeState() }
+    val isAtTop by remember {
+        derivedStateOf {
+            lazylistState.firstVisibleItemIndex == 0 && lazylistState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    val blurAlpha by animateFloatAsState(
+        targetValue = if (isAtTop) 0f else 1f,
+        animationSpec = tween(300),
+        label = "HomeScreenBlurAlpha"
+    )
 
     val localGridItem: @Composable (LocalItem) -> Unit = {
         when (it) {
@@ -420,26 +439,16 @@ fun HomeScreen(
                 )
             }
 
-            // FIXED: Added proper windowInsetsPadding to move content down
             LazyColumn(
                 state = lazylistState,
-                contentPadding = LocalPlayerAwareWindowInsets.current
-                    .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
-                    .asPaddingValues(),
                 modifier = Modifier
-                    .windowInsetsPadding(
-                        WindowInsets.systemBars.only(WindowInsetsSides.Top)
-                    )
-            )
-            {
-                // ModernHomeTopBarInline is now inside the LazyColumn
-                item(key = "home_top_bar") {
-                    ModernHomeTopBarInline(
-                        navController = navController,
-                        onSearchClick = onSearchClick
-                    )
-                }
-
+                    .fillMaxSize()
+                    .haze(state = hazeState),
+                contentPadding = PaddingValues(
+                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                    bottom = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
+                )
+            ) {
                 item(key = "home_chips") {
                     val isFrosted = isFrostedGlassUiEnabled()
                     if (isFrosted) {
@@ -1016,6 +1025,14 @@ fun HomeScreen(
                     )
                 }
             }
+
+            com.darkxvenom.airbeats.ui.component.TopFadeBlur(
+                hazeState = hazeState,
+                pageColor = screenBg,
+                scrimColor = screenBg,
+                alpha = blurAlpha,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
 
             PullToRefreshDefaults.LoadingIndicator(
                 isRefreshing = isRefreshing,
