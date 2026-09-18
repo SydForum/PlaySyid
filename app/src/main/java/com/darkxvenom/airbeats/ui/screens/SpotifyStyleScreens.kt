@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
@@ -113,6 +114,34 @@ private val SpotifyBg @Composable get() = if (isAppInDarkTheme()) Color(0xFF0505
 private val SpotifyCard @Composable get() = if (isAppInDarkTheme()) Color(0xFF181818) else Color(0xFFFFFFFF)
 private val SpotifyPill @Composable get() = if (isAppInDarkTheme()) Color(0xFF2A2A2A) else Color(0xFFE5E5E5)
 private val SpotifyText @Composable get() = if (isAppInDarkTheme()) Color.White else Color.Black
+
+@Composable
+fun SpotifyHeaderActions(navController: NavController) {
+    androidx.compose.material3.IconButton(onClick = { navController.navigate("settings/developer_news") }) {
+        androidx.compose.material3.Icon(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.newspaper),
+            contentDescription = "News from Developer",
+            tint = SpotifyText,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+    androidx.compose.material3.IconButton(onClick = { navController.navigate("new_release") }) {
+        androidx.compose.material3.Icon(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.notification_on),
+            contentDescription = "New Releases",
+            tint = SpotifyText,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+    androidx.compose.material3.IconButton(onClick = { navController.navigate("settings") }) {
+        androidx.compose.material3.Icon(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.settings),
+            contentDescription = "Settings",
+            tint = SpotifyText,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
 
 @OptIn(
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -309,15 +338,7 @@ fun SpotifyHomeScreen(
                 }
             }
         ) {
-            androidx.compose.material3.IconButton(onClick = { navController.navigate("new_release") }) {
-                androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.notification_on), contentDescription = null, tint = SpotifyText, modifier = Modifier.size(24.dp))
-            }
-            androidx.compose.material3.IconButton(onClick = { navController.navigate("history") }) {
-                androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.history), contentDescription = null, tint = SpotifyText, modifier = Modifier.size(24.dp))
-            }
-            androidx.compose.material3.IconButton(onClick = { navController.navigate("settings") }) {
-                androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.settings), contentDescription = null, tint = SpotifyText, modifier = Modifier.size(24.dp))
-            }
+            SpotifyHeaderActions(navController)
         }
     }
 }
@@ -335,7 +356,9 @@ fun SpotifySearchScreen(
     SpotifyScaffold(
         title = stringResource(R.string.search),
         subtitle = "Find your favorite music",
-        actions = {}
+        actions = {
+            SpotifyHeaderActions(navController)
+        }
     ) {
         item {
             SpotifySearchInput(
@@ -460,9 +483,7 @@ fun SpotifyExploreScreen(
         title = stringResource(R.string.explore),
         subtitle = "Fresh music and moods",
         actions = {
-            androidx.compose.material3.IconButton(onClick = { navController.navigate(Screens.Search.route) }) {
-                androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.search), contentDescription = null, tint = SpotifyText, modifier = Modifier.size(24.dp))
-            }
+            SpotifyHeaderActions(navController)
         }
     ) {
         item {
@@ -593,12 +614,7 @@ fun SpotifyLibraryScreen(navController: NavController) {
             subtitle = "Saved music in AirBeats",
             modifier = Modifier.align(Alignment.TopCenter),
             actions = {
-                androidx.compose.material3.IconButton(onClick = { navController.navigate(Screens.Search.route) }) {
-                    androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.search), contentDescription = null, tint = SpotifyText, modifier = Modifier.size(24.dp))
-                }
-                androidx.compose.material3.IconButton(onClick = { navController.navigate("settings") }) {
-                    androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.settings), contentDescription = null, tint = SpotifyText, modifier = Modifier.size(24.dp))
-                }
+                SpotifyHeaderActions(navController)
             },
         )
     }
@@ -726,29 +742,31 @@ private fun SpotifyHeader(
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
-        androidx.compose.animation.AnimatedContent(
-            targetState = isAtTop,
-            transitionSpec = {
-                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)).togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300)))
-            },
-            modifier = Modifier.matchParentSize()
-        ) { isAtTop ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (isAtTop) {
-                            Modifier.background(Color.Transparent)
-                        } else if (hazeState != null) {
-                            Modifier.hazeChild(
-                                state = hazeState,
-                                style = dev.chrisbanes.haze.materials.HazeMaterials.ultraThin()
-                            )
-                        } else {
-                            Modifier.background(SpotifyBg.copy(alpha = 0.95f))
-                        }
-                    )
+        val blurAlpha by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (isAtTop) 0f else 1f,
+            animationSpec = androidx.compose.animation.core.tween(300),
+            label = "SpotifyHeaderBlurAlpha"
+        )
+        if (hazeState != null) {
+            val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            val headerContentHeight = if (title == "AirBeats") 118.dp else 64.dp
+            com.darkxvenom.airbeats.ui.component.TopFadeBlur(
+                hazeState = hazeState,
+                pageColor = SpotifyBg,
+                scrimColor = SpotifyBg,
+                height = statusBarPadding + headerContentHeight + 36.dp,
+                alpha = blurAlpha,
+                modifier = Modifier.align(Alignment.TopCenter)
             )
+        } else {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isAtTop,
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut(),
+                modifier = Modifier.matchParentSize()
+            ) {
+                Box(modifier = Modifier.fillMaxSize().background(SpotifyBg.copy(alpha = 0.95f)))
+            }
         }
 
         Column(

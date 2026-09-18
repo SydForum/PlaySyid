@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.HazeState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -150,6 +152,19 @@ fun PlayfulHomeScreen(
             Scaffold(
                 containerColor = Color(0xFFFFD54F) // Bright yellow background
             ) { padding ->
+                val playfulListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                val hazeState = remember { HazeState() }
+                val isAtTop by remember {
+                    derivedStateOf {
+                        playfulListState.firstVisibleItemIndex == 0 && playfulListState.firstVisibleItemScrollOffset == 0
+                    }
+                }
+                val blurAlpha by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = if (isAtTop) 0f else 1f,
+                    animationSpec = androidx.compose.animation.core.tween(300),
+                    label = "PlayfulBlurAlpha"
+                )
+
                 Box(modifier = Modifier
                     .fillMaxSize()
                     .pullToRefresh(
@@ -158,6 +173,15 @@ fun PlayfulHomeScreen(
                         onRefresh = viewModel::refresh
                     )
                 ) {
+                    com.darkxvenom.airbeats.ui.component.TopFadeBlur(
+                        hazeState = hazeState,
+                        pageColor = Color(0xFFFFD54F),
+                        scrimColor = Color(0xFFFFD54F),
+                        height = padding.calculateTopPadding() + 76.dp + 36.dp,
+                        alpha = blurAlpha,
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -298,10 +322,12 @@ fun PlayfulHomeScreen(
 
                             // Content Area
                             LazyColumn(
+                                state = playfulListState,
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .weight(1f)
-                                    .padding(end = 16.dp),
+                                    .padding(end = 16.dp)
+                                    .haze(state = hazeState),
                                 contentPadding = PaddingValues(bottom = 250.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {

@@ -185,39 +185,41 @@ fun AppleHeader(
     isAtTop: Boolean = true,
     hazeState: HazeState? = null,
     profileUrl: String? = null,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    onNewReleaseClick: (() -> Unit)? = null,
+    onDeveloperNewsClick: (() -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val avatarManager = remember { AvatarPreferenceManager(context) }
     val currentSelection by avatarManager
         .getAvatarSelection
         .collectAsState(initial = AvatarSelection.Default)
+    val isDark = isAppInDarkTheme()
+
+    val blurAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isAtTop) 0f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(300),
+        label = "AppleHeaderBlurAlpha"
+    )
 
     Box(modifier = modifier.fillMaxWidth()) {
-        AnimatedContent(
-            targetState = isAtTop,
-            transitionSpec = {
-                fadeIn(tween(300)).togetherWith(fadeOut(tween(300)))
-            },
-            modifier = Modifier.matchParentSize(),
-            label = "AppleHeaderBackground"
-        ) { isAtTopState ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (isAtTopState) {
-                            Modifier.background(Color.Transparent)
-                        } else if (hazeState != null) {
-                            Modifier.hazeChild(
-                                state = hazeState,
-                                style = dev.chrisbanes.haze.materials.HazeMaterials.ultraThin()
-                            )
-                        } else {
-                            Modifier.background(AppleBg.copy(alpha = 0.95f))
-                        }
-                    )
+        if (hazeState != null) {
+            com.darkxvenom.airbeats.ui.component.TopFadeBlur(
+                hazeState = hazeState,
+                pageColor = AppleBg,
+                scrimColor = AppleBg,
+                alpha = blurAlpha,
+                modifier = Modifier.align(Alignment.TopCenter)
             )
+        } else {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isAtTop,
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut(),
+                modifier = Modifier.matchParentSize()
+            ) {
+                Box(modifier = Modifier.fillMaxSize().background(AppleBg.copy(alpha = 0.95f)))
+            }
         }
 
         Row(
@@ -229,52 +231,105 @@ fun AppleHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(title, color = AppleText, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = title,
+                color = AppleText,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-            IconButton(
-                onClick = onProfileClick,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                when (val selection = currentSelection) {
-                    is AvatarSelection.Custom -> {
-                        AsyncImage(
-                            model = selection.uri.toUri(),
-                            contentDescription = "Profile",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                if (onDeveloperNewsClick != null) {
+                    IconButton(
+                        onClick = onDeveloperNewsClick,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isDark) Color.White.copy(alpha = 0.12f)
+                                else Color.Black.copy(alpha = 0.06f)
+                            )
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.newspaper),
+                            contentDescription = "News from Developer",
+                            tint = AppleText,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    is AvatarSelection.DiceBear -> {
-                        AsyncImage(
-                            model = selection.url,
-                            contentDescription = "Profile",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                }
+
+                if (onNewReleaseClick != null) {
+                    IconButton(
+                        onClick = onNewReleaseClick,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isDark) Color.White.copy(alpha = 0.12f)
+                                else Color.Black.copy(alpha = 0.06f)
+                            )
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.notification_on),
+                            contentDescription = "New Releases",
+                            tint = AppleText,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    else -> {
-                        if (profileUrl != null) {
+                }
+
+                IconButton(
+                    onClick = onProfileClick,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    when (val selection = currentSelection) {
+                        is AvatarSelection.Custom -> {
                             AsyncImage(
-                                model = coil.request.ImageRequest.Builder(context)
-                                    .data(profileUrl)
-                                    .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                                    .diskCacheKey(profileUrl)
-                                    .crossfade(true)
-                                    .build(),
+                                model = selection.uri.toUri(),
                                 contentDescription = "Profile",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
-                        } else {
-                            Icon(
-                                painter = painterResource(R.drawable.person),
+                        }
+                        is AvatarSelection.DiceBear -> {
+                            AsyncImage(
+                                model = selection.url,
                                 contentDescription = "Profile",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
+                        }
+                        else -> {
+                            if (profileUrl != null) {
+                                AsyncImage(
+                                    model = coil.request.ImageRequest.Builder(context)
+                                        .data(profileUrl)
+                                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                                        .diskCacheKey(profileUrl)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "Profile",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.person),
+                                    contentDescription = "Profile",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -291,6 +346,8 @@ fun AppleScaffold(
     profileUrl: String? = null,
     isRefreshing: Boolean? = null,
     onRefresh: (() -> Unit)? = null,
+    onNewReleaseClick: (() -> Unit)? = { navController.navigate("new_release") },
+    onDeveloperNewsClick: (() -> Unit)? = { navController.navigate("settings/developer_news") },
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit
 ) {
     val lazyListState = rememberLazyListState()
@@ -346,7 +403,9 @@ fun AppleScaffold(
             isAtTop = isAtTop,
             hazeState = hazeState,
             profileUrl = profileUrl,
-            onProfileClick = { navController.navigate("settings") }
+            onProfileClick = { navController.navigate("settings") },
+            onNewReleaseClick = onNewReleaseClick,
+            onDeveloperNewsClick = onDeveloperNewsClick
         )
     }
 }

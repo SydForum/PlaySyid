@@ -58,6 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import dev.chrisbanes.haze.haze
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -200,6 +201,17 @@ fun NewClassicHomeScreen(
 
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val screenBg = if (isDark) Color.Black else MaterialTheme.colorScheme.background
+    val hazeState = remember { dev.chrisbanes.haze.HazeState() }
+    val isAtTop by remember {
+        androidx.compose.runtime.derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    val blurAlpha by animateFloatAsState(
+        targetValue = if (isAtTop) 0f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(300),
+        label = "NewClassicBlurAlpha"
+    )
 
     Box(
         modifier = Modifier
@@ -215,7 +227,8 @@ fun NewClassicHomeScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .background(screenBg),
+                .background(screenBg)
+                .haze(state = hazeState),
             contentPadding = PaddingValues(
                 bottom = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding() + 110.dp
             )
@@ -721,6 +734,14 @@ fun NewClassicHomeScreen(
                 Spacer(Modifier.height(40.dp))
             }
         }
+
+        com.darkxvenom.airbeats.ui.component.TopFadeBlur(
+            hazeState = hazeState,
+            pageColor = screenBg,
+            scrimColor = screenBg,
+            alpha = blurAlpha,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
 
         PullToRefreshDefaults.LoadingIndicator(
             isRefreshing = isRefreshing,
