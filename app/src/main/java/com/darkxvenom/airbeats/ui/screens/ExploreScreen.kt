@@ -1,8 +1,11 @@
 package com.darkxvenom.airbeats.ui.screens
 
 import android.content.res.Configuration.ORIENTATION_LANDSCAPE
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -158,19 +161,38 @@ fun MoodAndGenresButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val shape = RoundedCornerShape(24.dp)
+    val containerColor = if (isFrosted) {
+        if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+    val borderStroke = if (isFrosted) {
+        BorderStroke(
+            1.dp,
+            if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+        )
+    } else null
+
     Box(
         contentAlignment = Alignment.CenterStart,
         modifier =
             modifier
                 .height(MoodAndGenresButtonHeight)
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .clip(shape)
+                .background(containerColor)
+                .then(
+                    if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier
+                )
                 .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 16.dp),
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
+            color = if (isFrosted && isDark) Color.White else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
