@@ -238,8 +238,6 @@ fun HomeScreen(
         }
     }
 
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val screenBg = if (isDark) Color.Black else MaterialTheme.colorScheme.background
     val hazeState = remember { HazeState() }
     val isAtTop by remember {
         derivedStateOf {
@@ -441,14 +439,21 @@ fun HomeScreen(
 
             LazyColumn(
                 state = lazylistState,
+                contentPadding = LocalPlayerAwareWindowInsets.current
+                    .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+                    .asPaddingValues(),
                 modifier = Modifier
                     .fillMaxSize()
-                    .haze(state = hazeState),
-                contentPadding = PaddingValues(
-                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
-                    bottom = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
-                )
+                    .haze(state = hazeState)
             ) {
+                // ModernHomeTopBarInline is now inside the LazyColumn
+                item(key = "home_top_bar") {
+                    ModernHomeTopBarInline(
+                        navController = navController,
+                        onSearchClick = onSearchClick
+                    )
+                }
+
                 item(key = "home_chips") {
                     val isFrosted = isFrostedGlassUiEnabled()
                     if (isFrosted) {
@@ -1028,8 +1033,8 @@ fun HomeScreen(
 
             com.darkxvenom.airbeats.ui.component.TopFadeBlur(
                 hazeState = hazeState,
-                pageColor = screenBg,
-                scrimColor = screenBg,
+                pageColor = Color.Transparent,
+                scrimColor = Color.Transparent,
                 alpha = blurAlpha,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
