@@ -223,7 +223,8 @@ fun NewClassicHomeScreen(
             item(key = "hero_section") {
                 NewClassicHeroSection(
                     heroData = effectiveHero,
-                    onNotificationClick = { navController.navigate("history") },
+                    onNewReleaseClick = { navController.navigate("new_release") },
+                    onDeveloperNewsClick = { navController.navigate("settings/developer_news") },
                     onSettingsClick = { navController.navigate("settings") },
                     onPlayNowClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -736,7 +737,8 @@ fun NewClassicHomeScreen(
 @Composable
 private fun NewClassicHeroSection(
     heroData: HeroPlaylistData,
-    onNotificationClick: () -> Unit,
+    onNewReleaseClick: () -> Unit,
+    onDeveloperNewsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onPlayNowClick: () -> Unit,
 ) {
@@ -803,7 +805,7 @@ private fun NewClassicHeroSection(
                     .height(56.dp)
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.End
             ) {
                 val buttonBg = if (isDark) {
                     if (isFrosted) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.15f)
@@ -816,7 +818,7 @@ private fun NewClassicHeroSection(
                 val buttonTint = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
 
                 IconButton(
-                    onClick = onNotificationClick,
+                    onClick = onNewReleaseClick,
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
@@ -828,11 +830,34 @@ private fun NewClassicHeroSection(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.notification_on),
-                        contentDescription = "Notifications",
+                        contentDescription = "New Releases",
                         tint = buttonTint,
                         modifier = Modifier.size(20.dp)
                     )
                 }
+
+                Spacer(Modifier.width(10.dp))
+
+                IconButton(
+                    onClick = onDeveloperNewsClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(buttonBg)
+                        .then(
+                            if (buttonBorder != null) Modifier.border(buttonBorder, CircleShape)
+                            else Modifier
+                        )
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.newspaper),
+                        contentDescription = "News from Developer",
+                        tint = buttonTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(10.dp))
 
                 IconButton(
                     onClick = onSettingsClick,
