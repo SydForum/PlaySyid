@@ -1,8 +1,13 @@
 package com.darkxvenom.airbeats.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
+import com.darkxvenom.airbeats.ui.component.settingsCardContainerColor
+import com.darkxvenom.airbeats.ui.component.settingsCardBorder
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -119,6 +124,8 @@ fun StatsScreen(
 ) {
     val menuState = LocalMenuState.current
     val haptic = LocalHapticFeedback.current
+    val isFrosted = isFrostedGlassUiEnabled()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
@@ -303,8 +310,11 @@ fun StatsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+                    shape = RoundedCornerShape(if (isFrosted) 20.dp else 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isFrosted) settingsCardContainerColor(true) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                    ),
+                    border = settingsCardBorder(isFrosted)
                 ) {
                     Row(
                         modifier = Modifier
@@ -572,10 +582,15 @@ fun StatsScreen(
 
     // BottomSheet de Insight
     if (showInsightBottomSheet) {
+        val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ModalBottomSheet(
             onDismissRequest = { showInsightBottomSheet = false },
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isFrosted) (if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)) else MaterialTheme.colorScheme.surface,
+            shape = sheetShape,
+            modifier = Modifier.then(
+                if (isFrosted) Modifier.border(BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)), sheetShape) else Modifier
+            )
         ) {
             InsightBottomSheetContent(
                 onNavigateToFullInsight = {
@@ -626,12 +641,16 @@ private fun GlobalStatsBoardCard(
             users.firstOrNull { it.name.trim().equals(state.currentUserName.trim(), ignoreCase = true) }
         } else null
 
+    val isFrosted = isFrostedGlassUiEnabled()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(if (isFrosted) 20.dp else 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isFrosted) settingsCardContainerColor(true) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+        ),
+        border = settingsCardBorder(isFrosted)
     ) {
         Column(
             modifier = Modifier
@@ -714,10 +733,18 @@ private fun GlobalStatPill(
     value: String,
     modifier: Modifier = Modifier,
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val pillBg = if (isFrosted) (if (isDark) Color.White.copy(alpha = 0.06f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    val pillBorder = if (isDark) Color.White.copy(alpha = 0.10f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+
     Column(
         modifier =
             modifier
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                .background(pillBg, RoundedCornerShape(12.dp))
+                .then(
+                    if (isFrosted) Modifier.border(BorderStroke(1.dp, pillBorder), RoundedCornerShape(12.dp)) else Modifier
+                )
                 .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
@@ -730,15 +757,27 @@ private fun GlobalUserRankRow(
     user: GlobalStatsUser,
     isCurrentUser: Boolean,
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val rowBg = if (isCurrentUser) {
+        if (isFrosted) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+    } else {
+        if (isFrosted) (if (isDark) Color.White.copy(alpha = 0.05f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    }
+    val rowBorder = if (isCurrentUser) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    } else {
+        if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    }
+
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
-                .background(
-                    if (isCurrentUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) 
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    RoundedCornerShape(12.dp),
+                .background(rowBg, RoundedCornerShape(12.dp))
+                .then(
+                    if (isFrosted) Modifier.border(BorderStroke(1.dp, rowBorder), RoundedCornerShape(12.dp)) else Modifier
                 )
                 .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -788,9 +827,17 @@ private fun WeeklyGlobalStatsSheet(
     currentUserName: String = "",
     onDismiss: () -> Unit,
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = if (isFrosted) (if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)) else MaterialTheme.colorScheme.surface,
+        shape = sheetShape,
+        modifier = Modifier.then(
+            if (isFrosted) Modifier.border(BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)), sheetShape) else Modifier
+        ),
     ) {
         Box(
             modifier =
@@ -825,15 +872,30 @@ private fun WeeklyGlobalStatsSheet(
                 ) {
                     items(users, key = { it.id }) { user ->
                         val isCurrent = user.id == currentUserId || (currentUserName.isNotBlank() && !currentUserName.equals("AirBeats User", ignoreCase = true) && user.name.trim().equals(currentUserName.trim(), ignoreCase = true))
+                        val rowBg = if (isCurrent) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                        } else if (isFrosted) {
+                            if (isDark) Color.White.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                        }
+                        val rowBorder = if (isCurrent) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                        } else {
+                            if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                        }
+
                         Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 5.dp)
                                     .background(
-                                        if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                                        rowBg,
                                         RoundedCornerShape(14.dp),
+                                    )
+                                    .then(
+                                        if (isFrosted) Modifier.border(BorderStroke(1.dp, rowBorder), RoundedCornerShape(14.dp)) else Modifier
                                     )
                                     .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1218,14 +1280,16 @@ fun StatsHighlightCard(
     imageUrl: String?,
     onClick: () -> Unit
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(if (isFrosted) 20.dp else 16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+            containerColor = if (isFrosted) settingsCardContainerColor(true) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = settingsCardBorder(isFrosted)
     ) {
         Row(
             modifier = Modifier
