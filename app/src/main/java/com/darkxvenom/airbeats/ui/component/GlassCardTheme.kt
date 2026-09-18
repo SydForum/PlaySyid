@@ -33,9 +33,9 @@ fun settingsCardContainerColor(frosted: Boolean = isFrostedGlassUiEnabled()): Co
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     return if (frosted) {
         if (isDark) {
-            Color(0xFF202026).copy(alpha = 0.70f)
+            Color.White.copy(alpha = 0.08f)
         } else {
-            MaterialTheme.colorScheme.surface.copy(alpha = 0.80f)
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
         }
     } else {
         MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
@@ -51,9 +51,9 @@ fun popupGlassContainerColor(frosted: Boolean = isFrostedGlassUiEnabled()): Colo
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     return if (frosted) {
         if (isDark) {
-            Color(0xFF16161B).copy(alpha = 0.78f)
+            Color(0xFF16161B).copy(alpha = 0.88f)
         } else {
-            MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
         }
     } else {
         MaterialTheme.colorScheme.surfaceContainer
@@ -69,7 +69,7 @@ fun settingsCardBorder(frosted: Boolean = isFrostedGlassUiEnabled()): BorderStro
     return if (frosted) {
         BorderStroke(
             1.dp,
-            if (isDark) Color.White.copy(alpha = 0.14f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+            if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
         )
     } else {
         null

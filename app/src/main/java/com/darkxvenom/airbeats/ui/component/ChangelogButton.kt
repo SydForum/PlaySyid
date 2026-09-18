@@ -131,52 +131,30 @@ fun ChangelogButton(
     )
 
     if (showBottomSheet) {
-        val isFrosted = isFrostedGlassUiEnabled()
         ModalBottomSheet(
             onDismissRequest = { showBottomSheet = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = if (isFrosted) Color.Transparent else MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
             dragHandle = {
-                Box(
+                Surface(
                     modifier = Modifier
                         .padding(vertical = 12.dp)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-                )
+                        .width(32.dp)
+                        .height(4.dp),
+                    shape = RoundedCornerShape(2.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                ) {}
             }
         ) {
-            if (isFrosted) {
-                SettingsGlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    containerColor = popupGlassContainerColor()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        ChangelogScreen(viewModel)
-                        Spacer(Modifier.height(32.dp))
-                    }
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    ChangelogScreen(viewModel)
-                    Spacer(Modifier.height(32.dp))
-                }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                ChangelogScreen(viewModel)
+                Spacer(Modifier.height(32.dp))
             }
         }
     }

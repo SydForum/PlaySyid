@@ -70,22 +70,34 @@ fun BottomSheetMenu(
 
     if (state.isVisible) {
         val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        val containerColor = if (isFrosted || (enableLiquidGlass && backdrop != null)) {
+        val containerColor = if (enableLiquidGlass && !isFrosted && backdrop != null) {
             Color.Transparent
+        } else if (isFrosted) {
+            popupGlassContainerColor(frosted = true)
         } else {
             background
         }
 
-        val sheetModifier = if (enableLiquidGlass && !isFrosted && backdrop != null) {
-            modifier.fillMaxHeight().drawBackdropCustomShape(
-                backdrop = backdrop,
-                layer = layer,
-                luminanceAnimation = luminanceAnimation.value,
-                shape = sheetShape
-            )
-        } else {
-            modifier
-        }
+        val sheetModifier = modifier.fillMaxHeight().then(
+            if (enableLiquidGlass && !isFrosted && backdrop != null) {
+                Modifier.drawBackdropCustomShape(
+                    backdrop = backdrop,
+                    layer = layer,
+                    luminanceAnimation = luminanceAnimation.value,
+                    shape = sheetShape
+                )
+            } else if (isFrosted) {
+                Modifier.border(
+                    androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+                    ),
+                    sheetShape
+                )
+            } else {
+                Modifier
+            }
+        )
 
         ModalBottomSheet(
             onDismissRequest = {
@@ -94,43 +106,24 @@ fun BottomSheetMenu(
             },
             containerColor = containerColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
-            shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
+            shape = sheetShape,
             dragHandle = {
                 Box(
                     modifier = Modifier
                         .padding(vertical = 12.dp)
                         .size(width = 40.dp, height = 4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                 )
             },
             modifier = sheetModifier
         ) {
-            if (isFrosted) {
-                SettingsGlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    containerColor = popupGlassContainerColor()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                    ) {
-                        state.content(this)
-                    }
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                ) {
-                    state.content(this)
-                }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            ) {
+                state.content(this)
             }
         }
     }

@@ -19,7 +19,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -89,8 +88,6 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.luminance
 import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
-import com.darkxvenom.airbeats.ui.component.SettingsGlassCard
-import com.darkxvenom.airbeats.ui.component.popupGlassContainerColor
 import com.darkxvenom.airbeats.ui.component.LocalBackdrop
 import com.darkxvenom.airbeats.ui.component.drawBackdropCustomShape
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
@@ -1025,16 +1022,22 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = if (isFrosted || (enableLiquidGlass && backdrop != null)) {
+        containerColor = if (enableLiquidGlass && !isFrosted && backdrop != null) {
             Color.Transparent
+        } else if (isFrosted) {
+            if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
         } else {
             MaterialTheme.colorScheme.surface
         },
-        scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
-        shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
+        shape = sheetShape,
         modifier = Modifier.then(
             if (enableLiquidGlass && !isFrosted && backdrop != null) {
                 Modifier.drawBackdropCustomShape(backdrop = backdrop, layer = layer, luminanceAnimation = luminanceAnimation.value, shape = sheetShape)
+            } else if (isFrosted) {
+                Modifier.border(
+                    BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                    sheetShape
+                )
             } else {
                 Modifier
             }
@@ -1042,15 +1045,22 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
         dragHandle = {
             Box(
                 modifier = Modifier
-                    .padding(vertical = 12.dp)
-                    .width(40.dp)
+                    .padding(top = 10.dp, bottom = 6.dp)
+                    .width(34.dp)
                     .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.36f),
+                        shape = RoundedCornerShape(50)
+                    )
             )
         },
     ) {
-        val sheetContent: @Composable ColumnScope.() -> Unit = {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 18.dp)
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -1113,34 +1123,6 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
                 ) {
                     Text(stringResource(R.string.reset))
                 }
-            }
-        }
-
-        if (isFrosted) {
-            SettingsGlassCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(28.dp),
-                containerColor = popupGlassContainerColor()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 14.dp)
-                        .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 6.dp)
-                ) {
-                    sheetContent()
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 18.dp)
-            ) {
-                sheetContent()
             }
         }
     }

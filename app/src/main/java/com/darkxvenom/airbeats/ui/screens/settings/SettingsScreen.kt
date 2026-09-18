@@ -1208,13 +1208,11 @@ fun SettingsScreen(
         }
 
         if (showChangelogSheet) {
-            val isFrosted = isFrostedGlassUiEnabled()
             ModalBottomSheet(
                 onDismissRequest = { showChangelogSheet = false },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 containerColor = Color.Transparent,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                scrimColor = if (isFrosted) Color.Black.copy(alpha = 0.50f) else androidx.compose.material3.BottomSheetDefaults.ScrimColor,
                 dragHandle = {
                     Box(
                         modifier = Modifier
