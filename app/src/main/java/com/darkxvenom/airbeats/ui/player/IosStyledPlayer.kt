@@ -451,7 +451,9 @@ private fun V8PlayerControlsContent(
             centerContent = currentFormat?.let { format ->
                 {
                     val codec = format.mimeType.substringAfter("/").uppercase()
+                    val isDolbyAtmos = format.mimeType.contains("eac3", ignoreCase = true) || format.mimeType.contains("dolby", ignoreCase = true)
                     val label = when {
+                        isDolbyAtmos -> "Dolby Atmos"
                         codec.contains("FLAC") || codec.contains("ALAC") -> "Lossless"
                         codec.contains("OPUS") -> codec
                         codec.contains("AAC") -> codec
@@ -468,9 +470,9 @@ private fun V8PlayerControlsContent(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.graphic_eq),
+                                painter = painterResource(if (isDolbyAtmos) R.drawable.ic_dolby_atmos else R.drawable.graphic_eq),
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(if (isDolbyAtmos) 16.dp else 14.dp),
                                 tint = textBackgroundColor.copy(alpha = 0.8f),
                             )
                             Spacer(Modifier.width(4.dp))

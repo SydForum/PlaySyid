@@ -91,6 +91,7 @@ import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.ui.component.LocalBackdrop
 import com.darkxvenom.airbeats.ui.component.drawBackdropCustomShape
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
+import com.darkxvenom.airbeats.playback.DeviceCodecs
 import com.darkxvenom.airbeats.utils.rememberPreference
 import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.unit.sp
@@ -303,6 +304,7 @@ fun PlayerMenu(
     var isMuted by remember { mutableStateOf(false) }
     var previousVolume by remember { mutableFloatStateOf(playerVolume.value) }
     var showEqualizerSheet by rememberSaveable { mutableStateOf(false) }
+    var showDolbyAtmosSheet by rememberSaveable { mutableStateOf(false) }
     var showListenTogetherSheet by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
@@ -654,6 +656,37 @@ fun PlayerMenu(
                     }
 
                     item {
+                        val dolbyAtmosEnabled by playerConnection?.service?.dolbyAtmosEnabled?.collectAsState() ?: remember { mutableStateOf(true) }
+                        androidx.compose.material3.ListItem(
+                            headlineContent = { Text(stringResource(R.string.dolby_atmos)) },
+                            supportingContent = {
+                                Text(
+                                    text = if (dolbyAtmosEnabled) stringResource(R.string.enabled) else stringResource(R.string.disabled),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (dolbyAtmosEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_dolby_atmos),
+                                    contentDescription = null,
+                                    tint = if (dolbyAtmosEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = dolbyAtmosEnabled,
+                                    onCheckedChange = { playerConnection?.service?.setDolbyAtmosEnabled(it) }
+                                )
+                            },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable {
+                                showDolbyAtmosSheet = true
+                            }
+                        )
+                    }
+
+                    item {
                         androidx.compose.material3.ListItem(
                             headlineContent = { Text(stringResource(R.string.listen_together)) },
                             leadingContent = { Icon(painterResource(R.drawable.group), contentDescription = null) },
@@ -680,6 +713,14 @@ fun PlayerMenu(
             InAppEqualizerSheet(
                 onDismiss = {
                     showEqualizerSheet = false
+                }
+            )
+        }
+
+        if (showDolbyAtmosSheet) {
+            InAppDolbyAtmosSheet(
+                onDismiss = {
+                    showDolbyAtmosSheet = false
                 }
             )
         }
@@ -1363,4 +1404,205 @@ fun <T> ValueAdjuster(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun InAppDolbyAtmosSheet(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val playerConnection = LocalPlayerConnection.current ?: return
+    val dolbyAtmosEnabled by playerConnection.service.dolbyAtmosEnabled.collectAsState()
+    val isTrackDolbyAtmos by playerConnection.service.isTrackDolbyAtmos.collectAsState()
+    val dolbyAtmosSupported = remember { DeviceCodecs.playsDolbyAtmos }
+    val (enableLiquidGlass) = rememberPreference(LiquidGlassKey, false)
+    val isFrosted = isFrostedGlassUiEnabled()
+    val backdrop = LocalBackdrop.current
+    val layer = rememberGraphicsLayer()
+    val luminanceAnimation = remember { Animatable(0.3f) }
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = if (enableLiquidGlass && !isFrosted && backdrop != null) {
+            Color.Transparent
+        } else if (isFrosted) {
+            if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        shape = sheetShape,
+        modifier = Modifier.then(
+            if (enableLiquidGlass && !isFrosted && backdrop != null) {
+                Modifier.drawBackdropCustomShape(backdrop = backdrop, layer = layer, luminanceAnimation = luminanceAnimation.value, shape = sheetShape)
+            } else if (isFrosted) {
+                Modifier.border(
+                    BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                    sheetShape
+                )
+            } else {
+                Modifier
+            }
+        ),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 6.dp)
+                    .width(34.dp)
+                    .height(4.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.36f),
+                        shape = RoundedCornerShape(50)
+                    )
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_dolby_atmos),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.dolby_atmos),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = if (dolbyAtmosEnabled) {
+                            if (isTrackDolbyAtmos) "Native Multichannel Dolby Stream Active" else "Spatial Virtual Surround Active"
+                        } else {
+                            stringResource(R.string.disabled)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Switch(
+                    checked = dolbyAtmosEnabled,
+                    onCheckedChange = playerConnection.service::setDolbyAtmosEnabled,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            painter = painterResource(R.drawable.graphic_eq),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Acoustic Spatial Processing",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Expands the stereo soundstage into a multi-dimensional listening field using acoustic mid/side expansion and cross-feed head modeling.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Hardware E-AC-3 Decoder",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (dolbyAtmosSupported) "Supported" else "Emulated",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (dolbyAtmosSupported) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Soundstage Enhancement",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (dolbyAtmosEnabled) "2.5x Wide Stereo" else "Standard",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (dolbyAtmosEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            androidx.compose.material3.Button(
+                onClick = {
+                    val opened = DeviceCodecs.openDolbyAtmosSettings(
+                        context,
+                        playerConnection.player.audioSessionId
+                    )
+                    if (!opened) {
+                        android.widget.Toast.makeText(context, context.getString(R.string.no_dolby_atmos), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.tune),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = stringResource(R.string.dolby_atmos_system_panel))
+            }
+        }
+    }
+}
+
 

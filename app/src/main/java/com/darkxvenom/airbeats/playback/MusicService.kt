@@ -78,6 +78,7 @@ import com.darkxvenom.airbeats.constants.DiscordTokenKey
 import com.darkxvenom.airbeats.constants.DiscordUseDetailsKey
 import com.darkxvenom.airbeats.constants.DynamicIslandKey
 import com.darkxvenom.airbeats.constants.EnableDiscordRPCKey
+import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
 import com.darkxvenom.airbeats.constants.EqualizerEnabledKey
 import com.darkxvenom.airbeats.constants.HideExplicitKey
 import com.darkxvenom.airbeats.constants.HistoryDuration
@@ -284,6 +285,9 @@ class MusicService :
     private var equalizer: Equalizer? = null
     private var equalizerSessionId: Int = C.AUDIO_SESSION_ID_UNSET
     val equalizerState = MutableStateFlow(EqualizerUiState())
+    val spatialAudioProcessor = SpatialAudioProcessor()
+    val dolbyAtmosEnabled = MutableStateFlow(true)
+    val isTrackDolbyAtmos = MutableStateFlow(false)
 
     private var discordRpc: DiscordRPC? = null
     private var lastPlaybackSpeed = 1.0f
@@ -403,6 +407,14 @@ class MusicService :
             .distinctUntilChanged()
             .collectLatest(scope) {
                 crossfadeDurationMs.value = it
+            }
+
+        dataStore.data
+            .map { it[DolbyAtmosEnabledKey] ?: true }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                dolbyAtmosEnabled.value = enabled
+                updateSpatialAudio()
             }
 
         crossfadeAudio =
@@ -1421,6 +1433,36 @@ class MusicService :
         )
     }
 
+    fun setDolbyAtmosEnabled(enabled: Boolean) {
+        dolbyAtmosEnabled.value = enabled
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[DolbyAtmosEnabledKey] = enabled
+            }
+        }
+        updateSpatialAudio()
+    }
+
+    fun updateSpatialAudio() {
+        val isNativeAtmos = isTrackDolbyAtmos.value
+        spatialAudioProcessor.enabled = dolbyAtmosEnabled.value && !isNativeAtmos
+    }
+
+    override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+        var isDolby = false
+        for (group in tracks.groups) {
+            for (i in 0 until group.length) {
+                val format = group.getTrackFormat(i)
+                if (group.isTrackSelected(i) && DeviceCodecs.isDolbyAtmosFormat(format)) {
+                    isDolby = true
+                    break
+                }
+            }
+        }
+        isTrackDolbyAtmos.value = isDolby
+        updateSpatialAudio()
+    }
+
     override fun onMediaItemTransition(
         mediaItem: MediaItem?,
         reason: Int,
@@ -1437,6 +1479,7 @@ class MusicService :
 
         setupLoudnessEnhancer()
         setupEqualizer()
+        updateSpatialAudio()
 
         discordUpdateJob?.cancel()
 
@@ -1986,7 +2029,7 @@ class MusicService :
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                 .setAudioProcessorChain(
                     DefaultAudioSink.DefaultAudioProcessorChain(
-                        emptyArray(),
+                        arrayOf(spatialAudioProcessor),
                         SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
                         SonicAudioProcessor(),
                     ),

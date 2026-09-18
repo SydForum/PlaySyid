@@ -373,6 +373,17 @@
     <string name="audio_quality_auto">Auto</string>
     <string name="audio_quality_high">High</string>
     <string name="audio_quality_low">Low</string>
+    <string name="dolby_atmos">Dolby Atmos</string>
+    <string name="dolby_atmos_subtitle">Play the more immersive, surround version of a song when there is one.</string>
+    <string name="dolby_atmos_unavailable">This device cannot decode hardware Dolby Atmos, virtual spatial surround will be used.</string>
+    <string name="dolby_atmos_system_panel">Dolby Atmos System Panel</string>
+    <string name="dolby_atmos_system_panel_desc">Open device Dolby Atmos or system sound enhancement panel</string>
+    <string name="no_dolby_atmos">No Dolby Atmos panel found on this device</string>
+    <string name="dolby_atmos_open_failed">Couldn\'t open Dolby Atmos settings</string>
+    <string name="spatial_audio">Spatial Audio</string>
+    <string name="spatial_audio_desc">Expands stereo soundstage with virtual spatial acoustics</string>
+    <string name="enabled">On</string>
+    <string name="disabled">Off</string>
     <string name="queue">Queue</string>
     <string name="persistent_queue">Persistent queue</string>
     <string name="persistent_queue_desc">Restore your last queue when the app starts</string>

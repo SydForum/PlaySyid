@@ -13,16 +13,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
 import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
+import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.AudioNormalizationKey
 import com.darkxvenom.airbeats.constants.AudioQuality
 import com.darkxvenom.airbeats.constants.AudioQualityKey
 import com.darkxvenom.airbeats.constants.AutoLoadMoreKey
+import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
+import com.darkxvenom.airbeats.playback.DeviceCodecs
+import com.darkxvenom.airbeats.ui.component.PreferenceEntry
 import com.darkxvenom.airbeats.constants.DownloadQualityKey
 import com.darkxvenom.airbeats.constants.AutoSkipNextOnErrorKey
 import com.darkxvenom.airbeats.constants.CrossfadeKey
@@ -49,6 +55,14 @@ fun PlayerSettings(
     navController: NavController,
     scrollBehavior: TopAppBarScrollBehavior,
 ) {
+    val context = LocalContext.current
+    val playerConnection = LocalPlayerConnection.current
+    val (dolbyAtmos, onDolbyAtmosChange) = rememberPreference(
+        DolbyAtmosEnabledKey,
+        defaultValue = true
+    )
+    val dolbyAtmosSupported = remember { DeviceCodecs.playsDolbyAtmos }
+
     val (audioQuality, onAudioQualityChange) = rememberEnumPreference(
         AudioQualityKey,
         defaultValue = AudioQuality.AUTO
@@ -118,6 +132,35 @@ fun PlayerSettings(
                             AudioQuality.MEDIUM -> "Medium"
                             AudioQuality.LOW -> stringResource(R.string.audio_quality_low)
                         }
+                    }
+                )},
+
+                {SwitchPreference(
+                    title = { Text(stringResource(R.string.dolby_atmos)) },
+                    description = stringResource(
+                        if (dolbyAtmosSupported) {
+                            R.string.dolby_atmos_subtitle
+                        } else {
+                            R.string.dolby_atmos_unavailable
+                        }
+                    ),
+                    icon = { Icon(painterResource(R.drawable.ic_dolby_atmos), null) },
+                    checked = dolbyAtmos,
+                    onCheckedChange = { enabled ->
+                        onDolbyAtmosChange(enabled)
+                        playerConnection?.service?.setDolbyAtmosEnabled(enabled)
+                    }
+                )},
+
+                {PreferenceEntry(
+                    title = { Text(stringResource(R.string.dolby_atmos_system_panel)) },
+                    description = stringResource(R.string.dolby_atmos_system_panel_desc),
+                    icon = { Icon(painterResource(R.drawable.tune), null) },
+                    onClick = {
+                        DeviceCodecs.openDolbyAtmosSettings(
+                            context,
+                            playerConnection?.player?.audioSessionId ?: 0
+                        )
                     }
                 )},
 

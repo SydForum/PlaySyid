@@ -1564,12 +1564,16 @@ fun BottomSheetPlayer(
         }
         val immersiveControlsContent: @Composable ColumnScope.(MediaMetadata) -> Unit = { mediaMetadata ->
             val isLoading = playbackState != STATE_READY && playbackState != STATE_ENDED
+            val isDolbyAtmos = currentFormat?.mimeType?.let {
+                it.contains("eac3", ignoreCase = true) || it.contains("dolby", ignoreCase = true)
+            } == true
             val codecLabel = remember(currentFormat) {
                 currentFormat?.mimeType
                     ?.substringAfter("/", missingDelimiterValue = "")
                     ?.uppercase()
                     ?.let { codec ->
                         when {
+                            codec.contains("EAC3") || codec.contains("DOLBY") -> "DOLBY ATMOS"
                             codec.contains("MP4A") -> "MP4"
                             codec.contains("AAC") -> "AAC"
                             codec.contains("OPUS") -> "OPUS"
@@ -1779,10 +1783,10 @@ fun BottomSheetPlayer(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Image(
-                                    painter = painterResource(R.drawable.graphic_eq),
+                                    painter = painterResource(if (isDolbyAtmos) R.drawable.ic_dolby_atmos else R.drawable.graphic_eq),
                                     contentDescription = null,
                                     colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.78f)),
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(if (isDolbyAtmos) 16.dp else 14.dp)
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
