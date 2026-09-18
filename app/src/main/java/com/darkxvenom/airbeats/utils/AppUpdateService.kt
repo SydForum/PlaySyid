@@ -15,11 +15,24 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.FileProvider
 import com.darkxvenom.airbeats.R
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
+
+sealed interface UpdateDownloadState {
+    data object Idle : UpdateDownloadState
+    data class Downloading(
+        val progress: Float, // 0.0f to 1.0f or -1f if unknown
+        val downloadedBytes: Long,
+        val totalBytes: Long
+    ) : UpdateDownloadState
+    data class Completed(val apkFile: File) : UpdateDownloadState
+    data class Failed(val error: String) : UpdateDownloadState
+}
 
 /** Downloads a release APK with visible progress, verifies its signer, then opens Android's installer. */
 class AppUpdateService : Service() {
@@ -38,15 +51,19 @@ class AppUpdateService : Service() {
         val downloadUrl = intent?.getStringExtra(EXTRA_DOWNLOAD_URL).orEmpty()
         if (intent?.action != ACTION_DOWNLOAD || downloadUrl.isBlank()) {
             Timber.w("AppUpdateService started with invalid action or empty URL")
+            _downloadState.value = UpdateDownloadState.Failed("Invalid download URL")
             stopForegroundAndFinish(startId)
             return START_NOT_STICKY
         }
+
+        _downloadState.value = UpdateDownloadState.Downloading(0f, 0L, 0L)
 
         thread(name = "app-update-download") {
             try {
                 downloadAndInstall(downloadUrl)
             } catch (e: Exception) {
                 Timber.e(e, "App update download failed")
+                _downloadState.value = UpdateDownloadState.Failed(e.localizedMessage ?: "Update download failed")
                 showFinishedNotification("Update download failed", "Could not complete update download. Please try again.")
             } finally {
                 stopForegroundAndFinish(startId)
@@ -128,7 +145,18 @@ class AppUpdateService : Service() {
                         if (progress != lastProgress) {
                             lastProgress = progress
                             notificationManager.notify(NOTIFICATION_ID, notification("Downloading update", progress, true))
+                            _downloadState.value = UpdateDownloadState.Downloading(
+                                progress = downloaded.toFloat() / total.toFloat(),
+                                downloadedBytes = downloaded,
+                                totalBytes = total
+                            )
                         }
+                    } else {
+                        _downloadState.value = UpdateDownloadState.Downloading(
+                            progress = -1f,
+                            downloadedBytes = downloaded,
+                            totalBytes = -1L
+                        )
                     }
                 }
             }
@@ -136,8 +164,9 @@ class AppUpdateService : Service() {
         connection.disconnect()
         require(isSignedLikeInstalledApp(apk)) { "Downloaded APK is not signed by this app's signer" }
 
+        _downloadState.value = UpdateDownloadState.Completed(apk)
         showReadyNotification(apk)
-        openInstaller(apk)
+        openInstaller(this, apk)
     }
 
     @Suppress("DEPRECATION")
@@ -160,24 +189,6 @@ class AppUpdateService : Service() {
                 ?.signatures ?: return false
         }
         return installed.any { current -> downloaded.any { candidate -> current.toByteArray().contentEquals(candidate.toByteArray()) } }
-    }
-
-    private fun openInstaller(apk: File) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            val settingsIntent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                data = Uri.parse("package:$packageName")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(settingsIntent)
-            return
-        }
-
-        val uri = FileProvider.getUriForFile(this, "$packageName.provider", apk)
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(installIntent)
     }
 
     private fun notification(title: String, progress: Int, ongoing: Boolean) =
@@ -267,6 +278,35 @@ class AppUpdateService : Service() {
         private const val COMPLETED_NOTIFICATION_ID = 6_205
         private const val ACTION_DOWNLOAD = "com.darkxvenom.airbeats.action.DOWNLOAD_UPDATE"
         private const val EXTRA_DOWNLOAD_URL = "download_url"
+
+        private val _downloadState = MutableStateFlow<UpdateDownloadState>(UpdateDownloadState.Idle)
+        val downloadState = _downloadState.asStateFlow()
+
+        fun resetState() {
+            _downloadState.value = UpdateDownloadState.Idle
+        }
+
+        fun getDownloadedApk(context: Context): File? {
+            val apk = File(context.cacheDir, "AirBeats-update.apk")
+            return if (apk.exists() && apk.length() > 0) apk else null
+        }
+
+        fun openInstaller(context: Context, apk: File) {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", apk)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                return
+            }
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        }
 
         fun start(context: Context, downloadUrl: String) {
             val intent = Intent(context, AppUpdateService::class.java).apply {

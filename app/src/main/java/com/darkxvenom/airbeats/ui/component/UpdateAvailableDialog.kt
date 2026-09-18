@@ -38,11 +38,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +67,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.utils.AppUpdateService
+import com.darkxvenom.airbeats.utils.UpdateDownloadState
 import com.darkxvenom.airbeats.utils.UpdateInfo
+import java.util.Locale
 
 @Composable
 fun UpdateAvailableDialog(
@@ -74,7 +78,7 @@ fun UpdateAvailableDialog(
 ) {
     val context = LocalContext.current
     var isWhatIsNewExpanded by remember { mutableStateOf(false) }
-    var updateStarted by remember { mutableStateOf(false) }
+    val downloadState by AppUpdateService.downloadState.collectAsState()
 
     val arrowRotation by animateFloatAsState(
         targetValue = if (isWhatIsNewExpanded) 180f else 0f,
@@ -94,7 +98,7 @@ fun UpdateAvailableDialog(
     )
 
     Dialog(
-        onDismissRequest = { if (!updateStarted) onDismiss() },
+        onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
@@ -315,7 +319,201 @@ fun UpdateAvailableDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Real-time Progress / Status Card
+                AnimatedVisibility(
+                    visible = downloadState !is UpdateDownloadState.Idle,
+                    enter = expandVertically(animationSpec = tween(300)) + fadeIn(),
+                    exit = shrinkVertically(animationSpec = tween(300)) + fadeOut()
+                ) {
+                    when (val state = downloadState) {
+                        is UpdateDownloadState.Downloading -> {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Downloading update…",
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = FontWeight.SemiBold
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (state.progress >= 0f) {
+                                            Text(
+                                                text = "${(state.progress * 100).toInt()}%",
+                                                style = MaterialTheme.typography.labelLarge.copy(
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+
+                                    if (state.progress >= 0f) {
+                                        LinearProgressIndicator(
+                                            progress = { state.progress },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                                .clip(RoundedCornerShape(4.dp)),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                        )
+                                    } else {
+                                        LinearProgressIndicator(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                                .clip(RoundedCornerShape(4.dp)),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        val downloadedMb = state.downloadedBytes / (1024f * 1024f)
+                                        val totalMb = state.totalBytes / (1024f * 1024f)
+                                        val bytesText = if (state.totalBytes > 0) {
+                                            String.format(Locale.getDefault(), "%.1f MB / %.1f MB", downloadedMb, totalMb)
+                                        } else if (state.downloadedBytes > 0) {
+                                            String.format(Locale.getDefault(), "%.1f MB", downloadedMb)
+                                        } else {
+                                            "Starting download…"
+                                        }
+                                        Text(
+                                            text = bytesText,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        is UpdateDownloadState.Completed -> {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.check_circle),
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Download Complete",
+                                            style = MaterialTheme.typography.titleSmall.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Tap Install to update now",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        is UpdateDownloadState.Failed -> {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.info),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "Download Failed",
+                                            style = MaterialTheme.typography.titleSmall.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Text(
+                                            text = state.error.ifBlank { "Could not complete update download." },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        UpdateDownloadState.Idle -> Unit
+                    }
+                }
 
                 // Bottom Action Buttons
                 Row(
@@ -325,7 +523,6 @@ fun UpdateAvailableDialog(
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
-                        enabled = !updateStarted,
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp),
@@ -341,17 +538,27 @@ fun UpdateAvailableDialog(
                         )
                     }
 
+                    val isDownloading = downloadState is UpdateDownloadState.Downloading
+                    val isCompleted = downloadState is UpdateDownloadState.Completed
+                    val isFailed = downloadState is UpdateDownloadState.Failed
+
                     Button(
                         onClick = {
-                            val directApkUrl = updateInfo.apkDownloadUrl.ifBlank {
-                                updateInfo.releaseUrl.ifBlank {
-                                    com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleasePageUrl()
+                            when (val state = downloadState) {
+                                is UpdateDownloadState.Completed -> {
+                                    AppUpdateService.openInstaller(context, state.apkFile)
+                                }
+                                else -> {
+                                    val directApkUrl = updateInfo.apkDownloadUrl.ifBlank {
+                                        updateInfo.releaseUrl.ifBlank {
+                                            com.darkxvenom.airbeats.utils.RemoteConfigManager.getLatestReleasePageUrl()
+                                        }
+                                    }
+                                    AppUpdateService.start(context, directApkUrl)
                                 }
                             }
-                            updateStarted = true
-                            AppUpdateService.start(context, directApkUrl)
                         },
-                        enabled = !updateStarted,
+                        enabled = !isDownloading,
                         modifier = Modifier
                             .weight(1.3f)
                             .height(48.dp),
@@ -361,14 +568,26 @@ fun UpdateAvailableDialog(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
+                        val iconRes = when {
+                            isCompleted -> R.drawable.deployed_code_update
+                            isFailed -> R.drawable.refresh
+                            else -> R.drawable.download
+                        }
+                        val buttonText = when {
+                            isDownloading -> "Downloading…"
+                            isCompleted -> "Install"
+                            isFailed -> "Retry"
+                            else -> "Download"
+                        }
+
                         Icon(
-                            painter = painterResource(R.drawable.download),
+                            painter = painterResource(iconRes),
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (updateStarted) "Downloading…" else "Download",
+                            text = buttonText,
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Bold
                             )
