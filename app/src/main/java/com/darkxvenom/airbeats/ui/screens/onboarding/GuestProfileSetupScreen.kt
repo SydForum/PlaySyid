@@ -372,22 +372,26 @@ fun GuestProfileSetupScreen(navController: NavController) {
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Option 1: Restore from Android OS
+                        // Option 1: Restore from Android OS / Auto Backup
                         Surface(
                             onClick = {
                                 showRestoreOptionsDialog = false
                                 isRestoringBackup = true
-                                restoringStatusText = "Restoring from Android OS..."
+                                restoringStatusText = "Searching for Auto Backup..."
                                 coroutineScope.launch {
                                     val restored = withContext(Dispatchers.IO) {
-                                        AutoBackupManager.checkAndRestoreDeviceCloudBackup(context)
+                                        var success = AutoBackupManager.restoreAutoBackup(context, shouldRestart = true)
+                                        if (!success) {
+                                            success = AutoBackupManager.checkAndRestoreDeviceCloudBackup(context)
+                                        }
+                                        success
                                     }
                                     if (!restored) {
                                         isRestoringBackup = false
                                         android.widget.Toast.makeText(
                                             context,
-                                            "No existing cloud backup found for this device",
-                                            android.widget.Toast.LENGTH_SHORT
+                                            "No automatic backup found. Please choose 'Restore from Storage' to select your backup file.",
+                                            android.widget.Toast.LENGTH_LONG
                                         ).show()
                                     }
                                 }
@@ -422,7 +426,7 @@ fun GuestProfileSetupScreen(navController: NavController) {
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Restore from Android OS",
+                                        text = "Restore from Android OS / Auto Backup",
                                         style = MaterialTheme.typography.bodyLarge.copy(
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 15.sp
@@ -431,7 +435,7 @@ fun GuestProfileSetupScreen(navController: NavController) {
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Restore cloud backup linked to this device",
+                                        text = "Restore OS or persistent auto-backup snapshot",
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontSize = 12.sp
                                         ),

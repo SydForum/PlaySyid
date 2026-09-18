@@ -528,7 +528,7 @@ class MainActivity : ComponentActivity() {
                 if (isNameSet == false) {
                     if (!hasCheckedCloudRestore) {
                         hasCheckedCloudRestore = true
-                        splashStatusText = "Restoring cloud backup..."
+                        splashStatusText = "Checking for backup..."
                         val restored = withContext(Dispatchers.IO) {
                             AutoBackupManager.checkAndRestoreDeviceCloudBackup(this@MainActivity)
                         }

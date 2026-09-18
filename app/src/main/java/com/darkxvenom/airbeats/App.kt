@@ -206,14 +206,6 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                 namePreferenceManager = namePreferenceManager,
             )?.onFailure(::reportException)
         }
-        GlobalScope.launch(Dispatchers.IO) {
-            runCatching {
-                AutoBackupManager.createAutoBackup(this@App, database, notifyBackupManager = true)
-                Timber.i("App launch: AutoBackup created/updated and Android BackupManager notified")
-            }.onFailure { e ->
-                Timber.w(e, "Failed to create AutoBackup on app launch")
-            }
-        }
         GlobalScope.launch {
             dataStore.data
                 .map { it[VisitorDataKey] }

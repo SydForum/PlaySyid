@@ -42,6 +42,9 @@
     <application
         android:name=".App"
         android:allowBackup="true"
+        android:backupAgent=".utils.AirBeatsBackupAgent"
+        android:restoreAnyVersion="true"
+        android:requestLegacyExternalStorage="true"
         android:appCategory="audio"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"

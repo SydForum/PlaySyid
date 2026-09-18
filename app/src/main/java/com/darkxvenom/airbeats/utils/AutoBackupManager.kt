@@ -262,8 +262,122 @@ object AutoBackupManager {
         }
     }
 
+    fun hasBackableData(context: Context, database: MusicDatabase?): Boolean {
+        // Room Database check
+        val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
+        if (dbFile.exists() && dbFile.length() > 32 * 1024) return true
+
+        // Datastore check (settings, profile)
+        val datastoreDir = context.filesDir / "datastore"
+        if (datastoreDir.exists() && datastoreDir.isDirectory) {
+            val hasData = datastoreDir.listFiles()?.any { it.isFile && it.length() > 0 } == true
+            if (hasData) return true
+        }
+
+        // Global stats check
+        val parentFile = context.filesDir.parentFile
+        if (parentFile != null) {
+            val statsPrefs = parentFile / "shared_prefs" / GLOBAL_STATS_FILENAME
+            if (statsPrefs.exists() && statsPrefs.length() > 0) return true
+        }
+
+        // Stats identity file check
+        val idFile = File(context.filesDir, STATS_IDENTITY_FILENAME)
+        if (idFile.exists() && idFile.length() > 0) return true
+
+        return false
+    }
+
+    fun savePersistentExternalBackup(context: Context, sourceFile: File) {
+        if (!sourceFile.exists() || sourceFile.length() == 0L) return
+
+        // 1. Try public Downloads/AirBeats/airbeats_auto_backup.backup (survives app uninstall)
+        runCatching {
+            val downloadsDir = File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                "AirBeats"
+            )
+            if (!downloadsDir.exists()) downloadsDir.mkdirs()
+            val destInDownloads = File(downloadsDir, "airbeats_auto_backup.backup")
+            sourceFile.copyTo(destInDownloads, overwrite = true)
+            Timber.i("AutoBackupManager: Persistent external backup saved to Downloads (${destInDownloads.length()} bytes)")
+        }.onFailure { e ->
+            Timber.d("AutoBackupManager: Could not save persistent backup to Downloads: ${e.message}")
+        }
+
+        // 2. Try public Documents/AirBeats/airbeats_auto_backup.backup (survives app uninstall)
+        runCatching {
+            val documentsDir = File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
+                "AirBeats"
+            )
+            if (!documentsDir.exists()) documentsDir.mkdirs()
+            val destInDocs = File(documentsDir, "airbeats_auto_backup.backup")
+            sourceFile.copyTo(destInDocs, overwrite = true)
+            Timber.i("AutoBackupManager: Persistent external backup saved to Documents (${destInDocs.length()} bytes)")
+        }.onFailure { e ->
+            Timber.d("AutoBackupManager: Could not save persistent backup to Documents: ${e.message}")
+        }
+    }
+
+    fun findAvailableAutoBackup(context: Context): File? {
+        // 1. Check internal filesDir (restored by Android OS BackupAgent from Google Drive)
+        val internalFile = getAutoBackupFile(context)
+        if (internalFile.exists() && internalFile.length() > 0L) {
+            return internalFile
+        }
+
+        // 2. Check legacy internal backup location
+        val legacyFile = File(context.filesDir, "os_backup/latest.backup")
+        if (legacyFile.exists() && legacyFile.length() > 0L) {
+            return legacyFile
+        }
+
+        // 3. Check public Downloads/AirBeats/airbeats_auto_backup.backup (persistent after uninstall)
+        val extDownloads = File(
+            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+            "AirBeats/airbeats_auto_backup.backup"
+        )
+        if (extDownloads.exists() && extDownloads.length() > 0L) {
+            return extDownloads
+        }
+
+        // 4. Check public Documents/AirBeats/airbeats_auto_backup.backup (persistent after uninstall)
+        val extDocs = File(
+            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
+            "AirBeats/airbeats_auto_backup.backup"
+        )
+        if (extDocs.exists() && extDocs.length() > 0L) {
+            return extDocs
+        }
+
+        // 5. Check for any user or auto backup files in Downloads/AirBeats/ or Documents/AirBeats/
+        val candidateDirs = listOf(
+            File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "AirBeats"),
+            File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS), "AirBeats"),
+            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+        )
+        for (dir in candidateDirs) {
+            if (dir.exists() && dir.isDirectory) {
+                val latestBackup = dir.listFiles { f -> f.isFile && f.name.endsWith(".backup") && f.length() > 0L }
+                    ?.maxByOrNull { it.lastModified() }
+                if (latestBackup != null) {
+                    return latestBackup
+                }
+            }
+        }
+
+        return null
+    }
+
     fun createAutoBackup(context: Context, database: MusicDatabase?, notifyBackupManager: Boolean = true): Boolean {
         return try {
+            // Guard: Never overwrite existing backups with an empty, uninitialized state
+            if (!hasBackableData(context, database)) {
+                Timber.d("AutoBackupManager: Skipping auto_backup creation - database and profile have no content to back up")
+                return false
+            }
+
             val targetFile = getAutoBackupFile(context)
             val tmpFile = File(context.filesDir, "$BACKUP_FILENAME.tmp")
 
@@ -286,13 +400,17 @@ object AutoBackupManager {
                     .putString(KEY_LAST_RESTORED_SIG, currentSig)
                     .commit()
 
+                // Save persistent external copy that survives app uninstall
+                savePersistentExternalBackup(context, targetFile)
+
                 if (notifyBackupManager) {
                     runCatching {
                         android.app.backup.BackupManager(context).dataChanged()
+                        Timber.i("AutoBackupManager: Notified Android BackupManager for scheduled OS backup pass")
                     }
                 }
 
-                Timber.i("AutoBackupManager: auto_backup created successfully (${targetFile.length()} bytes)")
+                Timber.i("AutoBackupManager: auto_backup snapshot created successfully (${targetFile.length()} bytes)")
                 true
             } else {
                 false
@@ -474,15 +592,17 @@ object AutoBackupManager {
     }
 
     fun restoreAutoBackup(context: Context, shouldRestart: Boolean = true): Boolean {
-        var file = getAutoBackupFile(context)
-        if (!file.exists() || file.length() == 0L) {
-            file = File(context.filesDir, "os_backup/latest.backup")
-        }
-        if (!file.exists() || file.length() == 0L) {
+        val file = findAvailableAutoBackup(context)
+        if (file == null || !file.exists() || file.length() == 0L) {
             Timber.w("AutoBackupManager: No backup file available to restore")
             return false
         }
-        return FileInputStream(file).use { stream ->
+        val targetFile = getAutoBackupFile(context)
+        if (file.absolutePath != targetFile.absolutePath) {
+            runCatching { file.copyTo(targetFile, overwrite = true) }
+        }
+        Timber.i("AutoBackupManager: Restoring auto backup from ${file.absolutePath} (${file.length()} bytes)")
+        return FileInputStream(targetFile).use { stream ->
             restoreFromInputStream(context, stream, shouldRestart)
         }
     }
@@ -491,9 +611,10 @@ object AutoBackupManager {
         try {
             var backupFile = getAutoBackupFile(context)
             if (!backupFile.exists() || backupFile.length() == 0L) {
-                val legacyFile = File(context.filesDir, "os_backup/latest.backup")
-                if (legacyFile.exists() && legacyFile.length() > 0L) {
-                    legacyFile.copyTo(backupFile, overwrite = true)
+                val candidate = findAvailableAutoBackup(context)
+                if (candidate != null && candidate.exists() && candidate.length() > 0L) {
+                    candidate.copyTo(backupFile, overwrite = true)
+                    Timber.i("AutoBackupManager: Discovered persistent backup at ${candidate.absolutePath} and primed local backup file")
                 }
             }
 
@@ -554,11 +675,15 @@ object AutoBackupManager {
 
             httpClient.newCall(request).execute().use { response ->
                 val isSuccess = response.isSuccessful
-                Timber.i("AutoBackupManager: Cloud upload response code=${response.code}, success=$isSuccess")
+                if (response.code == 404) {
+                    Timber.d("AutoBackupManager: Custom cloud storage endpoint not active on worker (404). Local/OS backup preserved.")
+                } else {
+                    Timber.i("AutoBackupManager: Cloud upload response code=${response.code}, success=$isSuccess")
+                }
                 isSuccess
             }
         } catch (e: Exception) {
-            Timber.e(e, "AutoBackupManager: Cloud upload failed")
+            Timber.d("AutoBackupManager: Cloud upload unavailable: ${e.message}")
             false
         }
     }
@@ -574,7 +699,7 @@ object AutoBackupManager {
 
             httpClient.newCall(request).execute().use { response ->
                 if (response.code == 404) {
-                    Timber.i("AutoBackupManager: No cloud backup found for this device on server (404)")
+                    Timber.d("AutoBackupManager: No remote cloud backup file on server (404)")
                     return@use false
                 }
                 if (!response.isSuccessful) {
@@ -597,7 +722,7 @@ object AutoBackupManager {
                 }
             }
         } catch (e: Exception) {
-            Timber.e(e, "AutoBackupManager: Cloud download failed")
+            Timber.d("AutoBackupManager: Cloud download unavailable: ${e.message}")
             false
         }
     }
@@ -612,11 +737,11 @@ object AutoBackupManager {
                 .build()
 
             httpClient.newCall(request).execute().use { response ->
-                Timber.i("AutoBackupManager: Cloud delete response code=${response.code}")
+                Timber.d("AutoBackupManager: Cloud delete response code=${response.code}")
                 response.isSuccessful
             }
         } catch (e: Exception) {
-            Timber.e(e, "AutoBackupManager: Cloud delete failed")
+            Timber.d("AutoBackupManager: Cloud delete unavailable: ${e.message}")
             false
         }
     }
@@ -629,6 +754,24 @@ object AutoBackupManager {
             return@withContext false
         }
 
+        // 1. Check if a local Android OS or persistent external auto-backup exists first
+        val availableFile = findAvailableAutoBackup(context)
+        if (availableFile != null && availableFile.exists() && availableFile.length() > 0L) {
+            val restored = restoreAutoBackup(context, shouldRestart = false)
+            if (restored) {
+                Timber.i("AutoBackupManager: Restored state from discovered local/OS backup file (${availableFile.length()} bytes)")
+                prefs.edit()
+                    .putInt(KEY_RESTART_ATTEMPTS, restartAttempts + 1)
+                    .putLong(KEY_LAST_BACKUP_TIME, availableFile.lastModified())
+                    .commit()
+                withContext(Dispatchers.Main) {
+                    restartApp(context)
+                }
+                return@withContext true
+            }
+        }
+
+        // 2. Fall back to remote cloud download if available
         val targetFile = getAutoBackupFile(context)
         val downloadSuccess = downloadFromCloud(context, targetFile)
         if (!downloadSuccess || !targetFile.exists() || targetFile.length() == 0L) {
@@ -674,6 +817,11 @@ object AutoBackupManager {
                 legacyFile.delete()
             }
 
+            runCatching {
+                File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "AirBeats/airbeats_auto_backup.backup").delete()
+                File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS), "AirBeats/airbeats_auto_backup.backup").delete()
+            }
+
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .clear()
@@ -681,6 +829,7 @@ object AutoBackupManager {
 
             runCatching {
                 android.app.backup.BackupManager(context).dataChanged()
+                Timber.i("AutoBackupManager: Backup deleted and Android BackupManager notified")
             }
             true
         } catch (e: Exception) {

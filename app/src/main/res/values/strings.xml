@@ -904,7 +904,7 @@
     <string name="backup_item_profile">Guest profile, name &amp; avatar</string>
     <string name="backup_item_covers">Playlist covers &amp; custom artwork</string>
     <string name="backup_item_settings">App settings &amp; audio preferences</string>
-    <string name="backup_now_success">All data synced to Android OS Backup!</string>
+    <string name="backup_now_success">Backup saved to device &amp; scheduled with Android OS</string>
     <string name="backup_delete_confirm_title">Delete Backup Data?</string>
     <string name="backup_delete_confirm_desc">This will delete the local backup snapshot and reset your backup state. Android OS will be notified.</string>
     <string name="backup_restore_confirm_title">Restore from Backup?</string>
