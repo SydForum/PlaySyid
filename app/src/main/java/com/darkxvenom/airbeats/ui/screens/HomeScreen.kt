@@ -72,6 +72,8 @@ import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import com.darkxvenom.airbeats.ui.component.ChipsRow
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -439,13 +441,47 @@ fun HomeScreen(
                 }
 
                 item(key = "home_chips") {
-                    GlassHomeTagsRow(
-                        navController = navController,
-                        isLoggedIn = isLoggedIn,
-                        modifier = Modifier
-                            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
-                            .animateItem()
-                    )
+                    val isFrosted = isFrostedGlassUiEnabled()
+                    if (isFrosted) {
+                        GlassHomeTagsRow(
+                            navController = navController,
+                            isLoggedIn = isLoggedIn,
+                            modifier = Modifier
+                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
+                                .animateItem()
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
+                                .fillMaxWidth()
+                                .animateItem()
+                        ) {
+                            ChipsRow(
+                                chips = listOfNotNull(
+                                    Pair("history", stringResource(R.string.history)),
+                                    Pair("stats", stringResource(R.string.stats)),
+                                    Pair("liked", stringResource(R.string.liked)),
+                                    Pair("downloads", stringResource(R.string.offline)),
+                                    if (isLoggedIn) Pair(
+                                        "account",
+                                        stringResource(R.string.account)
+                                    ) else null
+                                ),
+                                currentValue = "",
+                                onValueUpdate = { value ->
+                                    when (value) {
+                                        "history" -> navController.navigate("history")
+                                        "stats" -> navController.navigate("stats")
+                                        "liked" -> navController.navigate("auto_playlist/liked")
+                                        "downloads" -> navController.navigate("auto_playlist/downloaded")
+                                        "account" -> if (isLoggedIn) navController.navigate("account")
+                                    }
+                                },
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            )
+                        }
+                    }
                 }
 
                 quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->

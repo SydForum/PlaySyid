@@ -76,6 +76,9 @@ import com.darkxvenom.airbeats.ui.component.AvatarPreferenceManager
 import com.darkxvenom.airbeats.ui.component.AvatarSelection
 import com.darkxvenom.airbeats.ui.component.ChangelogScreen
 import com.darkxvenom.airbeats.ui.component.UpdateAvailableDialog
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
+import com.darkxvenom.airbeats.ui.component.settingsCardContainerColor
+import com.darkxvenom.airbeats.ui.component.settingsCardBorder
 import com.darkxvenom.airbeats.utils.RemoteConfigManager
 import com.darkxvenom.airbeats.utils.UpdateInfo
 import com.darkxvenom.airbeats.utils.Updater
@@ -127,12 +130,14 @@ fun SettingsCategory(
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
         )
 
+        val isFrosted = isFrostedGlassUiEnabled()
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+                containerColor = settingsCardContainerColor(isFrosted)
             ),
+            border = settingsCardBorder(isFrosted),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
@@ -245,12 +250,14 @@ fun GlassCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+            containerColor = settingsCardContainerColor(isFrosted)
         ),
+        border = settingsCardBorder(isFrosted),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         content()

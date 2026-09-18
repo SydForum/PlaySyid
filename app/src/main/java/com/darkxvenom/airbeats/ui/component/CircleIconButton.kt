@@ -39,15 +39,20 @@ fun CircleIconButton(
     scrollOffset: Float = 0f,
     modifier: Modifier = Modifier
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val glassBg = if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
     val glassBorder = if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-    val contentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val contentColor = if (isFrosted) {
+        if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1.0f,
+        targetValue = if (isPressed && isFrosted) 0.92f else 1.0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -55,13 +60,24 @@ fun CircleIconButton(
         label = "glassCircleIconPress"
     )
 
+    val bgModifier = if (isFrosted) {
+        Modifier
+            .background(glassBg.copy(alpha = (glassBg.alpha * (1f - (scrollOffset * 0.3f).coerceIn(0f, 0.3f)))))
+            .border(BorderStroke(1.dp, glassBorder), CircleShape)
+    } else {
+        Modifier.background(
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+                alpha = 1f - (scrollOffset * 0.3f).coerceIn(0f, 0.3f)
+            )
+        )
+    }
+
     Box(
         modifier = modifier
             .size(52.dp - (8 * scrollOffset).dp)
             .scale(pressScale * (1f - (scrollOffset * 0.1f)))
             .clip(CircleShape)
-            .background(glassBg.copy(alpha = (glassBg.alpha * (1f - (scrollOffset * 0.3f).coerceIn(0f, 0.3f)))))
-            .border(BorderStroke(1.dp, glassBorder), CircleShape)
+            .then(bgModifier)
             .clickable(
                 interactionSource = interactionSource,
                 indication = ripple(bounded = true),
@@ -87,15 +103,20 @@ fun CircleIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val glassBg = if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
     val glassBorder = if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-    val contentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val contentColor = if (isFrosted) {
+        if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1.0f,
+        targetValue = if (isPressed && isFrosted) 0.92f else 1.0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -103,13 +124,20 @@ fun CircleIconButton(
         label = "glassCircleIconPress"
     )
 
+    val bgModifier = if (isFrosted) {
+        Modifier
+            .background(glassBg)
+            .border(BorderStroke(1.dp, glassBorder), CircleShape)
+    } else {
+        Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)
+    }
+
     Box(
         modifier = modifier
             .size(52.dp)
             .scale(pressScale)
             .clip(CircleShape)
-            .background(glassBg)
-            .border(BorderStroke(1.dp, glassBorder), CircleShape)
+            .then(bgModifier)
             .clickable(
                 interactionSource = interactionSource,
                 indication = ripple(bounded = true),

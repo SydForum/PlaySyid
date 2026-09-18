@@ -50,6 +50,9 @@ import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
 import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.ui.component.IconButton
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
+import com.darkxvenom.airbeats.ui.component.settingsCardContainerColor
+import com.darkxvenom.airbeats.ui.component.settingsCardBorder
 
 // ==================== SHIMMER EFFECT ====================
 
@@ -286,6 +289,7 @@ fun UserCard(
 
 @Composable
 fun SocialIconRow(uriHandler: UriHandler) {
+    val isFrosted = isFrostedGlassUiEnabled()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -293,8 +297,9 @@ fun SocialIconRow(uriHandler: UriHandler) {
             .shadow(4.dp, RoundedCornerShape(28.dp)),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
-        )
+            containerColor = settingsCardContainerColor(isFrosted)
+        ),
+        border = settingsCardBorder(isFrosted)
     ) {
         Row(
             modifier = Modifier

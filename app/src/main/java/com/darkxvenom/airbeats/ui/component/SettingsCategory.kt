@@ -56,14 +56,16 @@ fun SettingsCategory(
         }
 
         // Settings card
+        val isFrosted = isFrostedGlassUiEnabled()
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .animateContentSize(),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+                containerColor = settingsCardContainerColor(isFrosted)
             ),
+            border = settingsCardBorder(isFrosted),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
@@ -102,14 +104,16 @@ fun SettingsGeneralCategory(
         }
 
         // Settings card
+        val isFrosted = isFrostedGlassUiEnabled()
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .animateContentSize(),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
+                containerColor = settingsCardContainerColor(isFrosted)
             ),
+            border = settingsCardBorder(isFrosted),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(modifier = Modifier.padding(vertical = 4.dp)) {

@@ -157,6 +157,10 @@ fun AppearanceSettings(
         LiquidGlassKey,
         defaultValue = false
     )
+    val (frostedGlassCardsButtons, onFrostedGlassCardsButtonsChange) = rememberPreference(
+        FrostedGlassCardsButtonsKey,
+        defaultValue = true
+    )
     val (enableDynamicIsland, onEnableDynamicIslandChange) = rememberPreference(
         DynamicIslandKey,
         defaultValue = false
@@ -587,6 +591,13 @@ fun AppearanceSettings(
                                 }
                             },
                             isEnabled = !isPlayful
+                        )},
+                        {SwitchPreference(
+                            title = { Text("Frosted Glass cards and buttons") },
+                            description = "Apply frosted glass effect to buttons, tags, settings cards, and popups",
+                            icon = { Icon(painterResource(R.drawable.contrast), null) },
+                            checked = frostedGlassCardsButtons,
+                            onCheckedChange = onFrostedGlassCardsButtonsChange
                         )},
                         {AnimatedVisibility(useDarkTheme) {
                             SwitchPreference(

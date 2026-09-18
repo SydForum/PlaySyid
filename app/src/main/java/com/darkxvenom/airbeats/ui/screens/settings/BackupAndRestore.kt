@@ -89,6 +89,9 @@ import com.darkxvenom.airbeats.ui.component.PreferenceEntry
 import com.darkxvenom.airbeats.ui.component.SettingsGeneralCategory
 import com.darkxvenom.airbeats.ui.component.SettingsPage
 import com.darkxvenom.airbeats.ui.component.SwitchPreference
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
+import com.darkxvenom.airbeats.ui.component.settingsCardContainerColor
+import com.darkxvenom.airbeats.ui.component.settingsCardBorder
 import com.darkxvenom.airbeats.ui.menu.OnlinePlaylistAdder
 import com.darkxvenom.airbeats.ui.utils.backToMain
 import com.darkxvenom.airbeats.ui.utils.formatFileSize
@@ -447,14 +450,16 @@ private fun MinimalVisitorDataCard(
     onResetClick: () -> Unit,
     onInfoClick: () -> Unit
 ) {
+    val isFrosted = isFrostedGlassUiEnabled()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            containerColor = if (isFrosted) settingsCardContainerColor(true) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ),
+        border = settingsCardBorder(isFrosted),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
@@ -718,14 +723,16 @@ private fun AndroidOsBackupCard(
             modifier = Modifier.padding(start = 0.dp, bottom = 8.dp, top = 4.dp)
         )
 
+        val isFrosted = isFrostedGlassUiEnabled()
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .animateContentSize(),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                containerColor = if (isFrosted) settingsCardContainerColor(true) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
             ),
+            border = settingsCardBorder(isFrosted),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(

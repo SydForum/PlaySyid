@@ -24,6 +24,7 @@ val DynamicIslandBgColorKey = intPreferencesKey("dynamicIslandBgColor")
 val DynamicIslandAccentColorKey = intPreferencesKey("dynamicIslandAccentColor")
 val DynamicIslandTextColorKey = intPreferencesKey("dynamicIslandTextColor")
 val DynamicIslandLiquidGlassKey = booleanPreferencesKey("dynamicIslandLiquidGlass")
+val FrostedGlassCardsButtonsKey = booleanPreferencesKey("frostedGlassCardsButtons")
 
 val UserNameKey = stringPreferencesKey("user_name")
 

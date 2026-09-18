@@ -1,6 +1,8 @@
 package com.darkxvenom.airbeats.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -60,17 +62,40 @@ fun BottomSheetMenu(
 ) {
     val focusManager = LocalFocusManager.current
     val (enableLiquidGlass) = rememberPreference(LiquidGlassKey, false)
+    val isFrosted = isFrostedGlassUiEnabled() || enableLiquidGlass
     val backdrop = LocalBackdrop.current
     val layer = rememberGraphicsLayer()
     val luminanceAnimation = remember { Animatable(0.3f) }
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     if (state.isVisible) {
+        val containerColor = if (isFrosted) {
+            if (backdrop != null) Color.Transparent else if (isDark) Color(0xFF141414).copy(alpha = 0.90f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+        } else {
+            background
+        }
+
+        val sheetModifier = modifier.fillMaxHeight().then(
+            if (isFrosted) {
+                if (backdrop != null) {
+                    Modifier.drawBackdropCustomShape(backdrop = backdrop, layer = layer, luminanceAnimation = luminanceAnimation.value, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                } else {
+                    Modifier.border(
+                        androidx.compose.foundation.BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                        RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                    )
+                }
+            } else {
+                Modifier
+            }
+        )
+
         ModalBottomSheet(
             onDismissRequest = {
                 focusManager.clearFocus()
                 state.isVisible = false
             },
-            containerColor = if (enableLiquidGlass && backdrop != null) Color.Transparent else background,
+            containerColor = containerColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
             dragHandle = {
                 Box(
@@ -81,7 +106,7 @@ fun BottomSheetMenu(
                         .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                 )
             },
-            modifier = modifier.fillMaxHeight().then(if (enableLiquidGlass && backdrop != null) { Modifier.drawBackdropCustomShape(backdrop = backdrop, layer = layer, luminanceAnimation = luminanceAnimation.value, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) } else Modifier)
+            modifier = sheetModifier
         ) {
             Column(
                 modifier = Modifier

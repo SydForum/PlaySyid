@@ -104,6 +104,7 @@ import com.darkxvenom.airbeats.playback.queues.ListQueue
 import com.darkxvenom.airbeats.playback.queues.YouTubeAlbumRadio
 import com.darkxvenom.airbeats.playback.queues.YouTubeQueue
 import com.darkxvenom.airbeats.ui.component.LocalMenuState
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.ui.menu.AlbumMenu
 import com.darkxvenom.airbeats.ui.menu.ArtistMenu
 import com.darkxvenom.airbeats.ui.menu.SongMenu
@@ -744,6 +745,7 @@ private fun NewClassicHeroSection(
     val configuration = LocalConfiguration.current
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val heroHeight = (configuration.screenHeightDp.dp * 0.58f).coerceAtLeast(490.dp) + statusBarHeight
+    val isFrosted = isFrostedGlassUiEnabled()
 
     Box(
         modifier = Modifier
@@ -805,7 +807,11 @@ private fun NewClassicHeroSection(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.08f))
+                        .background(if (isFrosted) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.15f))
+                        .then(
+                            if (isFrosted) Modifier.border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), CircleShape)
+                            else Modifier
+                        )
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.notification_on),
@@ -820,7 +826,11 @@ private fun NewClassicHeroSection(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.08f))
+                        .background(if (isFrosted) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.15f))
+                        .then(
+                            if (isFrosted) Modifier.border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), CircleShape)
+                            else Modifier
+                        )
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.settings),
@@ -891,10 +901,10 @@ private fun NewClassicHeroSection(
                     interactionSource = interactionSource,
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White.copy(alpha = 0.10f),
-                        contentColor = Color.White
+                        containerColor = if (isFrosted) Color.White.copy(alpha = 0.10f) else MaterialTheme.colorScheme.primary,
+                        contentColor = if (isFrosted) Color.White else MaterialTheme.colorScheme.onPrimary
                     ),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                    border = if (isFrosted) BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)) else null,
                     contentPadding = PaddingValues(horizontal = 28.dp, vertical = 11.dp),
                     modifier = Modifier
                         .scale(buttonScale)
@@ -906,7 +916,7 @@ private fun NewClassicHeroSection(
                         Icon(
                             painter = painterResource(R.drawable.play),
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = if (isFrosted) Color.White else MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -915,7 +925,7 @@ private fun NewClassicHeroSection(
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.8.sp,
-                                color = Color.White
+                                color = if (isFrosted) Color.White else MaterialTheme.colorScheme.onPrimary
                             )
                         )
                     }

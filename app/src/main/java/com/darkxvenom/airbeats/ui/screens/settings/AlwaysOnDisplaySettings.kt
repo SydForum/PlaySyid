@@ -107,6 +107,9 @@ import com.darkxvenom.airbeats.ui.component.IconButton
 import com.darkxvenom.airbeats.ui.component.PreferenceGroupTitle
 import com.darkxvenom.airbeats.ui.component.SettingsPage
 import com.darkxvenom.airbeats.ui.component.SwitchPreference
+import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
+import com.darkxvenom.airbeats.ui.component.settingsCardContainerColor
+import com.darkxvenom.airbeats.ui.component.settingsCardBorder
 import com.darkxvenom.airbeats.ui.utils.backToMain
 import com.darkxvenom.airbeats.utils.rememberPreference
 import me.saket.squiggles.SquigglySlider
@@ -557,9 +560,11 @@ private fun AodSettingsSection(
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp, top = 12.dp)
         )
+        val isFrosted = isFrostedGlassUiEnabled()
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f),
+            color = settingsCardContainerColor(isFrosted),
+            border = settingsCardBorder(isFrosted),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.graphics.Color
 import com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground
+import com.darkxvenom.airbeats.ui.component.SettingsGlassCard
 import com.darkxvenom.airbeats.ui.component.SettingsTopAppBar
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -165,11 +166,7 @@ fun ListenTogetherScreen(
                         ?: session?.state?.artists?.joinToString(),
                 )
 
-                Card(
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
-                    ),
+                SettingsGlassCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -254,11 +251,7 @@ fun ListenTogetherScreen(
                     }
                 }
 
-                Card(
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
-                    ),
+                SettingsGlassCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -350,11 +343,7 @@ fun ListenTogetherScreen(
 
 @Composable
 private fun ParticipantsSection(session: ListenTogetherSession) {
-    Card(
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
-        ),
+    SettingsGlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -394,11 +383,7 @@ private fun CurrentSessionCard(
     songTitle: String?,
     subtitle: String?,
 ) {
-    Card(
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.8f)
-        ),
+    SettingsGlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
