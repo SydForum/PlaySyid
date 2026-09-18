@@ -29,10 +29,7 @@ import androidx.compose.foundation.layout.Spacer
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
-import dev.chrisbanes.haze.haze
-import dev.chrisbanes.haze.HazeState
 import com.darkxvenom.airbeats.BuildConfig
 import com.darkxvenom.airbeats.checkForUpdates
 import com.darkxvenom.airbeats.isNewerVersion
@@ -225,17 +222,6 @@ fun HomeScreen(
 
     val scope = rememberCoroutineScope()
     val lazylistState = rememberLazyListState()
-    val hazeState = remember { HazeState() }
-    val isAtTop by remember {
-        derivedStateOf {
-            lazylistState.firstVisibleItemIndex == 0 && lazylistState.firstVisibleItemScrollOffset == 0
-        }
-    }
-    val blurAlpha by animateFloatAsState(
-        targetValue = if (isAtTop) 0f else 1f,
-        animationSpec = tween(300),
-        label = "ClassicBlurAlpha"
-    )
     val backStackEntry by navController.currentBackStackEntryAsState()
     val scrollToTop =
         backStackEntry?.savedStateHandle?.getStateFlow("scrollToTop", false)?.collectAsState()
@@ -441,8 +427,9 @@ fun HomeScreen(
                     .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
                     .asPaddingValues(),
                 modifier = Modifier
-                    .fillMaxSize()
-                    .haze(state = hazeState)
+                    .windowInsetsPadding(
+                        WindowInsets.systemBars.only(WindowInsetsSides.Top)
+                    )
             )
             {
                 // ModernHomeTopBarInline is now inside the LazyColumn
@@ -1029,14 +1016,6 @@ fun HomeScreen(
                     )
                 }
             }
-
-            com.darkxvenom.airbeats.ui.component.TopFadeBlur(
-                hazeState = hazeState,
-                pageColor = MaterialTheme.colorScheme.background,
-                scrimColor = MaterialTheme.colorScheme.background,
-                alpha = blurAlpha,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
 
             PullToRefreshDefaults.LoadingIndicator(
                 isRefreshing = isRefreshing,
