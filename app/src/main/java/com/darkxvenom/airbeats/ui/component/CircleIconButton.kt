@@ -57,8 +57,8 @@ fun CircleIconButton(
 
     Box(
         modifier = modifier
-            .size((40.dp - (6 * scrollOffset).dp).coerceAtLeast(32.dp))
-            .scale(pressScale * (1f - (scrollOffset * 0.1f)).coerceAtLeast(0.85f))
+            .size(52.dp - (8 * scrollOffset).dp)
+            .scale(pressScale * (1f - (scrollOffset * 0.1f)))
             .clip(CircleShape)
             .background(glassBg.copy(alpha = (glassBg.alpha * (1f - (scrollOffset * 0.3f).coerceIn(0f, 0.3f)))))
             .border(BorderStroke(1.dp, glassBorder), CircleShape)
@@ -72,7 +72,7 @@ fun CircleIconButton(
         Icon(
             painter = painterResource(icon),
             contentDescription = null,
-            modifier = Modifier.size((20.dp - (3 * scrollOffset).dp).coerceAtLeast(16.dp)),
+            modifier = Modifier.size(24.dp - (4 * scrollOffset).dp),
             tint = contentColor
         )
     }
@@ -105,7 +105,7 @@ fun CircleIconButton(
 
     Box(
         modifier = modifier
-            .size(40.dp)
+            .size(52.dp)
             .scale(pressScale)
             .clip(CircleShape)
             .background(glassBg)
@@ -120,7 +120,7 @@ fun CircleIconButton(
         Icon(
             painter = painterResource(icon),
             contentDescription = null,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(24.dp),
             tint = contentColor
         )
     }
