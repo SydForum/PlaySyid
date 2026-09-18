@@ -40,6 +40,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import com.darkxvenom.airbeats.ui.component.SettingsGlassCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -586,27 +587,59 @@ fun StatsScreen(
         ModalBottomSheet(
             onDismissRequest = { showInsightBottomSheet = false },
             sheetState = sheetState,
-            containerColor = if (isFrosted) (if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)) else MaterialTheme.colorScheme.surface,
-            shape = sheetShape,
-            modifier = Modifier.then(
-                if (isFrosted) Modifier.border(BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)), sheetShape) else Modifier
-            )
+            containerColor = if (isFrosted) Color.Transparent else MaterialTheme.colorScheme.surface,
+            shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                )
+            }
         ) {
-            InsightBottomSheetContent(
-                onNavigateToFullInsight = {
-                    coroutineScope.launch {
-                        sheetState.hide()
-                        showInsightBottomSheet = false
-                    }
-                    navController.navigate("insight")
-                },
-                onDismiss = {
-                    coroutineScope.launch {
-                        sheetState.hide()
-                        showInsightBottomSheet = false
-                    }
+            if (isFrosted) {
+                SettingsGlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(28.dp)
+                ) {
+                    InsightBottomSheetContent(
+                        onNavigateToFullInsight = {
+                            coroutineScope.launch {
+                                sheetState.hide()
+                                showInsightBottomSheet = false
+                            }
+                            navController.navigate("insight")
+                        },
+                        onDismiss = {
+                            coroutineScope.launch {
+                                sheetState.hide()
+                                showInsightBottomSheet = false
+                            }
+                        }
+                    )
                 }
-            )
+            } else {
+                InsightBottomSheetContent(
+                    onNavigateToFullInsight = {
+                        coroutineScope.launch {
+                            sheetState.hide()
+                            showInsightBottomSheet = false
+                        }
+                        navController.navigate("insight")
+                    },
+                    onDismiss = {
+                        coroutineScope.launch {
+                            sheetState.hide()
+                            showInsightBottomSheet = false
+                        }
+                    }
+                )
+            }
         }
     }
 
@@ -833,112 +866,210 @@ private fun WeeklyGlobalStatsSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (isFrosted) (if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)) else MaterialTheme.colorScheme.surface,
-        shape = sheetShape,
-        modifier = Modifier.then(
-            if (isFrosted) Modifier.border(BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)), sheetShape) else Modifier
-        ),
+        containerColor = if (isFrosted) Color.Transparent else MaterialTheme.colorScheme.surface,
+        shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+            )
+        },
     ) {
-        Box(
-            modifier =
-                Modifier
+        if (isFrosted) {
+            SettingsGlassCard(
+                modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xFF1DB954).copy(alpha = 0.35f),
-                                MaterialTheme.colorScheme.surface,
-                                MaterialTheme.colorScheme.surface,
-                            ),
-                        ),
-                    )
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
-        ) {
-            Column {
-                Text(
-                    text = "Weekly Global Stats",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Black,
-                )
-                Text(
-                    text = "Total Users: ${users.size} • Only names and listened hours are shown.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
-                )
-                Spacer(modifier = Modifier.height(18.dp))
-                LazyColumn(
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(28.dp)
+            ) {
+                Column(
                     modifier = Modifier
-                        .weight(1f, fill = false)
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp)
                 ) {
-                    items(users, key = { it.id }) { user ->
-                        val isCurrent = user.id == currentUserId || (currentUserName.isNotBlank() && !currentUserName.equals("AirBeats User", ignoreCase = true) && user.name.trim().equals(currentUserName.trim(), ignoreCase = true))
-                        val rowBg = if (isCurrent) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                        } else if (isFrosted) {
-                            if (isDark) Color.White.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
-                        }
-                        val rowBorder = if (isCurrent) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                        } else {
-                            if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                        }
+                    Text(
+                        text = "Weekly Global Stats",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        text = "Total Users: ${users.size} • Only names and listened hours are shown.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                    ) {
+                        items(users, key = { it.id }) { user ->
+                            val isCurrent = user.id == currentUserId || (currentUserName.isNotBlank() && !currentUserName.equals("AirBeats User", ignoreCase = true) && user.name.trim().equals(currentUserName.trim(), ignoreCase = true))
+                            val rowBg = if (isCurrent) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                            } else {
+                                if (isDark) Color.White.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                            }
+                            val rowBorder = if (isCurrent) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                            } else {
+                                if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            }
 
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 5.dp)
-                                    .background(
-                                        rowBg,
-                                        RoundedCornerShape(14.dp),
-                                    )
-                                    .then(
-                                        if (isFrosted) Modifier.border(BorderStroke(1.dp, rowBorder), RoundedCornerShape(14.dp)) else Modifier
-                                    )
-                                    .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "#${user.rank}",
-                                modifier = Modifier.width(46.dp),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                            )
                             Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 5.dp)
+                                        .background(
+                                            rowBg,
+                                            RoundedCornerShape(14.dp),
+                                        )
+                                        .border(BorderStroke(1.dp, rowBorder), RoundedCornerShape(14.dp))
+                                        .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = user.name,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = FontWeight.Bold,
+                                    text = "#${user.rank}",
+                                    modifier = Modifier.width(46.dp),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
                                 )
-                                val userHours = user.totalListenMs.toDouble() / (3600.0 * 1000.0)
-                                val userRank = if (userHours >= 1.0) AirBeatsRank.fromHours(userHours.toInt()) else null
-                                userRank?.let { rank ->
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    RankBadge(rank = rank, displayedRank = null, size = 18.dp)
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = user.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    val userHours = user.totalListenMs.toDouble() / (3600.0 * 1000.0)
+                                    val userRank = if (userHours >= 1.0) AirBeatsRank.fromHours(userHours.toInt()) else null
+                                    userRank?.let { rank ->
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        RankBadge(rank = rank, displayedRank = null, size = 18.dp)
+                                    }
                                 }
+                                Text(
+                                    text = formatListenHours(user.weeklyListenMs),
+                                    fontWeight = FontWeight.Black,
+                                )
                             }
-                            Text(
-                                text = formatListenHours(user.weeklyListenMs),
-                                fontWeight = FontWeight.Black,
-                            )
                         }
                     }
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(stringResource(R.string.done))
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
-                Spacer(modifier = Modifier.height(18.dp))
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text(stringResource(R.string.done))
+            }
+        } else {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF1DB954).copy(alpha = 0.35f),
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.surface,
+                                ),
+                            ),
+                        )
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+            ) {
+                Column {
+                    Text(
+                        text = "Weekly Global Stats",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        text = "Total Users: ${users.size} • Only names and listened hours are shown.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                    ) {
+                        items(users, key = { it.id }) { user ->
+                            val isCurrent = user.id == currentUserId || (currentUserName.isNotBlank() && !currentUserName.equals("AirBeats User", ignoreCase = true) && user.name.trim().equals(currentUserName.trim(), ignoreCase = true))
+                            val rowBg = if (isCurrent) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                            }
+                            val rowBorder = if (isCurrent) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                            } else {
+                                if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            }
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 5.dp)
+                                        .background(
+                                            rowBg,
+                                            RoundedCornerShape(14.dp),
+                                        )
+                                        .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "#${user.rank}",
+                                    modifier = Modifier.width(46.dp),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                )
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = user.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    val userHours = user.totalListenMs.toDouble() / (3600.0 * 1000.0)
+                                    val userRank = if (userHours >= 1.0) AirBeatsRank.fromHours(userHours.toInt()) else null
+                                    userRank?.let { rank ->
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        RankBadge(rank = rank, displayedRank = null, size = 18.dp)
+                                    }
+                                }
+                                Text(
+                                    text = formatListenHours(user.weeklyListenMs),
+                                    fontWeight = FontWeight.Black,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(stringResource(R.string.done))
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
-                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }

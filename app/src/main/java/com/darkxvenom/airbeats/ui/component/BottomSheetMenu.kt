@@ -70,34 +70,22 @@ fun BottomSheetMenu(
 
     if (state.isVisible) {
         val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        val containerColor = if (enableLiquidGlass && !isFrosted && backdrop != null) {
+        val containerColor = if (isFrosted || (enableLiquidGlass && backdrop != null)) {
             Color.Transparent
-        } else if (isFrosted) {
-            if (isDark) Color(0xFF141414).copy(alpha = 0.88f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
         } else {
             background
         }
 
-        val sheetModifier = modifier.fillMaxHeight().then(
-            if (enableLiquidGlass && !isFrosted && backdrop != null) {
-                Modifier.drawBackdropCustomShape(
-                    backdrop = backdrop,
-                    layer = layer,
-                    luminanceAnimation = luminanceAnimation.value,
-                    shape = sheetShape
-                )
-            } else if (isFrosted) {
-                Modifier.border(
-                    androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isDark) Color.White.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-                    ),
-                    sheetShape
-                )
-            } else {
-                Modifier
-            }
-        )
+        val sheetModifier = if (enableLiquidGlass && !isFrosted && backdrop != null) {
+            modifier.fillMaxHeight().drawBackdropCustomShape(
+                backdrop = backdrop,
+                layer = layer,
+                luminanceAnimation = luminanceAnimation.value,
+                shape = sheetShape
+            )
+        } else {
+            modifier
+        }
 
         ModalBottomSheet(
             onDismissRequest = {
@@ -106,24 +94,41 @@ fun BottomSheetMenu(
             },
             containerColor = containerColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            shape = sheetShape,
+            shape = if (isFrosted) RoundedCornerShape(28.dp) else sheetShape,
             dragHandle = {
                 Box(
                     modifier = Modifier
                         .padding(vertical = 12.dp)
                         .size(width = 40.dp, height = 4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
                 )
             },
             modifier = sheetModifier
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-            ) {
-                state.content(this)
+            if (isFrosted) {
+                SettingsGlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(28.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        state.content(this)
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    state.content(this)
+                }
             }
         }
     }
