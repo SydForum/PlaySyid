@@ -687,6 +687,62 @@ fun PlayerMenu(
                     }
 
                     item {
+                        val spatialAudioEnabled by playerConnection?.service?.spatialAudioEnabled?.collectAsState() ?: remember { mutableStateOf(false) }
+                        androidx.compose.material3.ListItem(
+                            headlineContent = { Text(stringResource(R.string.spatial_audio)) },
+                            supportingContent = {
+                                Text(
+                                    text = if (spatialAudioEnabled) stringResource(R.string.enabled) else stringResource(R.string.disabled),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (spatialAudioEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    painter = painterResource(R.drawable.graphic_eq),
+                                    contentDescription = null,
+                                    tint = if (spatialAudioEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = spatialAudioEnabled,
+                                    onCheckedChange = { playerConnection?.service?.setSpatialAudioEnabled(it) }
+                                )
+                            },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
+                        )
+                    }
+
+                    item {
+                        val automixEnabled by playerConnection?.service?.automixEnabled?.collectAsState() ?: remember { mutableStateOf(false) }
+                        androidx.compose.material3.ListItem(
+                            headlineContent = { Text(stringResource(R.string.automix)) },
+                            supportingContent = {
+                                Text(
+                                    text = if (automixEnabled) stringResource(R.string.enabled) else stringResource(R.string.disabled),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (automixEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    painter = painterResource(R.drawable.auto_awesome),
+                                    contentDescription = null,
+                                    tint = if (automixEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = automixEnabled,
+                                    onCheckedChange = { playerConnection?.service?.setAutomixEnabled(it) }
+                                )
+                            },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
+                        )
+                    }
+
+                    item {
                         androidx.compose.material3.ListItem(
                             headlineContent = { Text(stringResource(R.string.listen_together)) },
                             leadingContent = { Icon(painterResource(R.drawable.group), contentDescription = null) },
@@ -1412,6 +1468,7 @@ internal fun InAppDolbyAtmosSheet(onDismiss: () -> Unit) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val dolbyAtmosEnabled by playerConnection.service.dolbyAtmosEnabled.collectAsState()
     val isTrackDolbyAtmos by playerConnection.service.isTrackDolbyAtmos.collectAsState()
+    val spatialAudioEnabled by playerConnection.service.spatialAudioEnabled.collectAsState()
     val dolbyAtmosSupported = remember { DeviceCodecs.playsDolbyAtmos }
     val (enableLiquidGlass) = rememberPreference(LiquidGlassKey, false)
     val isFrosted = isFrostedGlassUiEnabled()
@@ -1569,10 +1626,35 @@ internal fun InAppDolbyAtmosSheet(onDismiss: () -> Unit) {
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = if (dolbyAtmosEnabled) "2.5x Wide Stereo" else "Standard",
+                            text = if (dolbyAtmosEnabled || spatialAudioEnabled) "2.5x Wide Stereo" else "Standard",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (dolbyAtmosEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (dolbyAtmosEnabled || spatialAudioEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.spatial_audio),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = stringResource(R.string.spatial_audio_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = spatialAudioEnabled,
+                            onCheckedChange = playerConnection.service::setSpatialAudioEnabled
                         )
                     }
                 }

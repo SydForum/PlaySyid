@@ -385,8 +385,17 @@ val TranslateLyricsKey = booleanPreferencesKey("translateLyrics")
 val PlayerVolumeKey = floatPreferencesKey("playerVolume")
 val EqualizerEnabledKey = booleanPreferencesKey("equalizerEnabled")
 val DolbyAtmosEnabledKey = booleanPreferencesKey("dolbyAtmosEnabled")
+val SpatialAudioEnabledKey = booleanPreferencesKey("spatialAudioEnabled")
+val AutomixEnabledKey = booleanPreferencesKey("automixEnabled")
+val AutomixPerformanceModeKey = stringPreferencesKey("automixPerformanceMode")
 val RepeatModeKey = intPreferencesKey("repeatMode")
 val PlayerButtonsStyleKey = stringPreferencesKey("player_buttons_style")
+
+enum class AutomixPerformanceMode(val threads: Int) {
+    EFFICIENT(1),
+    BALANCED(2),
+    PERFORMANCE(4);
+}
 
 val SearchSourceKey = stringPreferencesKey("searchSource")
 val SwipeThumbnailKey = booleanPreferencesKey("swipeThumbnail")

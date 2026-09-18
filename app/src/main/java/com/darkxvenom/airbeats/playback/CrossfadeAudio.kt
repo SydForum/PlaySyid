@@ -22,12 +22,18 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 
+import com.darkxvenom.airbeats.playback.automix.CrossfadeMode
+import com.darkxvenom.airbeats.playback.automix.TrackAnalyzer
+import com.darkxvenom.airbeats.playback.automix.TransitionTrackInfo
+import com.darkxvenom.airbeats.playback.automix.planTransition
+
 /**
  * Audio Crossfade Engine:
  *  - Equal-power volume curve (sin/cos) to maintain constant perceptual loudness
  *  - Gapless album skip (preserves seamless album track transitions)
  *  - Buffer verification before starting crossfade
  *  - Overlap secondary ExoPlayer for priming and smooth handoff
+ *  - Automix smart transition planner with beat-aligned fades and cue-point drops
  */
 internal class CrossfadeAudio(
     private val player: ExoPlayer,
@@ -39,6 +45,8 @@ internal class CrossfadeAudio(
     private val audioNormalizationEnabled: MutableStateFlow<Boolean>,
     private val maxSafeGainFactor: Float = 1.414f,
     private val overlapPlayerFactory: () -> ExoPlayer,
+    private val automixEnabled: MutableStateFlow<Boolean> = MutableStateFlow(false),
+    private val trackAnalyzer: TrackAnalyzer? = null,
     private val onCrossfadeStart: (MediaItem) -> Unit = {},
 ) {
     // ── Loop State ────────────────────────────────────────────────────────────
@@ -112,9 +120,10 @@ internal class CrossfadeAudio(
 
     private suspend fun runLoop() {
         while (kotlin.coroutines.coroutineContext.isActive) {
-            val fadeMs = crossfadeDurationMs.value
+            val isSmart = automixEnabled.value && trackAnalyzer != null
+            val rawFadeMs = crossfadeDurationMs.value
 
-            if (fadeMs <= 0) {
+            if (!isSmart && rawFadeMs <= 0) {
                 stopOverlapCrossfade(resetMainFade = true)
                 delay(250)
                 continue
@@ -156,19 +165,51 @@ internal class CrossfadeAudio(
                 continue
             }
 
+            val currentItem = runCatching { player.getMediaItemAt(player.currentMediaItemIndex) }.getOrNull()
+            val nextItem = if (nextIndex != C.INDEX_UNSET) runCatching { player.getMediaItemAt(nextIndex) }.getOrNull() else null
+
             // Gapless album skip: don't crossfade if both songs are from same album
-            if (!crossfadeActive && nextIndex != C.INDEX_UNSET) {
-                val currentItem =
-                    runCatching { player.getMediaItemAt(player.currentMediaItemIndex) }.getOrNull()
-                val nextItem = runCatching { player.getMediaItemAt(nextIndex) }.getOrNull()
-                if (currentItem != null && nextItem != null && isGaplessAlbumTransition(
-                        currentItem,
-                        nextItem
-                    )
-                ) {
-                    unprimeOverlap()
-                    delay(150)
-                    continue
+            if (!crossfadeActive && currentItem != null && nextItem != null && isGaplessAlbumTransition(currentItem, nextItem)) {
+                unprimeOverlap()
+                delay(150)
+                continue
+            }
+
+            var effectiveFadeMs = if (rawFadeMs > 0) rawFadeMs else 6000
+            var incomingCueMs = 0L
+            var plannedStartMs: Long? = null
+
+            if (isSmart && currentItem != null && nextItem != null) {
+                trackAnalyzer.request(
+                    currentItem.mediaId,
+                    currentItem.localConfiguration?.uri,
+                    durationMs / 1000.0
+                )
+                val nextDurationSec = (nextItem.metadata?.duration ?: 180).toDouble()
+                trackAnalyzer.request(
+                    nextItem.mediaId,
+                    nextItem.localConfiguration?.uri,
+                    nextDurationSec
+                )
+
+                val currentAnalysis = trackAnalyzer.analysisFor(currentItem.mediaId)
+                val nextAnalysis = trackAnalyzer.analysisFor(nextItem.mediaId)
+
+                val plan = planTransition(
+                    analysis = currentAnalysis,
+                    nextAnalysis = nextAnalysis,
+                    currentTrack = TransitionTrackInfo(id = currentItem.mediaId, durationMs = durationMs),
+                    nextTrack = TransitionTrackInfo(id = nextItem.mediaId, durationMs = (nextDurationSec * 1000).toLong()),
+                    currentTime = positionMs / 1000.0,
+                    duration = durationMs / 1000.0,
+                    fadeSeconds = (effectiveFadeMs / 1000.0).coerceIn(4.0, 12.0),
+                    mode = CrossfadeMode.SMART,
+                )
+
+                if (!plan.blocked) {
+                    effectiveFadeMs = plan.fadeMs.toInt().coerceIn(1000, 12000)
+                    incomingCueMs = (plan.incomingCueTime * 1000.0).toLong().coerceAtLeast(0L)
+                    plannedStartMs = (plan.transitionStart * 1000.0).toLong()
                 }
             }
 
@@ -184,7 +225,7 @@ internal class CrossfadeAudio(
                 }
 
                 val remainingMs = (durationMs - positionMs).coerceAtLeast(0L)
-                val tooFarFromEnd = !onTarget && remainingMs > fadeMs.toLong() + 2000L
+                val tooFarFromEnd = !onTarget && remainingMs > effectiveFadeMs.toLong() + 2000L
                 val nextChanged =
                     !onTarget && crossfadeTargetIndex != C.INDEX_UNSET && nextIndex != crossfadeTargetIndex
                 if (tooFarFromEnd || nextChanged) {
@@ -199,19 +240,31 @@ internal class CrossfadeAudio(
             }
 
             val remainingMs = (durationMs - positionMs).coerceAtLeast(0L)
-            val preloadWindowMs = fadeMs.toLong() + 1200L
+            val preloadWindowMs = effectiveFadeMs.toLong() + 1500L
 
-            if (remainingMs in 1L..preloadWindowMs) {
-                primeOverlapForNext(nextIndex)
+            val isTimeNearTransition = if (plannedStartMs != null) {
+                positionMs >= plannedStartMs - 2000L
+            } else {
+                remainingMs in 1L..preloadWindowMs
+            }
+
+            if (isTimeNearTransition) {
+                primeOverlapForNext(nextIndex, incomingCueMs)
             } else {
                 unprimeOverlap()
             }
 
-            // Start crossfade when remaining time is within fade duration
-            if (overlapPrimedIndex == nextIndex && remainingMs in 1L..fadeMs.toLong()) {
+            val shouldStartCrossfade = if (plannedStartMs != null) {
+                positionMs >= plannedStartMs
+            } else {
+                remainingMs in 1L..effectiveFadeMs.toLong()
+            }
+
+            // Start crossfade when transition condition is satisfied
+            if (overlapPrimedIndex == nextIndex && shouldStartCrossfade) {
                 val overlap = overlapPlayer
-                if (overlap != null && hasEnoughBuffer(overlap, requiredStartBufferMs(fadeMs))) {
-                    beginOverlapCrossfade(fadeMs = fadeMs, remainingMs = remainingMs)
+                if (overlap != null && hasEnoughBuffer(overlap, requiredStartBufferMs(effectiveFadeMs))) {
+                    beginOverlapCrossfade(fadeMs = effectiveFadeMs, remainingMs = remainingMs)
                 }
                 delay(50)
                 continue
@@ -252,7 +305,7 @@ internal class CrossfadeAudio(
 
     // ── Overlap Player Management ─────────────────────────────────────────────
 
-    private suspend fun primeOverlapForNext(nextIndex: Int) {
+    private suspend fun primeOverlapForNext(nextIndex: Int, cueTimeMs: Long = 0L) {
         val nextItem = runCatching { player.getMediaItemAt(nextIndex) }.getOrNull() ?: return
         val nextMediaId = nextItem.mediaId
 
@@ -263,6 +316,9 @@ internal class CrossfadeAudio(
         val overlap = ensureOverlapPlayer()
         overlap.clearMediaItems()
         overlap.setMediaItem(nextItem)
+        if (cueTimeMs > 0L) {
+            overlap.seekTo(cueTimeMs)
+        }
         overlap.prepare()
         overlap.playWhenReady = true
         overlap.volume = 0f

@@ -26,7 +26,11 @@ import com.darkxvenom.airbeats.constants.AudioNormalizationKey
 import com.darkxvenom.airbeats.constants.AudioQuality
 import com.darkxvenom.airbeats.constants.AudioQualityKey
 import com.darkxvenom.airbeats.constants.AutoLoadMoreKey
+import com.darkxvenom.airbeats.constants.AutomixEnabledKey
+import com.darkxvenom.airbeats.constants.AutomixPerformanceMode
+import com.darkxvenom.airbeats.constants.AutomixPerformanceModeKey
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
+import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
 import com.darkxvenom.airbeats.playback.DeviceCodecs
 import com.darkxvenom.airbeats.ui.component.PreferenceEntry
 import com.darkxvenom.airbeats.constants.DownloadQualityKey
@@ -62,6 +66,19 @@ fun PlayerSettings(
         defaultValue = true
     )
     val dolbyAtmosSupported = remember { DeviceCodecs.playsDolbyAtmos }
+
+    val (spatialAudio, onSpatialAudioChange) = rememberPreference(
+        SpatialAudioEnabledKey,
+        defaultValue = false
+    )
+    val (automix, onAutomixChange) = rememberPreference(
+        AutomixEnabledKey,
+        defaultValue = false
+    )
+    val (automixPerformance, onAutomixPerformanceChange) = rememberEnumPreference(
+        AutomixPerformanceModeKey,
+        defaultValue = AutomixPerformanceMode.BALANCED
+    )
 
     val (audioQuality, onAudioQualityChange) = rememberEnumPreference(
         AudioQualityKey,
@@ -152,6 +169,17 @@ fun PlayerSettings(
                     }
                 )},
 
+                {SwitchPreference(
+                    title = { Text(stringResource(R.string.spatial_audio)) },
+                    description = stringResource(R.string.spatial_audio_subtitle),
+                    icon = { Icon(painterResource(R.drawable.graphic_eq), null) },
+                    checked = spatialAudio,
+                    onCheckedChange = { enabled ->
+                        onSpatialAudioChange(enabled)
+                        playerConnection?.service?.setSpatialAudioEnabled(enabled)
+                    }
+                )},
+
                 {PreferenceEntry(
                     title = { Text(stringResource(R.string.dolby_atmos_system_panel)) },
                     description = stringResource(R.string.dolby_atmos_system_panel_desc),
@@ -204,16 +232,48 @@ fun PlayerSettings(
                     onCheckedChange = onAudioNormalizationChange
                 )},
 
-                {ListPreference(
-                    title = { Text(stringResource(R.string.crossfade)) },
-                    icon = { Icon(painterResource(R.drawable.sync), null) },
-                    selectedValue = crossfadeSeconds,
-                    values = listOf(0, 2, 4, 6, 8, 10, 12),
-                    onValueSelected = onCrossfadeSecondsChange,
-                    valueText = { seconds ->
-                        if (seconds == 0) "Off" else "$seconds seconds"
+                {SwitchPreference(
+                    title = { Text(stringResource(R.string.automix)) },
+                    description = stringResource(
+                        if (automix) R.string.automix_enabled_subtitle else R.string.automix_disabled_subtitle
+                    ),
+                    icon = { Icon(painterResource(R.drawable.auto_awesome), null) },
+                    checked = automix,
+                    onCheckedChange = { enabled ->
+                        onAutomixChange(enabled)
+                        playerConnection?.service?.setAutomixEnabled(enabled)
                     }
                 )},
+
+                if (automix) {
+                    {EnumListPreference(
+                        title = { Text(stringResource(R.string.automix_performance)) },
+                        icon = { Icon(painterResource(R.drawable.speed), null) },
+                        selectedValue = automixPerformance,
+                        onValueSelected = { mode ->
+                            onAutomixPerformanceChange(mode)
+                            playerConnection?.service?.setAutomixPerformanceMode(mode)
+                        },
+                        valueText = { mode ->
+                            when (mode) {
+                                AutomixPerformanceMode.EFFICIENT -> stringResource(R.string.automix_mode_efficient)
+                                AutomixPerformanceMode.BALANCED -> stringResource(R.string.automix_mode_balanced)
+                                AutomixPerformanceMode.PERFORMANCE -> stringResource(R.string.automix_mode_performance)
+                            }
+                        }
+                    )}
+                } else {
+                    {ListPreference(
+                        title = { Text(stringResource(R.string.crossfade)) },
+                        icon = { Icon(painterResource(R.drawable.sync), null) },
+                        selectedValue = crossfadeSeconds,
+                        values = listOf(0, 2, 4, 6, 8, 10, 12),
+                        onValueSelected = onCrossfadeSecondsChange,
+                        valueText = { seconds ->
+                            if (seconds == 0) "Off" else "$seconds seconds"
+                        }
+                    )}
+                },
             )
         )
 

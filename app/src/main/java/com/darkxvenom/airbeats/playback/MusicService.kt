@@ -79,6 +79,11 @@ import com.darkxvenom.airbeats.constants.DiscordUseDetailsKey
 import com.darkxvenom.airbeats.constants.DynamicIslandKey
 import com.darkxvenom.airbeats.constants.EnableDiscordRPCKey
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
+import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
+import com.darkxvenom.airbeats.constants.AutomixEnabledKey
+import com.darkxvenom.airbeats.constants.AutomixPerformanceMode
+import com.darkxvenom.airbeats.constants.AutomixPerformanceModeKey
+import com.darkxvenom.airbeats.playback.automix.TrackAnalyzer
 import com.darkxvenom.airbeats.constants.EqualizerEnabledKey
 import com.darkxvenom.airbeats.constants.HideExplicitKey
 import com.darkxvenom.airbeats.constants.HistoryDuration
@@ -287,7 +292,11 @@ class MusicService :
     val equalizerState = MutableStateFlow(EqualizerUiState())
     val spatialAudioProcessor = SpatialAudioProcessor()
     val dolbyAtmosEnabled = MutableStateFlow(true)
+    val spatialAudioEnabled = MutableStateFlow(false)
     val isTrackDolbyAtmos = MutableStateFlow(false)
+    val automixEnabled = MutableStateFlow(false)
+    val automixPerformanceMode = MutableStateFlow(AutomixPerformanceMode.BALANCED)
+    val trackAnalyzer by lazy { TrackAnalyzer(this) }
 
     private var discordRpc: DiscordRPC? = null
     private var lastPlaybackSpeed = 1.0f
@@ -417,6 +426,33 @@ class MusicService :
                 updateSpatialAudio()
             }
 
+        dataStore.data
+            .map { it[SpatialAudioEnabledKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                spatialAudioEnabled.value = enabled
+                updateSpatialAudio()
+            }
+
+        dataStore.data
+            .map { it[AutomixEnabledKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                automixEnabled.value = enabled
+            }
+
+        dataStore.data
+            .map {
+                runCatching {
+                    AutomixPerformanceMode.valueOf(it[AutomixPerformanceModeKey] ?: AutomixPerformanceMode.BALANCED.name)
+                }.getOrDefault(AutomixPerformanceMode.BALANCED)
+            }
+            .distinctUntilChanged()
+            .collectLatest(scope) { mode ->
+                automixPerformanceMode.value = mode
+                trackAnalyzer.setPerformanceMode(mode)
+            }
+
         crossfadeAudio =
             CrossfadeAudio(
                 player = player,
@@ -426,6 +462,8 @@ class MusicService :
                 playerVolume = playerVolume,
                 audioFocusVolumeFactor = audioFocusVolumeFactor,
                 audioNormalizationEnabled = audioNormalizationEnabled,
+                automixEnabled = automixEnabled,
+                trackAnalyzer = trackAnalyzer,
                 overlapPlayerFactory = {
                     ExoPlayer
                         .Builder(this)
@@ -1443,9 +1481,38 @@ class MusicService :
         updateSpatialAudio()
     }
 
+    fun setSpatialAudioEnabled(enabled: Boolean) {
+        spatialAudioEnabled.value = enabled
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[SpatialAudioEnabledKey] = enabled
+            }
+        }
+        updateSpatialAudio()
+    }
+
+    fun setAutomixEnabled(enabled: Boolean) {
+        automixEnabled.value = enabled
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[AutomixEnabledKey] = enabled
+            }
+        }
+    }
+
+    fun setAutomixPerformanceMode(mode: AutomixPerformanceMode) {
+        automixPerformanceMode.value = mode
+        trackAnalyzer.setPerformanceMode(mode)
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[AutomixPerformanceModeKey] = mode.name
+            }
+        }
+    }
+
     fun updateSpatialAudio() {
         val isNativeAtmos = isTrackDolbyAtmos.value
-        spatialAudioProcessor.enabled = dolbyAtmosEnabled.value && !isNativeAtmos
+        spatialAudioProcessor.enabled = (spatialAudioEnabled.value || dolbyAtmosEnabled.value) && !isNativeAtmos
     }
 
     override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
@@ -2232,6 +2299,7 @@ class MusicService :
             crossfadeAudio?.release()
             crossfadeAudio = null
         } catch (_: Exception) {}
+        runCatching { trackAnalyzer.release() }
         releaseLoudnessEnhancer()
         releaseEqualizer()
         mediaController?.release()
