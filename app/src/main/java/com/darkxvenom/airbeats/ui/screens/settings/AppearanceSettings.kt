@@ -175,20 +175,26 @@ fun AppearanceSettings(
 
     val isSystemInDarkTheme = isSystemInDarkTheme()
     val useDarkTheme =
-        remember(darkMode, isSystemInDarkTheme, enableLiquidGlass, isPlayful) {
+        remember(darkMode, isSystemInDarkTheme, enableLiquidGlass, frostedGlassCardsButtons, isPlayful) {
             if (isPlayful) {
                 false
-            } else if (enableLiquidGlass) {
+            } else if (enableLiquidGlass || frostedGlassCardsButtons) {
                 true
             } else {
                 if (darkMode == DarkMode.AUTO) isSystemInDarkTheme else darkMode == DarkMode.ON
             }
         }
 
-    // Automatically disable pureBlack when switching to light mode
-    LaunchedEffect(useDarkTheme) {
-        if (!useDarkTheme && pureBlack) {
+    // Automatically disable pureBlack when switching to light mode or enabling liquid glass / frosted glass
+    LaunchedEffect(useDarkTheme, enableLiquidGlass, frostedGlassCardsButtons) {
+        if ((!useDarkTheme || enableLiquidGlass || frostedGlassCardsButtons) && pureBlack) {
             onPureBlackChange(false)
+        }
+    }
+
+    LaunchedEffect(frostedGlassCardsButtons) {
+        if (frostedGlassCardsButtons && darkMode != DarkMode.ON) {
+            onDarkModeChange(DarkMode.ON)
         }
     }
 
@@ -552,10 +558,10 @@ fun AppearanceSettings(
                         {EnumListPreference(
                             title = { Text(stringResource(R.string.dark_theme)) },
                             icon = { Icon(painterResource(R.drawable.dark_mode), null) },
-                            selectedValue = if (enableLiquidGlass) DarkMode.ON else if (isPlayful) DarkMode.OFF else darkMode,
+                            selectedValue = if (enableLiquidGlass || frostedGlassCardsButtons) DarkMode.ON else if (isPlayful) DarkMode.OFF else darkMode,
                             onValueSelected = onDarkModeChange,
                             valueText = {
-                                if (enableLiquidGlass) {
+                                if (enableLiquidGlass || frostedGlassCardsButtons) {
                                     stringResource(R.string.dark_theme_on)
                                 } else if (isPlayful) {
                                     stringResource(R.string.dark_theme_off)
@@ -567,7 +573,7 @@ fun AppearanceSettings(
                                     }
                                 }
                             },
-                            isEnabled = !enableLiquidGlass && !isPlayful
+                            isEnabled = !enableLiquidGlass && !frostedGlassCardsButtons && !isPlayful
                         )},
                         {
                             PreferenceEntry(
@@ -597,19 +603,25 @@ fun AppearanceSettings(
                             description = "Apply frosted glass effect to buttons, tags, settings cards, and popups",
                             icon = { Icon(painterResource(R.drawable.contrast), null) },
                             checked = frostedGlassCardsButtons,
-                            onCheckedChange = onFrostedGlassCardsButtonsChange
+                            onCheckedChange = { newValue ->
+                                onFrostedGlassCardsButtonsChange(newValue)
+                                if (newValue) {
+                                    onDarkModeChange(DarkMode.ON)
+                                    onPureBlackChange(false)
+                                }
+                            }
                         )},
                         {AnimatedVisibility(useDarkTheme) {
                             SwitchPreference(
                                 title = { Text(stringResource(R.string.pure_black)) },
                                 icon = { Icon(painterResource(R.drawable.contrast), null) },
-                                checked = pureBlack && useDarkTheme && !enableLiquidGlass,
+                                checked = pureBlack && useDarkTheme && !enableLiquidGlass && !frostedGlassCardsButtons,
                                 onCheckedChange = { newValue ->
-                                    if (useDarkTheme && !enableLiquidGlass) {
+                                    if (useDarkTheme && !enableLiquidGlass && !frostedGlassCardsButtons) {
                                         onPureBlackChange(newValue)
                                     }
                                 },
-                                isEnabled = useDarkTheme && !enableLiquidGlass
+                                isEnabled = useDarkTheme && !enableLiquidGlass && !frostedGlassCardsButtons
                             )
                         }},
                         { PreferenceEntry(

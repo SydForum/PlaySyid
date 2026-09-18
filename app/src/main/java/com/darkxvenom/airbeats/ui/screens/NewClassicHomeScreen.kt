@@ -64,6 +64,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -120,11 +121,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private val NewClassicDarkBg = Color.Black // 100% Pure OLED Black
-private val NewClassicSurface = Color(0xFF141414)
-private val NewClassicTextPrimary = Color(0xFFFFFFFF)
-private val NewClassicTextSecondary = Color(0xFF909AA8)
-private val NewClassicSeeAllBg = Color(0xFF1C1C1C)
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(
@@ -202,10 +198,13 @@ fun NewClassicHomeScreen(
         )
     }
 
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val screenBg = if (isDark) Color.Black else MaterialTheme.colorScheme.background
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NewClassicDarkBg)
+            .background(screenBg)
             .pullToRefresh(
                 isRefreshing = isRefreshing,
                 state = pullRefreshState,
@@ -216,7 +215,7 @@ fun NewClassicHomeScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .background(NewClassicDarkBg),
+                .background(screenBg),
             contentPadding = PaddingValues(
                 bottom = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding() + 110.dp
             )
@@ -408,13 +407,13 @@ fun NewClassicHomeScreen(
                                     modifier = Modifier
                                         .size(34.dp)
                                         .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.1f)),
+                                        .background(if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.person),
                                         contentDescription = null,
-                                        tint = Color.White,
+                                        tint = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -746,13 +745,17 @@ private fun NewClassicHeroSection(
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val heroHeight = (configuration.screenHeightDp.dp * 0.58f).coerceAtLeast(490.dp) + statusBarHeight
     val isFrosted = isFrostedGlassUiEnabled()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val blendColor = if (isDark) Color.Black else MaterialTheme.colorScheme.background
+    val heroTextPrimary = if (isDark) Color.White else MaterialTheme.colorScheme.onBackground
+    val heroTextSecondary = if (isDark) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(heroHeight)
             .clipToBounds()
-            .background(Color.Black)
+            .background(blendColor)
     ) {
         // Crisp high-resolution hero image with immersive zoom
         AsyncImage(
@@ -767,23 +770,23 @@ private fun NewClassicHeroSection(
                 .scale(1.15f)
         )
 
-        // Continuous organic gradient blend dissolving seamlessly into pure OLED black
+        // Continuous organic gradient blend dissolving seamlessly into pure OLED black or clean light theme surface
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colorStops = arrayOf(
-                            0.0f to Color.Black.copy(alpha = 0.60f),
-                            0.12f to Color.Black.copy(alpha = 0.20f),
+                            0.0f to (if (isDark) Color.Black.copy(alpha = 0.60f) else Color.White.copy(alpha = 0.45f)),
+                            0.12f to (if (isDark) Color.Black.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.15f)),
                             0.24f to Color.Transparent,
                             0.38f to Color.Transparent,
-                            0.50f to Color.Black.copy(alpha = 0.15f),
-                            0.62f to Color.Black.copy(alpha = 0.38f),
-                            0.74f to Color.Black.copy(alpha = 0.68f),
-                            0.86f to Color.Black.copy(alpha = 0.92f),
-                            0.94f to Color.Black,
-                            1.0f to Color.Black
+                            0.50f to (if (isDark) Color.Black.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.20f)),
+                            0.62f to (if (isDark) Color.Black.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.45f)),
+                            0.74f to (if (isDark) Color.Black.copy(alpha = 0.68f) else Color.White.copy(alpha = 0.75f)),
+                            0.86f to (if (isDark) Color.Black.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f)),
+                            0.94f to blendColor,
+                            1.0f to blendColor
                         )
                     )
                 )
@@ -802,21 +805,31 @@ private fun NewClassicHeroSection(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                val buttonBg = if (isDark) {
+                    if (isFrosted) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.15f)
+                } else {
+                    if (isFrosted) Color.Black.copy(alpha = 0.06f) else Color.Black.copy(alpha = 0.10f)
+                }
+                val buttonBorder = if (isFrosted) {
+                    BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.08f))
+                } else null
+                val buttonTint = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+
                 IconButton(
                     onClick = onNotificationClick,
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(if (isFrosted) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.15f))
+                        .background(buttonBg)
                         .then(
-                            if (isFrosted) Modifier.border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), CircleShape)
+                            if (buttonBorder != null) Modifier.border(buttonBorder, CircleShape)
                             else Modifier
                         )
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.notification_on),
                         contentDescription = "Notifications",
-                        tint = Color.White,
+                        tint = buttonTint,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -826,16 +839,16 @@ private fun NewClassicHeroSection(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(if (isFrosted) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.15f))
+                        .background(buttonBg)
                         .then(
-                            if (isFrosted) Modifier.border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), CircleShape)
+                            if (buttonBorder != null) Modifier.border(buttonBorder, CircleShape)
                             else Modifier
                         )
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.settings),
                         contentDescription = "Settings",
-                        tint = Color.White,
+                        tint = buttonTint,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -863,7 +876,7 @@ private fun NewClassicHeroSection(
                 Text(
                     text = heroData.title,
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        color = Color.White,
+                        color = heroTextPrimary,
                         fontWeight = FontWeight.ExtraBold,
                         lineHeight = 32.sp
                     ),
@@ -876,7 +889,7 @@ private fun NewClassicHeroSection(
                 Text(
                     text = heroData.subtitle,
                     style = MaterialTheme.typography.bodySmall.copy(
-                        color = Color.White.copy(alpha = 0.72f),
+                        color = heroTextSecondary,
                         fontSize = 12.5.sp
                     ),
                     maxLines = 1,
@@ -896,15 +909,29 @@ private fun NewClassicHeroSection(
                     label = "playNowScale"
                 )
 
+                val playContainerColor = if (isFrosted) {
+                    if (isDark) Color.White.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                } else {
+                    MaterialTheme.colorScheme.primary
+                }
+                val playContentColor = if (isFrosted) {
+                    if (isDark) Color.White else MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onPrimary
+                }
+                val playBorder = if (isFrosted) {
+                    BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.18f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                } else null
+
                 Button(
                     onClick = onPlayNowClick,
                     interactionSource = interactionSource,
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isFrosted) Color.White.copy(alpha = 0.10f) else MaterialTheme.colorScheme.primary,
-                        contentColor = if (isFrosted) Color.White else MaterialTheme.colorScheme.onPrimary
+                        containerColor = playContainerColor,
+                        contentColor = playContentColor
                     ),
-                    border = if (isFrosted) BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)) else null,
+                    border = playBorder,
                     contentPadding = PaddingValues(horizontal = 28.dp, vertical = 11.dp),
                     modifier = Modifier
                         .scale(buttonScale)
@@ -916,7 +943,7 @@ private fun NewClassicHeroSection(
                         Icon(
                             painter = painterResource(R.drawable.play),
                             contentDescription = null,
-                            tint = if (isFrosted) Color.White else MaterialTheme.colorScheme.onPrimary,
+                            tint = playContentColor,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -925,7 +952,7 @@ private fun NewClassicHeroSection(
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.8.sp,
-                                color = if (isFrosted) Color.White else MaterialTheme.colorScheme.onPrimary
+                                color = playContentColor
                             )
                         )
                     }
@@ -944,6 +971,12 @@ private fun NewClassicSectionHeader(
     onSeeAllClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val textPrimary = if (isDark) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.onBackground
+    val textSecondary = if (isDark) Color(0xFF909AA8) else MaterialTheme.colorScheme.onSurfaceVariant
+    val seeAllBg = if (isDark) Color(0xFF1C1C1C) else MaterialTheme.colorScheme.surfaceVariant
+    val seeAllTextColor = if (isDark) Color.White.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -964,7 +997,7 @@ private fun NewClassicSectionHeader(
                     Text(
                         text = subtitle.uppercase(),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            color = NewClassicTextSecondary,
+                            color = textSecondary,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.8.sp,
                             fontSize = 11.sp
@@ -977,7 +1010,7 @@ private fun NewClassicSectionHeader(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        color = NewClassicTextPrimary,
+                        color = textPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     ),
@@ -992,7 +1025,7 @@ private fun NewClassicSectionHeader(
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(NewClassicSeeAllBg)
+                    .background(seeAllBg)
                     .clickable(onClick = onSeeAllClick)
                     .padding(horizontal = 14.dp, vertical = 5.dp),
                 contentAlignment = Alignment.Center
@@ -1000,7 +1033,7 @@ private fun NewClassicSectionHeader(
                 Text(
                     text = "SEE ALL",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        color = Color.White.copy(alpha = 0.75f),
+                        color = seeAllTextColor,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
                         fontSize = 10.5.sp
@@ -1022,6 +1055,11 @@ private fun NewClassicSongCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val surfaceColor = if (isDark) Color(0xFF141414) else MaterialTheme.colorScheme.surfaceContainer
+    val textPrimary = if (isDark) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.onBackground
+    val textSecondary = if (isDark) Color(0xFF909AA8) else MaterialTheme.colorScheme.onSurfaceVariant
+
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -1048,7 +1086,7 @@ private fun NewClassicSongCard(
             modifier = Modifier
                 .size(140.dp)
                 .clip(shape)
-                .background(NewClassicSurface)
+                .background(surfaceColor)
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
@@ -1066,7 +1104,7 @@ private fun NewClassicSongCard(
         Text(
             text = title,
             style = MaterialTheme.typography.bodyMedium.copy(
-                color = NewClassicTextPrimary,
+                color = textPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.5.sp
             ),
@@ -1079,7 +1117,7 @@ private fun NewClassicSongCard(
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodySmall.copy(
-                color = NewClassicTextSecondary,
+                color = textSecondary,
                 fontSize = 12.sp
             ),
             maxLines = 1,

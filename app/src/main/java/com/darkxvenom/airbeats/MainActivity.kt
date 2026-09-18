@@ -204,6 +204,7 @@ import com.darkxvenom.airbeats.ui.component.BottomSheet
 import com.darkxvenom.airbeats.ui.component.BottomSheetMenu
 import com.darkxvenom.airbeats.ui.component.IconButton
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
+import com.darkxvenom.airbeats.constants.FrostedGlassCardsButtonsKey
 import com.darkxvenom.airbeats.constants.UseSystemFontKey
 import com.darkxvenom.airbeats.constants.AppFont
 import com.darkxvenom.airbeats.constants.AppFontKey
@@ -565,6 +566,7 @@ class MainActivity : ComponentActivity() {
             val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
             val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
             val enableLiquidGlass by rememberPreference(LiquidGlassKey, defaultValue = false)
+            val frostedGlassCardsButtons by rememberPreference(FrostedGlassCardsButtonsKey, defaultValue = true)
 
             val pureBlack by rememberPreference(PureBlackKey, defaultValue = false)
             val appFontKey by rememberPreference(AppFontKey, defaultValue = AppFont.LINOTTE.key)
@@ -572,10 +574,10 @@ class MainActivity : ComponentActivity() {
             val isPlayful = homeScreenStyle == HomeScreenStyle.PLAYFUL
             val isSystemInDarkTheme = isSystemInDarkTheme()
             val useDarkTheme =
-                remember(darkTheme, isSystemInDarkTheme, enableLiquidGlass, isPlayful) {
+                remember(darkTheme, isSystemInDarkTheme, enableLiquidGlass, frostedGlassCardsButtons, isPlayful) {
                     if (isPlayful) {
                         false
-                    } else if (enableLiquidGlass) {
+                    } else if (enableLiquidGlass || frostedGlassCardsButtons) {
                         true
                     } else {
                         if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
@@ -625,7 +627,7 @@ class MainActivity : ComponentActivity() {
 
             AirBeatsTheme(
                 darkTheme = useDarkTheme,
-                pureBlack = pureBlack && !enableLiquidGlass && !isPlayful,
+                pureBlack = pureBlack && !enableLiquidGlass && !frostedGlassCardsButtons && !isPlayful,
                 appFont = appFont,
                 themeColor = themeColor,
             ) {
