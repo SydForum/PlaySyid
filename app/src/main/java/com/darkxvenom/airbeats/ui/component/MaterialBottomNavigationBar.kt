@@ -37,7 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private val DockShape = RoundedCornerShape(32.dp)
+private val DockShape = RoundedCornerShape(36.dp)
 private val PillShape = CircleShape
 
 private fun <T> materialNavSpring() = spring<T>(
@@ -69,7 +69,7 @@ fun MaterialBottomNavigationBar(
             shadowElevation = 10.dp,
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -114,21 +114,21 @@ private fun MaterialNavItem(
         shape = PillShape,
         color = backgroundColor,
         modifier = Modifier
-            .height(48.dp)
+            .height(54.dp)
             .animateContentSize(animationSpec = materialNavSpring()),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier
-                .padding(horizontal = if (selected) 18.dp else 12.dp)
-                .height(48.dp),
+                .padding(horizontal = if (selected) 20.dp else 14.dp)
+                .height(54.dp),
         ) {
             Icon(
                 painter = painterResource(id = iconRes),
                 contentDescription = label,
                 tint = contentColor,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(26.dp),
             )
             AnimatedVisibility(
                 visible = selected && label.isNotEmpty(),
