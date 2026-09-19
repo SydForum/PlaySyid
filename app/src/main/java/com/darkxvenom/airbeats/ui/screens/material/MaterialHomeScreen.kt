@@ -91,6 +91,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import coil.compose.AsyncImage
+import com.darkxvenom.airbeats.LocalDatabase
 import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
 import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
@@ -98,6 +99,7 @@ import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
 import com.darkxvenom.airbeats.constants.MaterialHomeSection
 import com.darkxvenom.airbeats.constants.SongSortType
 import com.darkxvenom.airbeats.db.entities.Song
+import com.darkxvenom.airbeats.innertube.YouTube
 import com.darkxvenom.airbeats.innertube.models.AlbumItem
 import com.darkxvenom.airbeats.innertube.models.ArtistItem
 import com.darkxvenom.airbeats.innertube.models.PlaylistItem
@@ -114,6 +116,7 @@ import com.darkxvenom.airbeats.utils.reportException
 import com.darkxvenom.airbeats.viewmodels.HomeViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URLEncoder
@@ -594,28 +597,35 @@ fun MaterialHomeScreen(
 
                 // 9. SPOTLIGHT HERO SECTION
                 if (isSectionVisible(MaterialHomeSection.SPOTLIGHT)) {
-                    quickPicks?.firstOrNull()?.artists?.firstOrNull()?.let { artist ->
-                        item(key = "spotlight") {
-                            MaterialSpotlightCard(
-                                artistName = artist.name,
-                                artistId = artist.id,
-                                onOpenArtist = {
-                                    artist.id?.let { navController.navigate("artist/$it") }
-                                },
-                                onPlayRadio = {
-                                    quickPicks?.firstOrNull()?.let {
-                                        playerConnection.playQueue(YouTubeQueue.radio(it.toMediaMetadata()))
-                                    }
-                                },
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            )
+                    quickPicks?.firstOrNull()?.let { pick ->
+                        val artist = pick.artists.firstOrNull()
+                        if (artist != null) {
+                            item(key = "spotlight") {
+                                MaterialSpotlightCard(
+                                    artistName = artist.name,
+                                    artistId = artist.id,
+                                    thumbnailUrl = artist.thumbnailUrl,
+                                    fallbackThumbnail = pick.song.thumbnailUrl,
+                                    onOpenArtist = {
+                                        artist.id.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                                    },
+                                    onPlayRadio = {
+                                        playerConnection.playQueue(YouTubeQueue.radio(pick.toMediaMetadata()))
+                                    },
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                            }
                         }
                     }
                 }
 
                 // 10. TOP ARTISTS SECTION
                 if (isSectionVisible(MaterialHomeSection.TOP_ARTISTS)) {
-                    quickPicks?.mapNotNull { it.artists.firstOrNull() }?.distinctBy { it.id }?.takeIf { it.isNotEmpty() }?.let { artists ->
+                    quickPicks?.mapNotNull { pick ->
+                        pick.artists.firstOrNull()?.let { artist ->
+                            Triple(artist, artist.thumbnailUrl, pick.song.thumbnailUrl)
+                        }
+                    }?.distinctBy { it.first.id }?.takeIf { it.isNotEmpty() }?.let { artistTriples ->
                         item(key = "top_artists") {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 MaterialSectionHeader(
@@ -627,12 +637,15 @@ fun MaterialHomeScreen(
                                     contentPadding = PaddingValues(horizontal = 16.dp),
                                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    itemsIndexed(artists.take(10)) { index, artist ->
+                                    itemsIndexed(artistTriples.take(10)) { index, (artist, thumb, songThumb) ->
                                         MaterialArtistCard(
+                                            artistId = artist.id,
                                             name = artist.name,
+                                            thumbnailUrl = thumb,
+                                            fallbackThumbnail = songThumb,
                                             rank = index + 1,
                                             onClick = {
-                                                artist.id?.let { navController.navigate("artist/$it") }
+                                                artist.id.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
                                             }
                                         )
                                     }
@@ -1179,11 +1192,43 @@ private fun MaterialChartCard(
 
 @Composable
 private fun MaterialArtistCard(
+    artistId: String?,
     name: String,
+    thumbnailUrl: String?,
+    fallbackThumbnail: String? = null,
     rank: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val database = LocalDatabase.current
+    val dbArtist by remember(artistId) {
+        if (artistId != null) {
+            database.artist(artistId)
+        } else {
+            flowOf(null)
+        }
+    }.collectAsState(initial = null)
+
+    var remoteThumbnail by remember(artistId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(artistId, dbArtist?.artist?.thumbnailUrl) {
+        val currentThumb = dbArtist?.artist?.thumbnailUrl ?: thumbnailUrl
+        if (artistId != null && currentThumb == null && artistId.startsWith("UC")) {
+            withContext(Dispatchers.IO) {
+                YouTube.artist(artistId).onSuccess { page ->
+                    remoteThumbnail = page.artist.thumbnail
+                    database.query {
+                        dbArtist?.artist?.let { update(it, page) }
+                    }
+                }
+            }
+        }
+    }
+
+    val finalThumbnail = dbArtist?.artist?.thumbnailUrl
+        ?: remoteThumbnail
+        ?: thumbnailUrl
+        ?: fallbackThumbnail
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -1196,13 +1241,24 @@ private fun MaterialArtistCard(
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 modifier = Modifier.size(76.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Filled.People,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp)
+                if (!finalThumbnail.isNullOrBlank()) {
+                    AsyncImage(
+                        model = finalThumbnail.highQualityThumbnail(),
+                        contentDescription = name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
                     )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.People,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
             }
 
@@ -1241,10 +1297,41 @@ private fun MaterialArtistCard(
 private fun MaterialSpotlightCard(
     artistName: String,
     artistId: String?,
+    thumbnailUrl: String?,
+    fallbackThumbnail: String? = null,
     onOpenArtist: () -> Unit,
     onPlayRadio: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val database = LocalDatabase.current
+    val dbArtist by remember(artistId) {
+        if (artistId != null) {
+            database.artist(artistId)
+        } else {
+            flowOf(null)
+        }
+    }.collectAsState(initial = null)
+
+    var remoteThumbnail by remember(artistId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(artistId, dbArtist?.artist?.thumbnailUrl) {
+        val currentThumb = dbArtist?.artist?.thumbnailUrl ?: thumbnailUrl
+        if (artistId != null && currentThumb == null && artistId.startsWith("UC")) {
+            withContext(Dispatchers.IO) {
+                YouTube.artist(artistId).onSuccess { page ->
+                    remoteThumbnail = page.artist.thumbnail
+                    database.query {
+                        dbArtist?.artist?.let { update(it, page) }
+                    }
+                }
+            }
+        }
+    }
+
+    val finalThumbnail = dbArtist?.artist?.thumbnailUrl
+        ?: remoteThumbnail
+        ?: thumbnailUrl
+        ?: fallbackThumbnail
+
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
@@ -1252,61 +1339,101 @@ private fun MaterialSpotlightCard(
         ),
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "Artist Spotlight",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = artistName,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilledIconButton(
-                    onClick = onPlayRadio,
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    modifier = Modifier.height(40.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Play Radio", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Artist Spotlight",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
 
-                if (artistId != null) {
-                    TextButton(onClick = onOpenArtist) {
-                        Text("View Profile", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = artistName,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilledIconButton(
+                        onClick = onPlayRadio,
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Play Radio", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+
+                    if (artistId != null) {
+                        TextButton(onClick = onOpenArtist) {
+                            Text("View Profile", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier
+                    .size(76.dp)
+                    .clickable(enabled = artistId != null, onClick = onOpenArtist)
+            ) {
+                if (!finalThumbnail.isNullOrBlank()) {
+                    AsyncImage(
+                        model = finalThumbnail.highQualityThumbnail(),
+                        contentDescription = artistName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.People,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
                 }
             }
