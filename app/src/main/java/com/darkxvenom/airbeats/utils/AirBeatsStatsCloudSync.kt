@@ -26,23 +26,6 @@ object AirBeatsStatsCloudSync {
         val userId = resolveStableUserId(context, namePreferenceManager, preferences)
         val cloudClient = AirBeatsStatsCloudClient()
 
-        // Prior to uploading, check remote board to reconcile any higher listen times (e.g. after backup restore)
-        val currentName = runCatching { namePreferenceManager.userName.first().trim() }.getOrDefault("")
-        val userNumber = getUserNumber(context)
-        cloudClient.readBoard().getOrNull()?.let { board ->
-            val cloudUser = board.users.firstOrNull { it.id == userId }
-                ?: (if (currentName.isNotBlank() && !currentName.equals("AirBeats User", ignoreCase = true))
-                    board.users.firstOrNull { it.name.trim().equals(currentName, ignoreCase = true) }
-                else null)
-                ?: (if (!userNumber.isNullOrBlank())
-                    board.users.firstOrNull { it.user == userNumber }
-                else null)
-
-            if (cloudUser != null) {
-                reconcileCloudListenTime(database, cloudUser.totalListenMs, cloudUser.weeklyListenMs)
-            }
-        }
-
         val upload = buildUpload(context, database, namePreferenceManager, userId) ?: return null
         return cloudClient
             .uploadDaily(upload)
@@ -51,13 +34,6 @@ object AirBeatsStatsCloudSync {
                 val updatedUserNumber = board.userNumber ?: board.users.firstOrNull { it.id == userId }?.user
                 if (!updatedUserNumber.isNullOrBlank()) {
                     persistUserNumber(context, updatedUserNumber)
-                }
-                val cloudUser = board.users.firstOrNull { it.id == userId }
-                    ?: (if (currentName.isNotBlank() && !currentName.equals("AirBeats User", ignoreCase = true))
-                        board.users.firstOrNull { it.name.trim().equals(currentName, ignoreCase = true) }
-                    else null)
-                if (cloudUser != null) {
-                    reconcileCloudListenTime(database, cloudUser.totalListenMs, cloudUser.weeklyListenMs)
                 }
             }
     }
@@ -279,80 +255,5 @@ object AirBeatsStatsCloudSync {
             ?.trim()
             ?.lowercase()
             ?.takeIf { it.isNotBlank() && it != "null" }
-
-    suspend fun reconcileCloudListenTime(
-        database: MusicDatabase,
-        cloudTotalListenMs: Long,
-        cloudWeeklyListenMs: Long = 0L,
-    ) {
-        if (cloudTotalListenMs <= 0L) return
-        val now = LocalDateTime.now().toInstant(ZoneOffset.UTC).toEpochMilli()
-        val allSongs = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
-        val localTotalListenMs = allSongs.sumOf { it.timeListened?.toLong() ?: 0L }
-
-        if (cloudTotalListenMs <= localTotalListenMs) {
-            timber.log.Timber.d("AirBeatsStatsCloudSync: Reconcile skipped (cloud: $cloudTotalListenMs ms <= local: $localTotalListenMs ms)")
-            return
-        }
-
-        val deltaTotal = cloudTotalListenMs - localTotalListenMs
-        val weekStart = LocalDate.now()
-            .with(WeekFields.of(Locale.getDefault()).dayOfWeek(), 1)
-            .atStartOfDay()
-            .toInstant(ZoneOffset.UTC)
-            .toEpochMilli()
-        val weekSongs = database.mostPlayedSongsStats(weekStart, limit = -1, toTimeStamp = Long.MAX_VALUE).first()
-        val localWeeklyListenMs = weekSongs.sumOf { it.timeListened?.toLong() ?: 0L }
-
-        val deltaWeekly = if (cloudWeeklyListenMs > localWeeklyListenMs) {
-            (cloudWeeklyListenMs - localWeeklyListenMs).coerceIn(0L, deltaTotal)
-        } else {
-            0L
-        }
-        val deltaHistorical = deltaTotal - deltaWeekly
-
-        timber.log.Timber.i("AirBeatsStatsCloudSync: Reconciling cloud listen time: deltaTotal=${deltaTotal}ms, deltaWeekly=${deltaWeekly}ms, deltaHistorical=${deltaHistorical}ms")
-
-        var targetSongId: String? = allSongs.firstOrNull()?.id
-        if (targetSongId == null) {
-            targetSongId = database.songsByPlayTimeAsc().first().firstOrNull()?.song?.id
-        }
-        if (targetSongId == null) {
-            val anchorSong = SongEntity(
-                id = "cloud_sync_anchor",
-                title = "Cloud Synced Listen Time",
-            )
-            database.query {
-                insert(anchorSong)
-            }
-            targetSongId = anchorSong.id
-        }
-
-        val targetId: String = targetSongId ?: return
-        database.query {
-            try {
-                if (deltaWeekly > 0L) {
-                    insert(
-                        Event(
-                            songId = targetId,
-                            timestamp = LocalDateTime.now(),
-                            playTime = deltaWeekly,
-                        ),
-                    )
-                }
-                if (deltaHistorical > 0L) {
-                    insert(
-                        Event(
-                            songId = targetId,
-                            timestamp = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(weekStart - 1000L), ZoneOffset.UTC),
-                            playTime = deltaHistorical,
-                        ),
-                    )
-                }
-                incrementTotalPlayTime(targetId, deltaTotal)
-            } catch (e: Exception) {
-                reportException(e)
-            }
-        }
-    }
 }
+

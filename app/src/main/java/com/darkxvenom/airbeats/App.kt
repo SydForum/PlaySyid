@@ -81,6 +81,11 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
         // Auto-restore Android OS unified backup file on open if present
         AutoBackupManager.checkAndRestoreOnOpen(this)
 
+        // Sanitize and heal any corrupted or fragmented playback events
+        GlobalScope.launch(Dispatchers.IO) {
+            com.darkxvenom.airbeats.db.DatabaseSanitizer.sanitizeDatabase(database)
+        }
+
         // Ensure active FCM subscription to personal numeric topic (e.g. "1", "2", "10")
         val assignedUserNum = AirBeatsStatsCloudSync.getUserNumber(this)
         if (!assignedUserNum.isNullOrBlank()) {

@@ -222,7 +222,9 @@ constructor(
         globalStats.value = globalStats.value.copy(isLoading = true, error = null, currentUserName = currentName)
         val userId = AirBeatsStatsCloudSync.resolveStableUserId(context, namePreferenceManager, statsPreferences)
 
-        // Read leaderboard first to reconcile if cloud has recorded higher listen time than local DB
+        var mustUpdateGlobalStats = forceUpload || shouldUploadToday()
+
+        // Read leaderboard first to check if cloud has recorded higher or different listen time than local DB
         val boardResult = cloudClient.readBoard()
         val initialBoard = boardResult.getOrNull()
         if (initialBoard != null) {
@@ -235,35 +237,26 @@ constructor(
                     initialBoard.users.firstOrNull { it.user == userNumber }
                 else null)
 
+            // If global stats is greater than the app's local stats (e.g. user restored an older backup),
+            // update global stats according to the app so the app is the authoritative source
             if (matchedUser != null) {
-                AirBeatsStatsCloudSync.reconcileCloudListenTime(
-                    database = database,
-                    cloudTotalListenMs = matchedUser.totalListenMs,
-                    cloudWeeklyListenMs = matchedUser.weeklyListenMs,
-                )
+                val currentLocalTime = buildUpload(userId)?.totalListenMs ?: 0L
+                if (matchedUser.totalListenMs > currentLocalTime) {
+                    mustUpdateGlobalStats = true
+                }
             }
         }
 
-        if (forceUpload || shouldUploadToday()) {
+        if (mustUpdateGlobalStats) {
             buildUpload(userId)?.let { upload ->
                 cloudClient
                     .uploadDaily(upload)
                     .onSuccess { board ->
                         statsPreferences.edit().putString(KEY_LAST_UPLOAD_DAY, LocalDate.now().toString()).apply()
                         val userNumber = AirBeatsStatsCloudSync.getUserNumber(context)
-                        val matchedUser = board.users.firstOrNull { it.id == userId }
-                            ?: (if (currentName.isNotBlank() && !currentName.equals("AirBeats User", ignoreCase = true))
-                                board.users.firstOrNull { it.name.trim().equals(currentName, ignoreCase = true) }
-                            else null)
-                            ?: (if (!userNumber.isNullOrBlank())
-                                board.users.firstOrNull { it.user == userNumber }
-                            else null)
-                        if (matchedUser != null) {
-                            AirBeatsStatsCloudSync.reconcileCloudListenTime(
-                                database = database,
-                                cloudTotalListenMs = matchedUser.totalListenMs,
-                                cloudWeeklyListenMs = matchedUser.weeklyListenMs,
-                            )
+                        val updatedUserNumber = board.userNumber ?: board.users.firstOrNull { it.id == userId }?.user
+                        if (!updatedUserNumber.isNullOrBlank()) {
+                            AirBeatsStatsCloudSync.persistUserNumber(context, updatedUserNumber)
                         }
                         globalStats.value =
                             GlobalStatsUiState(

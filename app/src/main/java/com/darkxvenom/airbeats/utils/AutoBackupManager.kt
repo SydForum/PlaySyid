@@ -580,6 +580,11 @@ object AutoBackupManager {
             }
             context.filesDir.resolve(PERSISTENT_QUEUE_FILE).delete()
 
+            runCatching {
+                val db = com.darkxvenom.airbeats.db.InternalDatabase.newInstance(context)
+                com.darkxvenom.airbeats.db.DatabaseSanitizer.sanitizeDatabase(db)
+            }
+
             if (shouldRestart) {
                 restartApp(context)
             }

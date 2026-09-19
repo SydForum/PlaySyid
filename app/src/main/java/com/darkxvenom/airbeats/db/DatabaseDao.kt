@@ -267,10 +267,11 @@ interface DatabaseDao {
     @Query(
         """
              SELECT song.id, song.title, song.thumbnailUrl,
-               (SELECT COUNT(1)
-                FROM event
-                WHERE songId = song.id
-                  AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) AS songCountListened,
+               CASE 
+                 WHEN song.duration > 0 AND (SELECT SUM(event.playTime) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) > 0
+                 THEN MAX(1, CAST(ROUND((SELECT SUM(event.playTime) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) * 1.0 / (song.duration * 1000)) AS INTEGER))
+                 ELSE (SELECT COUNT(1) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp)
+               END AS songCountListened,
                (SELECT SUM(event.playTime)
                 FROM event
                 WHERE songId = song.id
@@ -299,10 +300,11 @@ interface DatabaseDao {
     @Query(
         """
         SELECT song.*,
-               (SELECT COUNT(1)
-                FROM event
-                WHERE songId = song.id
-                  AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) AS songCountListened,
+               CASE 
+                 WHEN song.duration > 0 AND (SELECT SUM(event.playTime) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) > 0
+                 THEN MAX(1, CAST(ROUND((SELECT SUM(event.playTime) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) * 1.0 / (song.duration * 1000)) AS INTEGER))
+                 ELSE (SELECT COUNT(1) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp)
+               END AS songCountListened,
                (SELECT SUM(event.playTime)
                 FROM event
                 WHERE songId = song.id
@@ -369,12 +371,11 @@ interface DatabaseDao {
         """
     SELECT album.*,
            COUNT(DISTINCT song_album_map.songId) as downloadCount,
-           (SELECT COUNT(1)
-            FROM song_album_map
-                     JOIN event e ON song_album_map.songId = e.songId
-            WHERE albumId = album.id
-              AND e.timestamp > :fromTimeStamp 
-              AND e.timestamp <= :toTimeStamp) AS songCountListened,
+            CASE
+              WHEN (SELECT AVG(sam_song.duration) FROM song_album_map sam_inner JOIN song sam_song ON sam_song.id = sam_inner.songId WHERE sam_inner.albumId = album.id AND sam_song.duration > 0) > 0
+              THEN MAX(1, CAST(ROUND((SELECT SUM(e.playTime) FROM song_album_map JOIN event e ON song_album_map.songId = e.songId WHERE albumId = album.id AND e.timestamp > :fromTimeStamp AND e.timestamp <= :toTimeStamp) * 1.0 / ((SELECT AVG(sam_song2.duration) FROM song_album_map sam_inner2 JOIN song sam_song2 ON sam_song2.id = sam_inner2.songId WHERE sam_inner2.albumId = album.id AND sam_song2.duration > 0) * 1000)) AS INTEGER))
+              ELSE (SELECT COUNT(1) FROM song_album_map JOIN event e ON song_album_map.songId = e.songId WHERE albumId = album.id AND e.timestamp > :fromTimeStamp AND e.timestamp <= :toTimeStamp)
+            END AS songCountListened,
            (SELECT SUM(e.playTime)
             FROM song_album_map
                      JOIN event e ON song_album_map.songId = e.songId
