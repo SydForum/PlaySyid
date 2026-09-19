@@ -1385,7 +1385,7 @@ class MainActivity : ComponentActivity() {
                                                             } else {
                                                                 Modifier
                                                                     .padding(bottom = 6.dp)
-                                                                    .fillMaxWidth(0.88f)
+                                                                    .fillMaxWidth(if (navBarStyle == NavBarStyle.MATERIAL) 0.94f else 0.88f)
                                                                     .height(NavigationBarHeight - 16.dp)
                                                             }
                                                         ),
@@ -1523,6 +1523,7 @@ class MainActivity : ComponentActivity() {
                                                              selectedIndex = selectedIndex,
                                                              onItemSelected = onItemSelectedAction,
                                                              modifier = Modifier
+                                                                 .fillMaxSize()
                                                                  .offset(y = offsetY)
                                                                  .scale(scale)
                                                                  .alpha(alpha)

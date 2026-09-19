@@ -16,6 +16,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -64,7 +66,6 @@ fun MaterialBottomNavigationBar(
 
     Box(
         modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 6.dp)
             .animateContentSize(animationSpec = materialNavSpring()),
         contentAlignment = Alignment.Center,
     ) {
@@ -77,10 +78,14 @@ fun MaterialBottomNavigationBar(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
             ),
-            modifier = Modifier.clip(DockShape),
+            modifier = Modifier
+                .fillMaxHeight()
+                .clip(DockShape),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -127,15 +132,15 @@ private fun MaterialNavItem(
         shape = PillShape,
         color = backgroundColor,
         modifier = Modifier
-            .height(56.dp)
+            .fillMaxHeight()
             .animateContentSize(animationSpec = materialNavSpring()),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier
-                .padding(horizontal = if (selected) 20.dp else 14.dp)
-                .height(56.dp),
+                .fillMaxHeight()
+                .padding(horizontal = if (selected) 18.dp else 12.dp),
         ) {
             Icon(
                 painter = painterResource(id = iconRes),
