@@ -10,6 +10,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -41,13 +44,14 @@ private val DockShape = RoundedCornerShape(36.dp)
 private val PillShape = CircleShape
 
 private fun <T> materialNavSpring() = spring<T>(
-    dampingRatio = 0.8f,
+    dampingRatio = 0.82f,
     stiffness = 380f,
 )
 
 /**
- * Material 3 Expressive floating pill navigation bar ported from the reference design.
- * Features fluid spring physics, pill expanding indicator, and dynamic color transitions.
+ * Material 3 Expressive floating pill navigation bar.
+ * Features fluid spring physics, pill expanding indicator, and hairline rim styling
+ * with zero corner shadow artifacts for full visual smoothness.
  */
 @Composable
 fun MaterialBottomNavigationBar(
@@ -56,26 +60,32 @@ fun MaterialBottomNavigationBar(
     onItemSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
+
     Box(
         modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
             .animateContentSize(animationSpec = materialNavSpring()),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
             shape = DockShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp,
-            shadowElevation = 10.dp,
+            tonalElevation = 4.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            ),
+            modifier = Modifier.clip(DockShape),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 items.forEachIndexed { index, item ->
                     val isSelected = selectedIndex == index
-                    val onClick = remember(index) { { onItemSelected(index) } }
                     val label = if (item.titleId != 0) stringResource(item.titleId) else ""
                     val iconRes = if (isSelected) item.iconActive else item.iconInactive
 
@@ -83,7 +93,10 @@ fun MaterialBottomNavigationBar(
                         label = label,
                         iconRes = iconRes,
                         selected = isSelected,
-                        onClick = onClick,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onItemSelected(index)
+                        },
                     )
                 }
             }
@@ -114,7 +127,7 @@ private fun MaterialNavItem(
         shape = PillShape,
         color = backgroundColor,
         modifier = Modifier
-            .height(54.dp)
+            .height(56.dp)
             .animateContentSize(animationSpec = materialNavSpring()),
     ) {
         Row(
@@ -122,7 +135,7 @@ private fun MaterialNavItem(
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier
                 .padding(horizontal = if (selected) 20.dp else 14.dp)
-                .height(54.dp),
+                .height(56.dp),
         ) {
             Icon(
                 painter = painterResource(id = iconRes),

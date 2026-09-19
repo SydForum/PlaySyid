@@ -362,16 +362,16 @@ fun MaterialHomeScreen(
                                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { navController.navigate(Screens.Explore.route) }
+                                    onClick = { navController.navigate("new_release") }
                                 )
                                 MaterialQuickTile(
-                                    title = "Top 50",
-                                    subtitle = "Most played",
+                                    title = "Stats",
+                                    subtitle = "Listening stats",
                                     icon = Icons.Filled.TrendingUp,
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     contentColor = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { navController.navigate("auto_playlist/top") }
+                                    onClick = { navController.navigate(Screens.Stats.route) }
                                 )
                             }
                         }
@@ -766,9 +766,9 @@ fun MaterialHomeScreen(
 
         // Top Header Bar
         MaterialTopHeader(
-            onSearchClick = onSearchClick,
-            onSettingsClick = { navController.navigate("settings") },
             onNewReleasesClick = { navController.navigate("new_release") },
+            onDevNewsClick = { navController.navigate("settings/developer_news") },
+            onSettingsClick = { navController.navigate("settings") },
             modifier = Modifier.align(Alignment.TopCenter)
         )
     }
@@ -776,9 +776,9 @@ fun MaterialHomeScreen(
 
 @Composable
 private fun MaterialTopHeader(
-    onSearchClick: () -> Unit,
-    onSettingsClick: () -> Unit,
     onNewReleasesClick: () -> Unit,
+    onDevNewsClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -825,18 +825,19 @@ private fun MaterialTopHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                IconButton(onClick = onSearchClick) {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = "Search",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
                 IconButton(onClick = onNewReleasesClick) {
                     Icon(
                         imageVector = Icons.Filled.NewReleases,
                         contentDescription = "New Releases",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDevNewsClick) {
+                    Icon(
+                        painter = painterResource(R.drawable.newspaper),
+                        contentDescription = "News from Developer",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 IconButton(onClick = onSettingsClick) {

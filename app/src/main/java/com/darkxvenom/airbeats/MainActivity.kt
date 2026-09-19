@@ -162,6 +162,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -1441,40 +1442,42 @@ class MainActivity : ComponentActivity() {
                                                     var navigateToExplore by remember { mutableStateOf(false) }
 
                                                     val onItemSelectedAction: (Int) -> Unit = { index ->
-                                                         val screen = navigationItems[index]
-                                                         val isSelected = index == selectedIndex
+                                                         if (index in navigationItems.indices) {
+                                                             val screen = navigationItems[index]
+                                                             val isSelected = screen.route == navBackStackEntry?.destination?.route
 
-                                                         val currentTapTime = System.currentTimeMillis()
-                                                         val timeSinceLastTap = currentTapTime - lastTapTime
-                                                         val isDoubleTap =
-                                                             screen.titleId == R.string.explore &&
-                                                                     lastTappedIcon == R.string.explore &&
-                                                                     timeSinceLastTap < 300L
+                                                             val currentTapTime = System.currentTimeMillis()
+                                                             val timeSinceLastTap = currentTapTime - lastTapTime
+                                                             val isDoubleTap =
+                                                                 screen.titleId == R.string.explore &&
+                                                                         lastTappedIcon == R.string.explore &&
+                                                                         timeSinceLastTap < 300L
 
-                                                         lastTapTime = currentTapTime
-                                                         lastTappedIcon = screen.titleId
+                                                             lastTapTime = currentTapTime
+                                                             lastTappedIcon = screen.titleId
 
-                                                         if (screen.titleId == R.string.explore) {
-                                                             if (isDoubleTap) {
-                                                                 onActiveChange(true)
-                                                                 navigateToExplore = false
-                                                             } else {
-                                                                 navigateToExplore = true
-                                                                 coroutineScope.launch {
-                                                                     delay(300L)
-                                                                     if (navigateToExplore) {
-                                                                         navigateToScreen(navController, screen)
+                                                             if (screen.titleId == R.string.explore && navBarStyle != NavBarStyle.MATERIAL) {
+                                                                 if (isDoubleTap) {
+                                                                     onActiveChange(true)
+                                                                     navigateToExplore = false
+                                                                 } else {
+                                                                     navigateToExplore = true
+                                                                     coroutineScope.launch {
+                                                                         delay(300L)
+                                                                         if (navigateToExplore) {
+                                                                             navigateToScreen(navController, screen)
+                                                                         }
                                                                      }
                                                                  }
-                                                             }
-                                                         } else {
-                                                             if (isSelected) {
-                                                                 navController.currentBackStackEntry?.savedStateHandle?.set("scrollToTop", true)
-                                                                 coroutineScope.launch {
-                                                                     searchBarScrollBehavior.state.resetHeightOffset()
-                                                                 }
                                                              } else {
-                                                                 navigateToScreen(navController, screen)
+                                                                 if (isSelected) {
+                                                                     navController.currentBackStackEntry?.savedStateHandle?.set("scrollToTop", true)
+                                                                     coroutineScope.launch {
+                                                                         searchBarScrollBehavior.state.resetHeightOffset()
+                                                                     }
+                                                                 } else {
+                                                                     navigateToScreen(navController, screen)
+                                                                 }
                                                              }
                                                          }
                                                      }
@@ -1762,8 +1765,13 @@ class MainActivity : ComponentActivity() {
         navController: NavHostController,
         screen: Screens
     ) {
+        val startDestId = try {
+            navController.graph.findStartDestination().id
+        } catch (_: Exception) {
+            navController.graph.startDestinationId
+        }
         navController.navigate(screen.route) {
-            popUpTo(navController.graph.startDestinationId) {
+            popUpTo(startDestId) {
                 saveState = true
             }
             launchSingleTop = true
