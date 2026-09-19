@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
@@ -49,11 +50,35 @@ enum class SliderStyle {
 }
 
 enum class HomeScreenStyle {
-    CLASSIC, PLAYFUL, SPOTIFY, APPLE, NEW_CLASSIC
+    CLASSIC, PLAYFUL, SPOTIFY, APPLE, NEW_CLASSIC, MATERIAL
 }
 
 enum class NavBarStyle {
-    LIQUID_GLASS, SPOTIFY, APPLE, NEW_CLASSIC
+    LIQUID_GLASS, SPOTIFY, APPLE, NEW_CLASSIC, MATERIAL
+}
+
+val HiddenHomeSectionsKey = stringSetPreferencesKey("hiddenHomeSections")
+
+enum class MaterialHomeSection(val id: String, val title: String, val subtitle: String) {
+    HERO("hero", "Hero Greeting", "Greeting, date, and infinite radio quick start"),
+    QUICK_TILES("quick_tiles", "Quick Access", "Quick tiles for favorites, mixes, and recent tracks"),
+    TASTE_STRIP("taste_strip", "Taste Strip", "Genre and mood exploration chips"),
+    QUICK_PICKS("quick_picks", "Quick Picks", "Personalized recommendations for you"),
+    BECAUSE_YOU_LISTEN_TO("because_you_listen_to", "Because You Listen To", "Similar songs based on your listening history"),
+    FRESH_FINDS("fresh_finds", "Fresh Finds", "New tracks and undiscovered gems"),
+    JUMP_BACK_IN("jump_back_in", "Jump Back In", "Recently played tracks and listening history"),
+    MIXES("mixed_for_you", "Mixes To Explore", "Artist radios and endless mixes"),
+    SPOTLIGHT("spotlight_hero", "Artist Spotlight", "Featured artist card with instant radio"),
+    TOP_ARTISTS("top_artists", "Top Artists", "Your favorite and recommended artists"),
+    HEAVY_ROTATION("heavy_rotation", "Heavy Rotation", "Frequently played tracks"),
+    ALBUMS("albums_in_rotation", "Albums For You", "Top albums and recommended collections"),
+    CHARTS("trending_charts", "Trending Charts", "Top ranked and trending music charts"),
+    NEW_RELEASES("new_releases", "New Releases", "Fresh album and single drops");
+
+    companion object {
+        fun fromId(id: String?): MaterialHomeSection? =
+            entries.firstOrNull { it.id == id }
+    }
 }
 
 enum class LyricsScreenStyle {

@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material3.*
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -532,9 +534,18 @@ fun AppearanceSettings(
                                     HomeScreenStyle.PLAYFUL -> "Playful"
                                     HomeScreenStyle.SPOTIFY -> "Spotify"
                                     HomeScreenStyle.APPLE -> "Apple"
+                                    HomeScreenStyle.MATERIAL -> "Material"
                                 }
                             },
                         )},
+                        *(if (homeScreenStyle == HomeScreenStyle.MATERIAL) arrayOf<@Composable () -> Unit>({
+                            PreferenceEntry(
+                                title = { Text("Home Sections") },
+                                description = "Customize visible sections on the Material Home screen",
+                                icon = { Icon(Icons.Filled.Dashboard, null) },
+                                onClick = { navController.navigate("settings/home_sections") }
+                            )
+                        }) else emptyArray()),
                         {EnumListPreference(
                             title = { Text(stringResource(R.string.navigation_bar_style)) },
                             icon = { Icon(painterResource(R.drawable.nav_bar), null) },
@@ -546,6 +557,7 @@ fun AppearanceSettings(
                                     NavBarStyle.LIQUID_GLASS -> "Liquid Glass"
                                     NavBarStyle.SPOTIFY -> "Spotify"
                                     NavBarStyle.APPLE -> "Apple"
+                                    NavBarStyle.MATERIAL -> "Material"
                                 }
                             },
                         )},

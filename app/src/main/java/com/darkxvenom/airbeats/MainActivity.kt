@@ -694,6 +694,7 @@ class MainActivity : ComponentActivity() {
                                         NavBarStyle.SPOTIFY -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
                                         NavBarStyle.APPLE -> listOf(Screens.Home, Screens.Stats, Screens.Explore, Screens.Library, Screens.Search)
                                         NavBarStyle.NEW_CLASSIC -> listOf(Screens.Home, Screens.Search, Screens.Explore, Screens.Library)
+                                        NavBarStyle.MATERIAL -> listOf(Screens.Home, Screens.Explore, Screens.Library, Screens.Search)
                                     }
                                 }
                             }
@@ -1509,6 +1510,16 @@ class MainActivity : ComponentActivity() {
                                                              backdrop = backdrop,
                                                              modifier = Modifier
                                                                  .fillMaxSize()
+                                                                 .offset(y = offsetY)
+                                                                 .scale(scale)
+                                                                 .alpha(alpha)
+                                                         )
+                                                     } else if (navBarStyle == NavBarStyle.MATERIAL) {
+                                                         com.darkxvenom.airbeats.ui.component.MaterialBottomNavigationBar(
+                                                             items = curvedItems,
+                                                             selectedIndex = selectedIndex,
+                                                             onItemSelected = onItemSelectedAction,
+                                                             modifier = Modifier
                                                                  .offset(y = offsetY)
                                                                  .scale(scale)
                                                                  .alpha(alpha)

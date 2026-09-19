@@ -73,6 +73,8 @@ fun NavGraphBuilder.navigationBuilder(
             com.darkxvenom.airbeats.ui.screens.apple.AppleHomeScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.NEW_CLASSIC) {
             NewClassicHomeScreen(navController = navController, onSearchClick = onSearchClick)
+        } else if (homeScreenStyle == HomeScreenStyle.MATERIAL) {
+            com.darkxvenom.airbeats.ui.screens.material.MaterialHomeScreen(navController = navController, onSearchClick = onSearchClick)
         } else {
             HomeScreen(navController = navController, onSearchClick = onSearchClick)
         }
@@ -96,6 +98,8 @@ fun NavGraphBuilder.navigationBuilder(
             SpotifyLibraryScreen(navController)
         } else if (homeScreenStyle == HomeScreenStyle.APPLE) {
             com.darkxvenom.airbeats.ui.screens.apple.AppleLibraryScreen(navController = navController)
+        } else if (homeScreenStyle == HomeScreenStyle.MATERIAL) {
+            com.darkxvenom.airbeats.ui.screens.material.MaterialLibraryScreen(navController = navController)
         } else {
             LibraryScreen(navController)
         }
@@ -116,6 +120,8 @@ fun NavGraphBuilder.navigationBuilder(
             SpotifyExploreScreen(navController = navController)
         } else if (homeScreenStyle == HomeScreenStyle.APPLE) {
             com.darkxvenom.airbeats.ui.screens.apple.AppleExploreScreen(navController = navController)
+        } else if (homeScreenStyle == HomeScreenStyle.MATERIAL) {
+            com.darkxvenom.airbeats.ui.screens.material.MaterialExploreScreen(navController = navController, scrollBehavior = scrollBehavior)
         } else {
             ExploreScreen(navController,scrollBehavior)
         }
@@ -132,7 +138,9 @@ fun NavGraphBuilder.navigationBuilder(
         
         val useApple = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE || (navBarStyle != com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY && homeScreenStyle == HomeScreenStyle.APPLE)
 
-        if (useApple) {
+        if (homeScreenStyle == HomeScreenStyle.MATERIAL || navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.MATERIAL) {
+            com.darkxvenom.airbeats.ui.screens.material.MaterialSearchScreen(navController = navController)
+        } else if (useApple) {
             com.darkxvenom.airbeats.ui.screens.apple.AppleSearchScreen(navController = navController)
         } else {
             SpotifySearchScreen(navController = navController)
@@ -435,6 +443,11 @@ fun NavGraphBuilder.navigationBuilder(
     }
     composable("settings/developer_news") {
         com.darkxvenom.airbeats.ui.screens.settings.DeveloperNewsScreen(navController, scrollBehavior)
+    }
+    composable("settings/home_sections") {
+        com.darkxvenom.airbeats.ui.screens.settings.MaterialHomeSectionsScreen(
+            onBack = { navController.popBackStack() }
+        )
     }
     composable("login") {
             LoginScreen(navController)
