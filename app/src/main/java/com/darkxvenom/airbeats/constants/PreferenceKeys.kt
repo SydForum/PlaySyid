@@ -151,6 +151,19 @@ enum class AudioQuality {
     LOW,
 }
 
+val BitPerfectEnabledKey = booleanPreferencesKey("bit_perfect_enabled")
+val StreamingQualityPresetKey = intPreferencesKey("streaming_quality_preset")
+
+object QualityTiers {
+    const val QUALITY_DOLBY_ATMOS = 28 // Dolby Atmos (Spatial Immersive Audio)
+    const val QUALITY_MAX_HI_RES = 27  // Up to 24-bit / 192 kHz
+    const val QUALITY_HI_RES_96 = 7    // Up to 24-bit / 96 kHz
+    const val QUALITY_CD_LOSSLESS = 6  // 16-bit / 44.1 kHz FLAC
+    const val QUALITY_MP3_320 = 5      // 320 kbps MP3
+    const val QUALITY_DATA_SAVER = 4   // 96 kbps HE-AAC
+    const val QUALITY_YOUTUBE = -1     // YouTube Music Native (AAC / Opus)
+}
+
 val DownloadQualityKey = stringPreferencesKey("downloadQuality")
 
 val PersistentQueueKey = booleanPreferencesKey("persistentQueue")

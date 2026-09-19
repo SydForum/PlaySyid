@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.database.SQLException
 import android.media.AudioManager
+import android.media.AudioDeviceInfo
+import android.media.AudioDeviceCallback
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
@@ -80,6 +82,9 @@ import com.darkxvenom.airbeats.constants.DynamicIslandKey
 import com.darkxvenom.airbeats.constants.EnableDiscordRPCKey
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
 import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
+import com.darkxvenom.airbeats.constants.BitPerfectEnabledKey
+import com.darkxvenom.airbeats.constants.StreamingQualityPresetKey
+import com.darkxvenom.airbeats.constants.QualityTiers
 import com.darkxvenom.airbeats.constants.AutomixEnabledKey
 import com.darkxvenom.airbeats.constants.AutomixPerformanceMode
 import com.darkxvenom.airbeats.constants.AutomixPerformanceModeKey
@@ -297,6 +302,10 @@ class MusicService :
     val automixEnabled = MutableStateFlow(false)
     val automixPerformanceMode = MutableStateFlow(AutomixPerformanceMode.BALANCED)
     val trackAnalyzer by lazy { TrackAnalyzer(this) }
+    val bitPerfectEnabled = MutableStateFlow(false)
+    val isBitPerfectActive = MutableStateFlow(false)
+    private var usbBitPerfectOutput: UsbBitPerfectOutput? = null
+    private var audioDeviceCallback: AudioDeviceCallback? = null
 
     private var discordRpc: DiscordRPC? = null
     private var lastPlaybackSpeed = 1.0f
@@ -350,6 +359,9 @@ class MusicService :
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         setupAudioFocus()
+        val bitPerfect = UsbBitPerfectOutput(audioManager)
+        usbBitPerfectOutput = bitPerfect
+        setupUsbBitPerfectListener(bitPerfect)
 
         mediaLibrarySessionCallback.apply {
             toggleLike = ::toggleLike
@@ -400,11 +412,49 @@ class MusicService :
             }
         }
 
-        combine(playerVolume, audioFocusVolumeFactor, playbackFadeFactor) { vol, focus, fade ->
-            vol * focus * fade
+        combine(
+            playerVolume,
+            audioFocusVolumeFactor,
+            playbackFadeFactor,
+            bitPerfectEnabled,
+            isBitPerfectActive,
+        ) { vol, focus, fade, bpEnabled, bpActive ->
+            if (bpEnabled && bpActive) {
+                1.0f
+            } else {
+                vol * focus * fade
+            }
         }.collectLatest(scope) { finalVolume ->
             player.volume = finalVolume
         }
+
+        dataStore.data
+            .map { it[BitPerfectEnabledKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                bitPerfectEnabled.value = enabled
+                usbBitPerfectOutput?.setEnabled(enabled)
+                isBitPerfectActive.value = usbBitPerfectOutput?.isConfigured() == true
+                if (enabled) {
+                    equalizer?.enabled = false
+                    loudnessEnhancer?.enabled = false
+                    spatialAudioProcessor.enabled = false
+                } else {
+                    setupEqualizer()
+                    setupLoudnessEnhancer()
+                    updateSpatialAudio()
+                }
+            }
+
+        dataStore.data
+            .map { it[StreamingQualityPresetKey] ?: QualityTiers.QUALITY_MAX_HI_RES }
+            .distinctUntilChanged()
+            .collectLatest(scope) { preset ->
+                if (preset == QualityTiers.QUALITY_DOLBY_ATMOS) {
+                    dolbyAtmosEnabled.value = true
+                    updateSpatialAudio()
+                }
+            }
 
         dataStore.data
             .map { (it[CrossfadeKey] ?: 0) * 1000 }
@@ -664,6 +714,54 @@ class MusicService :
         }
     }
 
+
+    private fun setupUsbBitPerfectListener(bitPerfect: UsbBitPerfectOutput) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val callback = object : AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                    updateUsbDacRoute(bitPerfect)
+                }
+
+                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                    updateUsbDacRoute(bitPerfect)
+                }
+            }
+            audioDeviceCallback = callback
+            audioManager.registerAudioDeviceCallback(callback, null)
+        }
+        updateUsbDacRoute(bitPerfect)
+    }
+
+    private fun updateUsbDacRoute(bitPerfect: UsbBitPerfectOutput) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val usbDevice = devices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+            }
+            bitPerfect.setDevice(usbDevice)
+            isBitPerfectActive.value = bitPerfect.isConfigured()
+        }
+    }
+
+    fun setBitPerfectEnabled(enabled: Boolean) {
+        bitPerfectEnabled.value = enabled
+        usbBitPerfectOutput?.setEnabled(enabled)
+        isBitPerfectActive.value = usbBitPerfectOutput?.isConfigured() == true
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[BitPerfectEnabledKey] = enabled
+            }
+        }
+        if (enabled) {
+            equalizer?.enabled = false
+            loudnessEnhancer?.enabled = false
+            spatialAudioProcessor.enabled = false
+        } else {
+            setupEqualizer()
+            setupLoudnessEnhancer()
+            updateSpatialAudio()
+        }
+    }
 
     private fun setupAudioFocus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1243,6 +1341,10 @@ class MusicService :
     }
 
     private fun setupLoudnessEnhancer() {
+        if (bitPerfectEnabled.value && isBitPerfectActive.value) {
+            loudnessEnhancer?.enabled = false
+            return
+        }
         val audioSessionId = player.audioSessionId
 
         if (audioSessionId == C.AUDIO_SESSION_ID_UNSET || audioSessionId <= 0) {
@@ -1328,6 +1430,11 @@ class MusicService :
     }
 
     private fun setupEqualizer() {
+        if (bitPerfectEnabled.value && isBitPerfectActive.value) {
+            equalizer?.enabled = false
+            equalizerState.value = equalizerState.value.copy(enabled = false)
+            return
+        }
         val audioSessionId = player.audioSessionId
         if (audioSessionId == C.AUDIO_SESSION_ID_UNSET || audioSessionId <= 0) {
             equalizerState.value = equalizerState.value.copy(isAvailable = false)
@@ -1506,6 +1613,10 @@ class MusicService :
     }
 
     fun updateSpatialAudio() {
+        if (bitPerfectEnabled.value && isBitPerfectActive.value) {
+            spatialAudioProcessor.enabled = false
+            return
+        }
         val isNativeAtmos = isTrackDolbyAtmos.value
         spatialAudioProcessor.enabled = (spatialAudioEnabled.value || dolbyAtmosEnabled.value) && !isNativeAtmos
     }
@@ -2218,6 +2329,14 @@ class MusicService :
         }
         discordRpc = null
         abandonAudioFocus()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            audioDeviceCallback?.let {
+                audioManager.unregisterAudioDeviceCallback(it)
+            }
+        }
+        audioDeviceCallback = null
+        usbBitPerfectOutput?.clear()
+        usbBitPerfectOutput = null
         try {
             crossfadeAudio?.release()
             crossfadeAudio = null

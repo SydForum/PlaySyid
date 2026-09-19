@@ -1012,6 +1012,16 @@ fun SettingsScreen(
                                 onClick = { navController.navigate("settings/player") }
                             ),
                             SettingsCategoryItem(
+                                icon = painterResource(R.drawable.graphic_eq),
+                                title = {
+                                    Text(
+                                        "Scrobbler",
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = { navController.navigate("settings/scrobbler") }
+                            ),
+                            SettingsCategoryItem(
                                 icon = painterResource(R.drawable.play),
                                 title = {
                                     Text(

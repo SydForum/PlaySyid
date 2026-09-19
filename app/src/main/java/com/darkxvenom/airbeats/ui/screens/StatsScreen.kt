@@ -40,6 +40,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -338,6 +339,13 @@ fun StatsScreen(
                 GlobalStatsBoardCard(
                     state = globalStats,
                     onRefresh = viewModel::refreshGlobalStats,
+                )
+            }
+
+            item {
+                ScrobblerStatsHubCard(
+                    isFrosted = isFrosted,
+                    navController = navController,
                 )
             }
 
@@ -1329,3 +1337,127 @@ fun StatsHighlightCard(
         }
     }
 }
+
+@Composable
+fun ScrobblerStatsHubCard(
+    isFrosted: Boolean,
+    navController: NavController,
+) {
+    val context = LocalContext.current
+    val scrobblerPrefs = remember { com.darkxvenom.airbeats.data.local.ScrobblerPreferences(context) }
+    val settings by scrobblerPrefs.settings.collectAsState(initial = com.darkxvenom.airbeats.data.local.ScrobblerSettings())
+    val selectedCount = settings.selectedPackages.size
+    val isEnabled = settings.enabled
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(if (isFrosted) 20.dp else 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isFrosted) settingsCardContainerColor(true) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+        ),
+        border = settingsCardBorder(isFrosted)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isEnabled) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.graphic_eq),
+                        contentDescription = null,
+                        tint = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Music Scrobbler",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isEnabled) Color(0xFF2E7D32).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = if (isEnabled) "Active" else "Inactive",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isEnabled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (isEnabled) {
+                            if (selectedCount > 0) "$selectedCount app(s) monitored (Spotify, YT Music, etc.)"
+                            else "No apps selected — tap Select Apps"
+                        } else {
+                            "Track plays from Spotify, YT Music & other apps"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = { navController.navigate("settings/scrobbler/apps") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.music_note),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Select Apps")
+                }
+
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { navController.navigate("settings/scrobbler") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.tune),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Settings")
+                }
+            }
+        }
+    }
+}
+

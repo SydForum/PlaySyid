@@ -10,10 +10,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -31,6 +56,9 @@ import com.darkxvenom.airbeats.constants.AutomixPerformanceMode
 import com.darkxvenom.airbeats.constants.AutomixPerformanceModeKey
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
 import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
+import com.darkxvenom.airbeats.constants.BitPerfectEnabledKey
+import com.darkxvenom.airbeats.constants.StreamingQualityPresetKey
+import com.darkxvenom.airbeats.constants.QualityTiers
 import com.darkxvenom.airbeats.playback.DeviceCodecs
 import com.darkxvenom.airbeats.ui.component.PreferenceEntry
 import com.darkxvenom.airbeats.constants.DownloadQualityKey
@@ -128,6 +156,16 @@ fun PlayerSettings(
         CrossfadeKey,
         defaultValue = 0
     )
+    val (streamingQualityPreset, onStreamingQualityPresetChange) = rememberPreference(
+        StreamingQualityPresetKey,
+        defaultValue = QualityTiers.QUALITY_MAX_HI_RES
+    )
+    val (bitPerfect, onBitPerfectChange) = rememberPreference(
+        BitPerfectEnabledKey,
+        defaultValue = false
+    )
+    var showQualityDialog by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
 
     SettingsPage(
         title = stringResource(R.string.player_and_audio),
@@ -137,6 +175,37 @@ fun PlayerSettings(
         SettingsGeneralCategory(
             title = stringResource(R.string.player),
             items = listOf(
+                {
+                    val streamingQualitySubtitle = when (streamingQualityPreset) {
+                        QualityTiers.QUALITY_DOLBY_ATMOS -> "Dolby Atmos • Spatial Audio"
+                        QualityTiers.QUALITY_MAX_HI_RES -> "Max Quality • Up to 24-bit / 192 kHz"
+                        QualityTiers.QUALITY_HI_RES_96 -> "Hi-Res Audio • 24-bit / 96 kHz"
+                        QualityTiers.QUALITY_CD_LOSSLESS -> "CD Lossless • 16-bit / 44.1 kHz"
+                        QualityTiers.QUALITY_MP3_320 -> "Standard Quality • 320 kbps"
+                        QualityTiers.QUALITY_DATA_SAVER -> "Data Saver • 96 kbps"
+                        else -> "YouTube Music • Native stream"
+                    }
+                    PreferenceEntry(
+                        title = { Text("Streaming Quality") },
+                        description = streamingQualitySubtitle,
+                        icon = { Icon(Icons.Filled.HighQuality, null) },
+                        onClick = { showQualityDialog = true }
+                    )
+                },
+
+                {
+                    SwitchPreference(
+                        title = { Text("Bit-Perfect Output") },
+                        description = "Bypasses Android audio resampling, software volume scaling, and equalizer when connected to a compatible USB DAC (Android 14+).",
+                        icon = { Icon(painterResource(R.drawable.tune), null) },
+                        checked = bitPerfect,
+                        onCheckedChange = { enabled ->
+                            onBitPerfectChange(enabled)
+                            playerConnection?.service?.setBitPerfectEnabled(enabled)
+                        }
+                    )
+                },
+
                 {EnumListPreference(
                     title = { Text(stringResource(R.string.audio_quality)) },
                     icon = { Icon(painterResource(R.drawable.graphic_eq), null) },
@@ -333,5 +402,155 @@ fun PlayerSettings(
                 )},
             )
         )
+    }
+
+    if (showQualityDialog) {
+        val tiers = listOf(
+            Triple(QualityTiers.QUALITY_DOLBY_ATMOS, "Dolby Atmos", "Spatial Immersive Audio • Tidal Master" to "ATMOS"),
+            Triple(QualityTiers.QUALITY_MAX_HI_RES, "Max Quality", "Up to 24-bit / 192 kHz • Lossless Studio FLAC" to "24-BIT / 192k"),
+            Triple(QualityTiers.QUALITY_HI_RES_96, "Hi-Res Audio", "24-bit / 96 kHz • Lossless Studio FLAC" to "24-BIT / 96k"),
+            Triple(QualityTiers.QUALITY_CD_LOSSLESS, "CD Lossless", "16-bit / 44.1 kHz • Lossless CD FLAC" to "16-BIT / 44.1k"),
+            Triple(QualityTiers.QUALITY_MP3_320, "Standard Quality", "320 kbps • MP3 / AAC" to "320 kbps"),
+            Triple(QualityTiers.QUALITY_DATA_SAVER, "Data Saver", "96 kbps • High Efficiency AAC" to "96 kbps"),
+            Triple(QualityTiers.QUALITY_YOUTUBE, "YouTube Music", "128-256 kbps • YouTube Music AAC / Opus stream" to "YOUTUBE"),
+        )
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        ModalBottomSheet(
+            onDismissRequest = { showQualityDialog = false },
+            sheetState = sheetState,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .padding(top = 12.dp, bottom = 8.dp)
+                        .size(width = 36.dp, height = 4.dp),
+                ) {}
+            },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.HighQuality,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            "Streaming Quality",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            "Select preferred audio resolution & bit depth",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                Text(
+                    "Lossless streams provide bit-exact studio quality. If your chosen quality is unavailable, the player automatically streams the best available tier or falls back to YouTube Music native streams.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    tiers.forEach { (qualityId, title, meta) ->
+                        val (subtitle, badge) = meta
+                        val isSelected = streamingQualityPreset == qualityId
+                        Surface(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onStreamingQualityPresetChange(qualityId)
+                                if (qualityId == QualityTiers.QUALITY_DOLBY_ATMOS) {
+                                    playerConnection?.service?.setDolbyAtmosEnabled(true)
+                                }
+                                showQualityDialog = false
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+                            shadowElevation = if (isSelected) 3.dp else 0.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            title,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        ) {
+                                            Text(
+                                                badge,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+
+                                if (isSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Check,
+                                            contentDescription = "Selected",
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
