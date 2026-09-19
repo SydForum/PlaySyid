@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
@@ -68,7 +69,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +96,7 @@ import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
 import com.darkxvenom.airbeats.constants.MaterialHomeSection
+import com.darkxvenom.airbeats.constants.SongSortType
 import com.darkxvenom.airbeats.db.entities.Song
 import com.darkxvenom.airbeats.innertube.models.AlbumItem
 import com.darkxvenom.airbeats.innertube.models.ArtistItem
@@ -105,7 +110,12 @@ import com.darkxvenom.airbeats.ui.component.NamePreferenceManager
 import com.darkxvenom.airbeats.ui.screens.Screens
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
 import com.darkxvenom.airbeats.utils.rememberPreference
+import com.darkxvenom.airbeats.utils.reportException
 import com.darkxvenom.airbeats.viewmodels.HomeViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.LocalTime
@@ -133,6 +143,8 @@ fun MaterialHomeScreen(
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var isGeneratingMix by remember { mutableStateOf(false) }
     val namePrefMgr = remember { NamePreferenceManager(context) }
     val rawUserName by namePrefMgr.userName.collectAsState(initial = "")
     val displayName = rawUserName.takeIf { it.isNotBlank() } ?: "Guest"
@@ -150,6 +162,63 @@ fun MaterialHomeScreen(
 
     val hiddenSections by rememberPreference(HiddenHomeSectionsKey, defaultValue = emptySet())
     fun isSectionVisible(section: MaterialHomeSection): Boolean = section.id !in hiddenSections
+
+    suspend fun generateAndPlayMix() {
+        if (isGeneratingMix) return
+        isGeneratingMix = true
+        try {
+            // 1. YouTube Home official personalized Mix / Supermix
+            val ytMixPlaylist = homePage?.sections
+                ?.flatMap { it.items }
+                ?.filterIsInstance<PlaylistItem>()
+                ?.firstOrNull {
+                    it.title.contains("Mix", ignoreCase = true) ||
+                    it.title.contains("Supermix", ignoreCase = true)
+                }
+
+            if (ytMixPlaylist != null) {
+                val endpoint = ytMixPlaylist.playEndpoint ?: ytMixPlaylist.radioEndpoint ?: WatchEndpoint(playlistId = ytMixPlaylist.id)
+                playerConnection.playQueue(YouTubeQueue(endpoint))
+                return
+            }
+
+            // 2. Personal taste-driven radio mix from user's history / favorites
+            val candidateSeeds = mutableListOf<com.darkxvenom.airbeats.models.MediaMetadata>()
+            quickPicks?.take(15)?.forEach { candidateSeeds.add(it.toMediaMetadata()) }
+            forgottenFavorites?.take(15)?.forEach { candidateSeeds.add(it.toMediaMetadata()) }
+
+            if (candidateSeeds.isEmpty()) {
+                withContext(Dispatchers.IO) {
+                    val dbLiked = runCatching { viewModel.database.likedSongs(SongSortType.CREATE_DATE, true).first() }.getOrDefault(emptyList())
+                    dbLiked.take(20).forEach { candidateSeeds.add(it.toMediaMetadata()) }
+                    if (candidateSeeds.isEmpty()) {
+                        val dbRecent = runCatching { viewModel.database.recentSongs(20).first() }.getOrDefault(emptyList())
+                        dbRecent.forEach { candidateSeeds.add(it.toMediaMetadata()) }
+                    }
+                }
+            }
+
+            // 3. Fallback for new installs with no local playback history
+            if (candidateSeeds.isEmpty()) {
+                homePage?.sections?.flatMap { it.items }?.filterIsInstance<SongItem>()?.take(15)?.forEach {
+                    candidateSeeds.add(it.toMediaMetadata())
+                }
+            }
+
+            val seed = candidateSeeds.shuffled().firstOrNull()
+            if (seed != null) {
+                val radioEndpoint = WatchEndpoint(
+                    videoId = seed.id,
+                    playlistId = "RDAMVM${seed.id}"
+                )
+                playerConnection.playQueue(YouTubeQueue(radioEndpoint, preloadItem = seed))
+            }
+        } catch (e: Exception) {
+            reportException(e)
+        } finally {
+            isGeneratingMix = false
+        }
+    }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val scrollToTop = backStackEntry?.savedStateHandle?.getStateFlow("scrollToTop", false)?.collectAsState()
@@ -258,6 +327,7 @@ fun MaterialHomeScreen(
                             ) {
                                 MaterialQuickTile(
                                     title = "Liked Songs",
+                                    subtitle = "Your collection",
                                     icon = Icons.Filled.Favorite,
                                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -265,12 +335,20 @@ fun MaterialHomeScreen(
                                     onClick = { navController.navigate("auto_playlist/liked") }
                                 )
                                 MaterialQuickTile(
-                                    title = "History",
-                                    icon = Icons.Filled.History,
+                                    title = "Mix",
+                                    subtitle = if (isGeneratingMix) "Generating..." else "Made for you",
+                                    icon = Icons.Filled.AutoAwesome,
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    isLoading = isGeneratingMix,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { navController.navigate("history") }
+                                    onClick = {
+                                        if (!isGeneratingMix) {
+                                            coroutineScope.launch {
+                                                generateAndPlayMix()
+                                            }
+                                        }
+                                    }
                                 )
                             }
                             Row(
@@ -278,15 +356,17 @@ fun MaterialHomeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 MaterialQuickTile(
-                                    title = "Downloaded",
-                                    icon = Icons.Filled.CloudDownload,
+                                    title = "New Releases",
+                                    subtitle = "Fresh drops",
+                                    icon = Icons.Filled.NewReleases,
                                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { navController.navigate("local/songs") }
+                                    onClick = { navController.navigate(Screens.Explore.route) }
                                 )
                                 MaterialQuickTile(
                                     title = "Top 50",
+                                    subtitle = "Most played",
                                     icon = Icons.Filled.TrendingUp,
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -846,39 +926,70 @@ private fun MaterialHeroBanner(
 @Composable
 private fun MaterialQuickTile(
     title: String,
+    subtitle: String,
     icon: ImageVector,
     containerColor: Color,
     contentColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
 ) {
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        modifier = modifier.height(54.dp)
+        modifier = modifier.height(64.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(22.dp)
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = contentColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = contentColor.copy(alpha = 0.14f),
+                modifier = Modifier.size(38.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            color = contentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = contentColor.copy(alpha = 0.72f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
