@@ -47,6 +47,13 @@ sealed class Screens(
         route = "stats"
     )
 
+    data object Generator : Screens(
+        titleId = R.string.generator,
+        iconIdInactive = R.drawable.auto_awesome,
+        iconIdActive = R.drawable.auto_awesome,
+        route = "generator"
+    )
+
     companion object {
         val MainScreens: List<Screens>
             get() = listOf(Home, Search, Explore, Library, Stats)

@@ -54,7 +54,9 @@ import com.darkxvenom.airbeats.extensions.toMediaItem
 import com.darkxvenom.airbeats.extensions.togglePlayPause
 import com.darkxvenom.airbeats.playback.queues.ListQueue
 import com.darkxvenom.airbeats.ui.component.ChipsRow
+import com.darkxvenom.airbeats.ui.component.CreatePlaylistDialog
 import com.darkxvenom.airbeats.ui.component.HideOnScrollFAB
+import com.darkxvenom.airbeats.ui.component.LibraryFloatingActions
 import com.darkxvenom.airbeats.ui.component.LocalMenuState
 import com.darkxvenom.airbeats.ui.component.SongListItem
 import com.darkxvenom.airbeats.ui.component.SortHeader
@@ -89,6 +91,7 @@ fun LibrarySongsScreen(
     val (ytmSync) = rememberPreference(YtmSyncKey, true)
 
     val songs by viewModel.allSongs.collectAsState()
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
     var filter by rememberEnumPreference(SongFilterKey, SongFilter.LIKED)
 
@@ -326,18 +329,18 @@ fun LibrarySongsScreen(
         }
         }
 
-        HideOnScrollFAB(
-            visible = songs.isNotEmpty() == true,
+        LibraryFloatingActions(
             lazyListState = lazyListState,
-            icon = R.drawable.shuffle,
-            onClick = {
-                playerConnection.playQueue(
-                    ListQueue(
-                        title = context.getString(R.string.queue_all_songs),
-                        items = songs.shuffled().map { it.toMediaItem() },
-                    ),
-                )
+            onOpenGenerator = {
+                navController.navigate("generator")
+            },
+            onCreatePlaylist = {
+                showCreatePlaylistDialog = true
             },
         )
+    }
+
+    if (showCreatePlaylistDialog) {
+        CreatePlaylistDialog(onDismiss = { showCreatePlaylistDialog = false })
     }
 }

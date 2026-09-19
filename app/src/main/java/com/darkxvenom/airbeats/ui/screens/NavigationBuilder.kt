@@ -211,10 +211,16 @@ fun NavGraphBuilder.navigationBuilder(
         com.darkxvenom.airbeats.ui.screens.musicrecognition.MusicRecognitionScreen(navController)
     }
 
-
-
-
-
+    composable("generator") {
+        com.darkxvenom.airbeats.ui.screens.generator.GenerateScreen(
+            navController = navController,
+            onBack = { navController.popBackStack() },
+            onNavigateToPlaylist = { playlistId ->
+                navController.popBackStack()
+                navController.navigate("local_playlist/$playlistId")
+            }
+        )
+    }
 
     composable(
         route = "search/{query}",

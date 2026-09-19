@@ -1014,5 +1014,8 @@
     <string name="lyrics_glass_deep_blur">Deep Blur</string>
     <string name="lyrics_glass_vivid_glow">Vivid Glow</string>
     <string name="lyrics_glass_album_tint">Album Tint</string>
+    <string name="generator">Generator</string>
+    <string name="generator_subtitle">Shape a playlist with smart discovery engines</string>
+    <string name="generate_playlist">Generate Playlist</string>
 </resources>
 

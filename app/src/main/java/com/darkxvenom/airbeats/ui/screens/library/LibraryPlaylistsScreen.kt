@@ -74,6 +74,7 @@ import com.darkxvenom.airbeats.db.entities.PlaylistEntity
 import com.darkxvenom.airbeats.ui.component.CreatePlaylistDialog
 import com.darkxvenom.airbeats.ui.component.GridPosition
 import com.darkxvenom.airbeats.ui.component.HideOnScrollFAB
+import com.darkxvenom.airbeats.ui.component.LibraryFloatingActions
 import com.darkxvenom.airbeats.ui.component.LibraryHeroFavoriteTile
 import com.darkxvenom.airbeats.ui.component.LibraryPinnedCollectionTile
 import com.darkxvenom.airbeats.ui.component.LibraryPlaylistGridItem
@@ -350,10 +351,12 @@ fun LibraryPlaylistsScreen(
                 .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues()),
         )
 
-        HideOnScrollFAB(
+        LibraryFloatingActions(
             lazyListState = lazyListState,
-            icon = R.drawable.add,
-            onClick = {
+            onOpenGenerator = {
+                navController.navigate("generator")
+            },
+            onCreatePlaylist = {
                 showCreatePlaylistDialog = true
             },
         )

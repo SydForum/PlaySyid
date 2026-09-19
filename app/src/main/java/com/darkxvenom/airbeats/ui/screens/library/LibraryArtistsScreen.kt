@@ -27,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,9 +57,11 @@ import com.darkxvenom.airbeats.constants.GridThumbnailHeight
 import com.darkxvenom.airbeats.constants.LibraryViewType
 import com.darkxvenom.airbeats.constants.YtmSyncKey
 import com.darkxvenom.airbeats.ui.component.ChipsRow
+import com.darkxvenom.airbeats.ui.component.CreatePlaylistDialog
 import com.darkxvenom.airbeats.ui.component.EmptyPlaceholder
 import com.darkxvenom.airbeats.ui.component.LibraryArtistGridItem
 import com.darkxvenom.airbeats.ui.component.LibraryArtistListItem
+import com.darkxvenom.airbeats.ui.component.LibraryFloatingActions
 import com.darkxvenom.airbeats.ui.component.LocalMenuState
 import com.darkxvenom.airbeats.ui.component.SortHeader
 import com.darkxvenom.airbeats.utils.rememberEnumPreference
@@ -128,6 +132,7 @@ fun LibraryArtistsScreen(
 
     val artists by viewModel.allArtists.collectAsState()
     val coroutineScope = rememberCoroutineScope()
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
     val lazyListState = rememberLazyListState()
     val lazyGridState = rememberLazyGridState()
@@ -295,5 +300,20 @@ fun LibraryArtistsScreen(
                     }
                 }
         }
+
+        LibraryFloatingActions(
+            lazyListState = lazyListState,
+            lazyGridState = lazyGridState,
+            onOpenGenerator = {
+                navController.navigate("generator")
+            },
+            onCreatePlaylist = {
+                showCreatePlaylistDialog = true
+            },
+        )
+    }
+
+    if (showCreatePlaylistDialog) {
+        CreatePlaylistDialog(onDismiss = { showCreatePlaylistDialog = false })
     }
 }
