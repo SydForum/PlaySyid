@@ -117,8 +117,8 @@ fun audibleSecondsBetween(analysis: TrackAnalysis, start: Double, end: Double): 
     val reference = energies[floor((energies.size - 1) * 0.85).toInt()].orZero()
     if (reference <= 0) return 0.0
     val threshold = reference * AUDIBLE_ENERGY_FRACTION
-    val first = curve.first().time
-    val last = curve.last().time
+    val first = curve.firstOrNull()?.time ?: return null
+    val last = curve.lastOrNull()?.time ?: return null
     if (!first.isFinite() || !last.isFinite() || last <= first) return null
     val sampleSeconds = (last - first) / (curve.size - 1)
     var audible = 0.0

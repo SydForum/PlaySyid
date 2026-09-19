@@ -977,18 +977,23 @@ fun HomeScreen(
                         },
                         onClick = {
                             fabMenuExpanded = false
-                            val local = when {
-                                allLocalItems.isNotEmpty() && allYtItems.isNotEmpty() -> Random.nextFloat() < 0.5
-                                allLocalItems.isNotEmpty() -> true
-                                else -> false
-                            }
                             scope.launch(Dispatchers.Main) {
-                                if (local) {
-                                    when (val luckyItem = allLocalItems.random()) {
+                                val localCandidates = allLocalItems
+                                val ytCandidates = allYtItems
+
+                                val chooseLocal = when {
+                                    localCandidates.isNotEmpty() && ytCandidates.isNotEmpty() -> Random.nextFloat() < 0.5
+                                    localCandidates.isNotEmpty() -> true
+                                    ytCandidates.isNotEmpty() -> false
+                                    else -> null
+                                }
+
+                                if (chooseLocal == true) {
+                                    when (val luckyItem = localCandidates.randomOrNull()) {
                                         is Song -> playerConnection.playQueue(YouTubeQueue.radio(luckyItem.toMediaMetadata()))
                                         is Album -> {
                                             val albumWithSongs = withContext(Dispatchers.IO) {
-                                                database.albumWithSongs(luckyItem.id).first()
+                                                runCatching { database.albumWithSongs(luckyItem.id).first() }.getOrNull()
                                             }
                                             albumWithSongs?.let {
                                                 playerConnection.playQueue(LocalAlbumRadio(it))
@@ -997,18 +1002,29 @@ fun HomeScreen(
 
                                         is Artist -> {}
                                         is Playlist -> {}
+                                        null -> {}
                                     }
-                                } else {
-                                    when (val luckyItem = allYtItems.random()) {
+                                } else if (chooseLocal == false) {
+                                    when (val luckyItem = ytCandidates.randomOrNull()) {
                                         is SongItem -> playerConnection.playQueue(YouTubeQueue.radio(luckyItem.toMediaMetadata()))
                                         is AlbumItem -> playerConnection.playQueue(YouTubeAlbumRadio(luckyItem.playlistId))
                                         is ArtistItem -> luckyItem.radioEndpoint?.let {
                                             playerConnection.playQueue(YouTubeQueue(it))
                                         }
 
-                                        is PlaylistItem -> luckyItem.playEndpoint?.let {
+                                        is PlaylistItem -> (luckyItem.playEndpoint ?: luckyItem.radioEndpoint)?.let {
                                             playerConnection.playQueue(YouTubeQueue(it))
                                         }
+                                        null -> {}
+                                    }
+                                } else {
+                                    // Both local and remote collections are empty (initial launch / offline)
+                                    // Gracefully attempt to play a recent song or quick pick from the database without crashing
+                                    val fallbackSong = withContext(Dispatchers.IO) {
+                                        runCatching { database.recentSongs(1).first().firstOrNull() }.getOrNull()
+                                    }
+                                    if (fallbackSong != null) {
+                                        playerConnection.playQueue(YouTubeQueue.radio(fallbackSong.toMediaMetadata()))
                                     }
                                 }
                             }
