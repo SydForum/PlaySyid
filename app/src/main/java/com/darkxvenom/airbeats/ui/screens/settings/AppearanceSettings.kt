@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -581,41 +581,67 @@ fun AppearanceSettings(
                                 }
                             },
                         )},
-                        {SwitchPreference(
-                            title = { Text(stringResource(R.string.enable_dynamic_theme)) },
-                            icon = { Icon(painterResource(R.drawable.palette), null) },
-                            checked = dynamicTheme,
-                            onCheckedChange = onDynamicThemeChange,
-                        )},
-                        *(if (!dynamicTheme) arrayOf<@Composable () -> Unit>(
-                            {
-                                AccentColorSettingsSection(
-                                    selectedColorInt = themeAccentColor,
-                                    onColorSelected = onThemeAccentColorChange,
+                        {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                SwitchPreference(
+                                    title = { Text(stringResource(R.string.enable_dynamic_theme)) },
+                                    icon = { Icon(painterResource(R.drawable.palette), null) },
+                                    checked = dynamicTheme,
+                                    onCheckedChange = onDynamicThemeChange,
                                 )
-                            },
-                            {
-                                EnumListPreference(
-                                    title = { Text("Color Effects") },
-                                    icon = { Icon(Icons.Filled.AutoAwesome, null) },
-                                    selectedValue = themeColorEffect,
-                                    onValueSelected = { onThemeColorEffectKeyChange(it.name) },
-                                    valueText = {
-                                        when (it) {
-                                            ThemeColorEffect.NONE -> "None · Default balanced appearance"
-                                            ThemeColorEffect.VIBRANT -> "Vibrant · High energy & maximum saturation"
-                                            ThemeColorEffect.EXPRESSIVE -> "Expressive · Playful artistic secondary hues"
-                                            ThemeColorEffect.FRUIT_SALAD -> "Fruit Salad · Complementary fruit palette"
-                                            ThemeColorEffect.RAINBOW -> "Rainbow · Spirited spectrum tones"
-                                            ThemeColorEffect.FIDELITY -> "Fidelity · Exact accent color match"
-                                            ThemeColorEffect.CONTENT -> "Content · Media balanced aesthetic"
-                                            ThemeColorEffect.MONOCHROME -> "Monochrome · Modern greyscale styling"
-                                            ThemeColorEffect.NEUTRAL -> "Neutral · Quiet & understated tones"
-                                        }
-                                    },
-                                )
+
+                                AnimatedVisibility(
+                                    visible = !dynamicTheme,
+                                    enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                                    exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(
+                                                start = 72.dp,
+                                                end = 16.dp
+                                            ),
+                                            thickness = 0.5.dp,
+                                            color = Color.White.copy(alpha = 0.08f)
+                                        )
+
+                                        AccentColorSettingsSection(
+                                            selectedColorInt = themeAccentColor,
+                                            onColorSelected = onThemeAccentColorChange,
+                                        )
+
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(
+                                                start = 72.dp,
+                                                end = 16.dp
+                                            ),
+                                            thickness = 0.5.dp,
+                                            color = Color.White.copy(alpha = 0.08f)
+                                        )
+
+                                        EnumListPreference(
+                                            title = { Text("Color Effects") },
+                                            icon = { Icon(Icons.Filled.AutoAwesome, null) },
+                                            selectedValue = themeColorEffect,
+                                            onValueSelected = { onThemeColorEffectKeyChange(it.name) },
+                                            valueText = {
+                                                when (it) {
+                                                    ThemeColorEffect.NONE -> "None · Default balanced appearance"
+                                                    ThemeColorEffect.VIBRANT -> "Vibrant · High energy & maximum saturation"
+                                                    ThemeColorEffect.EXPRESSIVE -> "Expressive · Playful artistic secondary hues"
+                                                    ThemeColorEffect.FRUIT_SALAD -> "Fruit Salad · Complementary fruit palette"
+                                                    ThemeColorEffect.RAINBOW -> "Rainbow · Spirited spectrum tones"
+                                                    ThemeColorEffect.FIDELITY -> "Fidelity · Exact accent color match"
+                                                    ThemeColorEffect.CONTENT -> "Content · Media balanced aesthetic"
+                                                    ThemeColorEffect.MONOCHROME -> "Monochrome · Modern greyscale styling"
+                                                    ThemeColorEffect.NEUTRAL -> "Neutral · Quiet & understated tones"
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
                             }
-                        ) else emptyArray()),
+                        },
                         {EnumListPreference(
                             title = { Text(stringResource(R.string.dark_theme)) },
                             icon = { Icon(painterResource(R.drawable.dark_mode), null) },
