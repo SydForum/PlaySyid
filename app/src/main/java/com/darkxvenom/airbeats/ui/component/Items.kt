@@ -1510,12 +1510,13 @@ fun PlaylistListItem(
     },
     thumbnailContent = {
         val painter =
-            when (playlist.playlist.name) {
-                stringResource(R.string.liked) -> R.drawable.favorite_border
-                stringResource(R.string.offline) -> R.drawable.offline
-                stringResource(R.string.cached_playlist) -> R.drawable.cached
-                stringResource(R.string.filter_local) -> R.drawable.folder
-                "Import Playlist", stringResource(R.string.import_playlist) -> R.drawable.spotify
+            when {
+                playlist.playlist.name == stringResource(R.string.liked) -> R.drawable.favorite_border
+                playlist.playlist.name == stringResource(R.string.offline) -> R.drawable.offline
+                playlist.playlist.name == stringResource(R.string.cached_playlist) -> R.drawable.cached
+                playlist.playlist.name == stringResource(R.string.filter_local) -> R.drawable.folder
+                playlist.playlist.browseId?.startsWith("sp:") == true -> R.drawable.spotify
+                playlist.playlist.name in listOf("Import Playlist", stringResource(R.string.import_playlist)) -> R.drawable.spotify
                 else -> {
                     if (autoPlaylist) {
                         R.drawable.trending_up
@@ -1623,11 +1624,13 @@ fun PlaylistGridItem(
         } else {
             // Si no hay miniatura, mostrar la imagen predeterminada
             val painter =
-                when (playlist.playlist.name) {
-                    stringResource(R.string.liked) -> R.drawable.favorite_border
-                    stringResource(R.string.offline) -> R.drawable.offline
-                    stringResource(R.string.cached_playlist) -> R.drawable.cached
-                    stringResource(R.string.filter_local) -> R.drawable.folder
+                when {
+                    playlist.playlist.name == stringResource(R.string.liked) -> R.drawable.favorite_border
+                    playlist.playlist.name == stringResource(R.string.offline) -> R.drawable.offline
+                    playlist.playlist.name == stringResource(R.string.cached_playlist) -> R.drawable.cached
+                    playlist.playlist.name == stringResource(R.string.filter_local) -> R.drawable.folder
+                    playlist.playlist.browseId?.startsWith("sp:") == true -> R.drawable.spotify
+                    playlist.playlist.name in listOf("Import Playlist", stringResource(R.string.import_playlist)) -> R.drawable.spotify
                     else -> {
                         if (autoPlaylist) {
                             R.drawable.trending_up

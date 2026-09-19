@@ -2,14 +2,16 @@ package com.darkxvenom.airbeats.utils
 
 import com.darkxvenom.airbeats.db.DatabaseDao
 import com.darkxvenom.airbeats.db.entities.PlaylistEntity
+import com.darkxvenom.airbeats.db.entities.PlaylistSongMap
 import com.darkxvenom.airbeats.innertube.YouTube
+import com.darkxvenom.airbeats.models.toMediaMetadata
+import com.darkxvenom.airbeats.spotify.Spotify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.jsoup.Jsoup
-import java.net.URLDecoder
+import java.time.LocalDateTime
 import java.util.UUID
-import com.darkxvenom.airbeats.models.toMediaMetadata
 
 object SpotifyImporter {
 
@@ -19,56 +21,94 @@ object SpotifyImporter {
         onProgress: (Int, Int) -> Unit
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            // 1. Convert URL to embed URL
-            val playlistId = url.substringAfter("playlist/").substringBefore("?")
-            if (playlistId.isBlank()) throw IllegalArgumentException("Invalid Spotify Playlist URL")
-            val embedUrl = "https://open.spotify.com/embed/playlist/$playlistId"
+            val playlistId = extractPlaylistId(url)
+            if (playlistId.isBlank()) throw IllegalArgumentException("Invalid Spotify Playlist URL or ID")
 
-            // 2. Fetch HTML using Jsoup
-            val doc = Jsoup.connect(embedUrl).get()
+            val tracks = mutableListOf<Pair<String, String>>()
+            var playlistName = "Imported Spotify Playlist"
 
-            // 3. Extract JSON state
-            val nextDataElement = doc.select("script#__NEXT_DATA__").first()
-                ?: throw IllegalStateException("Could not find Spotify playlist data")
-            val jsonString = nextDataElement.html()
+            // 1. Try Spotify API if accessToken is available
+            if (!Spotify.accessToken.isNullOrBlank()) {
+                val spPlaylistResult = Spotify.playlist(playlistId)
+                spPlaylistResult.onSuccess { spPlaylist ->
+                    if (spPlaylist.name.isNotBlank()) {
+                        playlistName = spPlaylist.name
+                    }
+                    var offset = 0
+                    val limit = 100
+                    while (true) {
+                        val tracksResult = Spotify.playlistTracks(playlistId, limit = limit, offset = offset).getOrNull()
+                        if (tracksResult == null || tracksResult.items.isEmpty()) break
+                        tracksResult.items.forEach { item ->
+                            val t = item.track
+                            if (t != null && t.name.isNotBlank()) {
+                                tracks.add(t.name to t.artists.joinToString(" ") { it.name })
+                            }
+                        }
+                        offset += tracksResult.items.size
+                        if (offset >= tracksResult.total || tracksResult.items.size < limit) break
+                    }
+                }
+            }
 
-            val json = JSONObject(jsonString)
-            val entity = json.getJSONObject("props")
-                .getJSONObject("pageProps")
-                .getJSONObject("state")
-                .getJSONObject("data")
-                .getJSONObject("entity")
+            // 2. Fallback to Jsoup embed scraping if no tracks found via API
+            if (tracks.isEmpty()) {
+                val embedUrl = "https://open.spotify.com/embed/playlist/$playlistId"
+                val doc = Jsoup.connect(embedUrl)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .get()
 
-            val playlistName = entity.optString("name", "Imported Playlist")
+                val nextDataElement = doc.select("script#__NEXT_DATA__").first()
+                if (nextDataElement != null) {
+                    val json = JSONObject(nextDataElement.html())
+                    val entity = json.optJSONObject("props")
+                        ?.optJSONObject("pageProps")
+                        ?.optJSONObject("state")
+                        ?.optJSONObject("data")
+                        ?.optJSONObject("entity")
 
-            // Tracks are in trackList
-            val trackListArray = entity.optJSONArray("trackList")
-                ?: throw IllegalStateException("Could not find track list")
+                    if (entity != null) {
+                        playlistName = entity.optString("name", playlistName)
+                        val trackListArray = entity.optJSONArray("trackList")
+                        if (trackListArray != null) {
+                            for (i in 0 until trackListArray.length()) {
+                                val trackObj = trackListArray.optJSONObject(i) ?: continue
+                                val title = trackObj.optString("title")
+                                val artist = trackObj.optString("subtitle")
+                                if (title.isNotBlank()) {
+                                    tracks.add(title to artist)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
-            val totalTracks = trackListArray.length()
-            val songIds = mutableListOf<String>()
+            if (tracks.isEmpty()) {
+                throw IllegalStateException("Could not extract tracks from Spotify playlist. Please ensure the playlist is public or you are logged into Spotify.")
+            }
 
-            // 4. Create Playlist in DB
-            val newPlaylistId = UUID.randomUUID().toString()
+            // 3. Create Playlist in DB
+            val newPlaylistId = "LP" + UUID.randomUUID().toString().replace("-", "").take(8)
             val playlistEntity = PlaylistEntity(
                 id = newPlaylistId,
                 name = playlistName,
-                bookmarkedAt = java.time.LocalDateTime.now()
+                browseId = "sp:$playlistId",
+                bookmarkedAt = LocalDateTime.now(),
+                remoteSongCount = tracks.size
             )
             dao.insert(playlistEntity)
 
-            // 5. Match songs and add to playlist
+            // 4. Match songs on YouTube and add to playlist
+            val totalTracks = tracks.size
+            val songIds = mutableListOf<String>()
+
             for (i in 0 until totalTracks) {
                 onProgress(i + 1, totalTracks)
-                val trackObj = trackListArray.optJSONObject(i) ?: continue
-                val title = trackObj.optString("title")
-                val artist = trackObj.optString("subtitle")
-                
-                if (title.isBlank()) continue
-                val query = "$title $artist"
+                val (title, artist) = tracks[i]
+                val query = "$title $artist".trim()
 
                 try {
-                    // Search YouTube
                     val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
                     val firstSong = searchResult?.items?.firstOrNull() as? com.darkxvenom.airbeats.innertube.models.SongItem
                     if (firstSong != null) {
@@ -80,13 +120,10 @@ object SpotifyImporter {
                 }
             }
 
-            // 6. Save songs to playlist
-            // Since we only have a PlaylistEntity, we need to convert to Playlist model, 
-            // but addSongToPlaylist takes a Playlist object which is complex.
-            // Let's just insert PlaylistSongMap directly.
+            // 5. Insert PlaylistSongMap entries
             songIds.forEachIndexed { index, songId ->
                 dao.insert(
-                    com.darkxvenom.airbeats.db.entities.PlaylistSongMap(
+                    PlaylistSongMap(
                         songId = songId,
                         playlistId = newPlaylistId,
                         position = index
@@ -95,6 +132,81 @@ object SpotifyImporter {
             }
 
             playlistName
+        }
+    }
+
+    suspend fun convertPlaylistToYouTube(
+        spPlaylistId: String,
+        targetPlaylistEntityId: String,
+        dao: DatabaseDao,
+        onProgress: (Int, Int) -> Unit
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val tracks = mutableListOf<Pair<String, String>>()
+
+            // Fetch tracks from Spotify
+            var offset = 0
+            val limit = 100
+            while (true) {
+                val tracksResult = Spotify.playlistTracks(spPlaylistId, limit = limit, offset = offset).getOrNull()
+                if (tracksResult == null || tracksResult.items.isEmpty()) break
+                tracksResult.items.forEach { item ->
+                    val t = item.track
+                    if (t != null && t.name.isNotBlank()) {
+                        tracks.add(t.name to t.artists.joinToString(" ") { it.name })
+                    }
+                }
+                offset += tracksResult.items.size
+                if (offset >= tracksResult.total || tracksResult.items.size < limit) break
+            }
+
+            if (tracks.isEmpty()) {
+                throw IllegalStateException("No tracks found in Spotify playlist")
+            }
+
+            val totalTracks = tracks.size
+            val matchedSongIds = mutableListOf<String>()
+
+            for (i in 0 until totalTracks) {
+                onProgress(i + 1, totalTracks)
+                val (title, artist) = tracks[i]
+                val query = "$title $artist".trim()
+
+                try {
+                    val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                    val firstSong = searchResult?.items?.firstOrNull() as? com.darkxvenom.airbeats.innertube.models.SongItem
+                    if (firstSong != null) {
+                        matchedSongIds.add(firstSong.id)
+                        dao.insert(firstSong.toMediaMetadata())
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            // Clear any existing maps and insert converted songs
+            dao.clearPlaylist(targetPlaylistEntityId)
+            matchedSongIds.forEachIndexed { index, songId ->
+                dao.insert(
+                    PlaylistSongMap(
+                        songId = songId,
+                        playlistId = targetPlaylistEntityId,
+                        position = index
+                    )
+                )
+            }
+
+            matchedSongIds.size
+        }
+    }
+
+    private fun extractPlaylistId(input: String): String {
+        val trimmed = input.trim()
+        return when {
+            trimmed.contains("playlist/") -> trimmed.substringAfter("playlist/").substringBefore("?").substringBefore("/")
+            trimmed.startsWith("spotify:playlist:") -> trimmed.substringAfter("spotify:playlist:")
+            trimmed.startsWith("sp:") -> trimmed.removePrefix("sp:")
+            else -> trimmed
         }
     }
 }

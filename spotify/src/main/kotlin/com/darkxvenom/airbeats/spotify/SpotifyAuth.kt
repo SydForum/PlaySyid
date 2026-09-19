@@ -61,6 +61,29 @@ object SpotifyAuth {
         spDc: String,
         spKey: String = "",
     ): Result<SpotifyInternalToken> = runCatching {
+        val cleanSpDc = if (spDc.startsWith("sp_dc=")) spDc.substringAfter("sp_dc=").substringBefore(";") else spDc
+        val cookieHeader = buildString {
+            append("sp_dc=$cleanSpDc")
+            if (spKey.isNotEmpty()) {
+                val cleanSpKey = if (spKey.startsWith("sp_key=")) spKey.substringAfter("sp_key=").substringBefore(";") else spKey
+                append("; sp_key=$cleanSpKey")
+            }
+        }
+
+        // Try direct get_access_token endpoint first
+        try {
+            val directUrl = "https://open.spotify.com/get_access_token?reason=transport&productType=web-player"
+            val directBody = withContext(Dispatchers.IO) {
+                httpGet(directUrl, mapOf("Cookie" to cookieHeader))
+            }
+            val directToken = json.decodeFromString<SpotifyInternalToken>(directBody)
+            if (!directToken.isAnonymous && directToken.accessToken.isNotBlank()) {
+                return@runCatching directToken
+            }
+        } catch (_: Exception) {
+            // Fallback to TOTP endpoint
+        }
+
         val nuance = fetchNuance()
         val serverTimeSec = fetchServerTime()
         val totp = generateTotp(nuance.s, serverTimeSec)
@@ -72,13 +95,6 @@ object SpotifyAuth {
             append("&totp=$totp")
             append("&totpServer=$totp")
             append("&totpVer=${nuance.v}")
-        }
-
-        val cookieHeader = buildString {
-            append("sp_dc=$spDc")
-            if (spKey.isNotEmpty()) {
-                append("; sp_key=$spKey")
-            }
         }
 
         val body = withContext(Dispatchers.IO) {

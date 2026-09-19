@@ -126,12 +126,14 @@ import com.darkxvenom.airbeats.ui.theme.PlayerColorExtractor
 import com.darkxvenom.airbeats.ui.utils.ItemWrapper
 import com.darkxvenom.airbeats.ui.utils.backToMain
 import com.darkxvenom.airbeats.ui.utils.resize
+import com.darkxvenom.airbeats.utils.SpotifyImporter
 import com.darkxvenom.airbeats.utils.makeTimeString
 import com.darkxvenom.airbeats.utils.rememberPreference
 import com.darkxvenom.airbeats.viewmodels.OnlinePlaylistViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @SuppressLint("RememberReturnType")
@@ -172,6 +174,8 @@ fun OnlinePlaylistScreen(
     var query by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue())
     }
+    var isConvertingToYouTube by remember { mutableStateOf(false) }
+    var convertProgress by remember { mutableStateOf(0 to 0) }
 
     val filteredSongs = remember(songs, query, hideExplicit) {
         var result = songs
@@ -276,6 +280,23 @@ fun OnlinePlaylistScreen(
                     Text(text = stringResource(android.R.string.ok))
                 }
             },
+        )
+    }
+
+    if (isConvertingToYouTube) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Converting Spotify to YouTube") },
+            text = {
+                Column {
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { if (convertProgress.second > 0) convertProgress.first.toFloat() / convertProgress.second.toFloat() else 0f },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    )
+                    Text("Matching tracks: ${convertProgress.first} of ${convertProgress.second}")
+                }
+            },
+            confirmButton = {}
         )
     }
 
@@ -783,6 +804,61 @@ fun OnlinePlaylistScreen(
                                             }
                                         },
                                     )
+                                }
+
+                                if (viewModel.playlistId.startsWith("sp:")) {
+                                    Surface(
+                                        onClick = {
+                                            if (!isConvertingToYouTube) {
+                                                isConvertingToYouTube = true
+                                                coroutineScope.launch {
+                                                    val spId = viewModel.playlistId.removePrefix("sp:")
+                                                    val targetEntityId = dbPlaylist?.playlist?.id ?: run {
+                                                        val newId = "LP" + java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+                                                        val newEntity = PlaylistEntity(
+                                                            id = newId,
+                                                            name = playlist?.title ?: "Spotify Playlist",
+                                                            browseId = viewModel.playlistId,
+                                                            bookmarkedAt = java.time.LocalDateTime.now(),
+                                                            remoteSongCount = songs.size
+                                                        )
+                                                        database.insert(newEntity)
+                                                        newId
+                                                    }
+
+                                                    val result = SpotifyImporter.convertPlaylistToYouTube(
+                                                        spPlaylistId = spId,
+                                                        targetPlaylistEntityId = targetEntityId,
+                                                        dao = database,
+                                                        onProgress = { cur, max ->
+                                                            convertProgress = cur to max
+                                                        }
+                                                    )
+                                                    isConvertingToYouTube = false
+                                                    result.onSuccess { count ->
+                                                        snackbarHostState.showSnackbar("Converted $count songs to YouTube!")
+                                                    }.onFailure { err ->
+                                                        snackbarHostState.showSnackbar("Conversion failed: ${err.message}")
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.youtube),
+                                                contentDescription = "Convert to YouTube",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
                                 }
 
                                 Surface(

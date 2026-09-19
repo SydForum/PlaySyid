@@ -32,6 +32,7 @@ import com.darkxvenom.airbeats.constants.SongFilterKey
 import com.darkxvenom.airbeats.constants.SongSortDescendingKey
 import com.darkxvenom.airbeats.constants.SongSortType
 import com.darkxvenom.airbeats.constants.SongSortTypeKey
+import com.darkxvenom.airbeats.constants.SpotifyCookieKey
 import com.darkxvenom.airbeats.constants.TopSize
 import com.darkxvenom.airbeats.db.MusicDatabase
 import com.darkxvenom.airbeats.extensions.reversed
@@ -256,7 +257,23 @@ constructor(
             }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     fun sync() {
-        viewModelScope.launch(Dispatchers.IO) { syncUtils.syncSavedPlaylists() }
+        viewModelScope.launch(Dispatchers.IO) {
+            syncUtils.syncSavedPlaylists()
+            syncUtils.syncSpotifyPlaylists()
+        }
+    }
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            context.dataStore.data
+                .map { it[SpotifyCookieKey] }
+                .distinctUntilChanged()
+                .collect { spDc ->
+                    if (!spDc.isNullOrBlank()) {
+                        syncUtils.syncSpotifyPlaylists()
+                    }
+                }
+        }
     }
 
     val topValue =

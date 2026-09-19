@@ -827,6 +827,7 @@
     <string name="bottom_right">Bottom right</string>
     <string name="medium">Medium</string>
     <string name="large">Large</string>
+    <string name="login_success">Logged in successfully</string>
     <string name="spotify_playlist_url">Spotify playlist URL</string>
     <string name="import_from_spotify">Import from Spotify</string>
     <string name="importing_playlist">Importing playlist…</string>
