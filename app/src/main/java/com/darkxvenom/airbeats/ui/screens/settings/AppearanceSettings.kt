@@ -18,7 +18,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Colorize
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material3.*
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -28,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -69,6 +74,21 @@ fun AppearanceSettings(
         DynamicThemeKey,
         defaultValue = true
     )
+    val (themeAccentColor, onThemeAccentColorChange) = rememberPreference(
+        ThemeAccentColorKey,
+        defaultValue = 0xFF4285F4.toInt()
+    )
+    val (themeColorEffectKey, onThemeColorEffectKeyChange) = rememberPreference(
+        ThemeColorEffectKey,
+        defaultValue = ThemeColorEffect.NONE.name
+    )
+    val themeColorEffect = remember(themeColorEffectKey) {
+        try {
+            ThemeColorEffect.valueOf(themeColorEffectKey)
+        } catch (e: Exception) {
+            ThemeColorEffect.NONE
+        }
+    }
     val (playerTextAlignment, onPlayerTextAlignmentChange) =
         rememberEnumPreference(
             PlayerTextAlignmentKey,
@@ -567,6 +587,35 @@ fun AppearanceSettings(
                             checked = dynamicTheme,
                             onCheckedChange = onDynamicThemeChange,
                         )},
+                        *(if (!dynamicTheme) arrayOf<@Composable () -> Unit>(
+                            {
+                                AccentColorSettingsSection(
+                                    selectedColorInt = themeAccentColor,
+                                    onColorSelected = onThemeAccentColorChange,
+                                )
+                            },
+                            {
+                                EnumListPreference(
+                                    title = { Text("Color Effects") },
+                                    icon = { Icon(Icons.Filled.AutoAwesome, null) },
+                                    selectedValue = themeColorEffect,
+                                    onValueSelected = { onThemeColorEffectKeyChange(it.name) },
+                                    valueText = {
+                                        when (it) {
+                                            ThemeColorEffect.NONE -> "None · Default balanced appearance"
+                                            ThemeColorEffect.VIBRANT -> "Vibrant · High energy & maximum saturation"
+                                            ThemeColorEffect.EXPRESSIVE -> "Expressive · Playful artistic secondary hues"
+                                            ThemeColorEffect.FRUIT_SALAD -> "Fruit Salad · Complementary fruit palette"
+                                            ThemeColorEffect.RAINBOW -> "Rainbow · Spirited spectrum tones"
+                                            ThemeColorEffect.FIDELITY -> "Fidelity · Exact accent color match"
+                                            ThemeColorEffect.CONTENT -> "Content · Media balanced aesthetic"
+                                            ThemeColorEffect.MONOCHROME -> "Monochrome · Modern greyscale styling"
+                                            ThemeColorEffect.NEUTRAL -> "Neutral · Quiet & understated tones"
+                                        }
+                                    },
+                                )
+                            }
+                        ) else emptyArray()),
                         {EnumListPreference(
                             title = { Text(stringResource(R.string.dark_theme)) },
                             icon = { Icon(painterResource(R.drawable.dark_mode), null) },
@@ -1001,4 +1050,310 @@ enum class PlayerTextAlignment {
     SIDED,
     CENTER,
 }
+
+data class AccentColorPreset(val name: String, val colorInt: Int)
+
+val DefaultAccentPresets = listOf(
+    AccentColorPreset("Crimson", 0xFFE03030.toInt()),
+    AccentColorPreset("Coral", 0xFFFF5722.toInt()),
+    AccentColorPreset("Amber", 0xFFFFB300.toInt()),
+    AccentColorPreset("Emerald", 0xFF2ECC71.toInt()),
+    AccentColorPreset("Mint", 0xFF00E676.toInt()),
+    AccentColorPreset("Teal", 0xFF009688.toInt()),
+    AccentColorPreset("Sky Blue", 0xFF2196F3.toInt()),
+    AccentColorPreset("Cobalt", 0xFF0047AB.toInt()),
+    AccentColorPreset("Indigo", 0xFF3F51B5.toInt()),
+    AccentColorPreset("Violet", 0xFF7C4DFF.toInt()),
+    AccentColorPreset("Rose", 0xFFE91E63.toInt()),
+    AccentColorPreset("Graphite", 0xFF607D8B.toInt()),
+)
+
+@Composable
+fun AccentColorSettingsSection(
+    selectedColorInt: Int,
+    onColorSelected: (Int) -> Unit,
+) {
+    var showCustomDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Colorize,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Accents",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Select an accent color for the app interface",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(DefaultAccentPresets.size) { index ->
+                val preset = DefaultAccentPresets[index]
+                val isSelected = selectedColorInt == preset.colorInt
+                AccentSwatchTile(
+                    color = Color(preset.colorInt),
+                    isSelected = isSelected,
+                    onClick = { onColorSelected(preset.colorInt) }
+                )
+            }
+            item {
+                val isCustomSelected = DefaultAccentPresets.none { it.colorInt == selectedColorInt }
+                CustomAccentTile(
+                    isSelected = isCustomSelected,
+                    onClick = { showCustomDialog = true }
+                )
+            }
+        }
+    }
+
+    if (showCustomDialog) {
+        CustomColorPickerDialog(
+            initialColor = Color(selectedColorInt),
+            onDismiss = { showCustomDialog = false },
+            onColorConfirmed = {
+                onColorSelected(it)
+                showCustomDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun AccentSwatchTile(
+    color: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "swatchScale"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .scale(scale)
+            .clip(CircleShape)
+            .background(color)
+            .border(
+                width = if (isSelected) 3.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.White.copy(alpha = 0.25f),
+                shape = CircleShape
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = if (color.luminance() > 0.5f) Color.Black else Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CustomAccentTile(
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "customScale"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .scale(scale)
+            .clip(CircleShape)
+            .background(
+                Brush.sweepGradient(
+                    listOf(
+                        Color(0xFFE03030),
+                        Color(0xFFFF9800),
+                        Color(0xFF2ECC71),
+                        Color(0xFF2196F3),
+                        Color(0xFF9C27B0),
+                        Color(0xFFE03030)
+                    )
+                )
+            )
+            .border(
+                width = if (isSelected) 3.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.White.copy(alpha = 0.3f),
+                shape = CircleShape
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Colorize,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CustomColorPickerDialog(
+    initialColor: Color,
+    onDismiss: () -> Unit,
+    onColorConfirmed: (Int) -> Unit,
+) {
+    var hexInput by remember {
+        mutableStateOf(String.format("%06X", 0xFFFFFF and initialColor.toArgb()))
+    }
+    var currentColor by remember { mutableStateOf(initialColor) }
+
+    val quickColors = remember {
+        listOf(
+            0xFFFF1744.toInt(), 0xFFF50057.toInt(), 0xFFD500F9.toInt(), 0xFF651FFF.toInt(),
+            0xFF3D5AFE.toInt(), 0xFF2979FF.toInt(), 0xFF00E5FF.toInt(), 0xFF1DE9B6.toInt(),
+            0xFF00E676.toInt(), 0xFF76FF03.toInt(), 0xFFC6FF00.toInt(), 0xFFFFEA00.toInt(),
+            0xFFFFC400.toInt(), 0xFFFF9100.toInt(), 0xFFFF3D00.toInt(), 0xFF37474F.toInt()
+        )
+    }
+
+    DefaultDialog(
+        buttons = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = { onColorConfirmed(currentColor.toArgb()) }
+            ) {
+                Text("Apply")
+            }
+        },
+        onDismiss = onDismiss
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Custom Accent Color",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(currentColor)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                )
+
+                OutlinedTextField(
+                    value = hexInput,
+                    onValueChange = { input ->
+                        val filtered = input.uppercase().filter { it in "0123456789ABCDEF" }.take(6)
+                        hexInput = filtered
+                        if (filtered.length == 6) {
+                            try {
+                                val parsed = android.graphics.Color.parseColor("#$filtered")
+                                currentColor = Color(parsed)
+                            } catch (_: Exception) {}
+                        }
+                    },
+                    label = { Text("HEX Code") },
+                    prefix = { Text("#") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Text(
+                text = "Quick Palette",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(8),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(quickColors.size) { idx ->
+                    val colorInt = quickColors[idx]
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(CircleShape)
+                            .background(Color(colorInt))
+                            .clickable {
+                                currentColor = Color(colorInt)
+                                hexInput = String.format("%06X", 0xFFFFFF and colorInt)
+                            }
+                    )
+                }
+            }
+        }
+    }
+}
+
 

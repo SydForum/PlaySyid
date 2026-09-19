@@ -10,6 +10,21 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 val DynamicThemeKey = booleanPreferencesKey("dynamicTheme")
+val ThemeAccentColorKey = intPreferencesKey("themeAccentColor")
+val ThemeColorEffectKey = stringPreferencesKey("themeColorEffect")
+
+enum class ThemeColorEffect(val title: String, val description: String) {
+    NONE("None", "Default balanced tonal appearance"),
+    VIBRANT("Vibrant", "High energy & maximum chromatic saturation"),
+    EXPRESSIVE("Expressive", "Artistic with playful secondary & tertiary hues"),
+    FRUIT_SALAD("Fruit Salad", "Playful complementary fruit palette"),
+    RAINBOW("Rainbow", "Spirited spectrum dynamic tones"),
+    FIDELITY("Fidelity", "Faithfully mirrors the exact accent color"),
+    CONTENT("Content", "Content-focused balanced aesthetic"),
+    MONOCHROME("Monochrome", "Sleek modern greyscale tonal styling"),
+    NEUTRAL("Neutral", "Quiet, calm, and understated chromatic tones"),
+}
+
 val DarkModeKey = stringPreferencesKey("darkMode")
 val LiquidGlassKey = booleanPreferencesKey("enableLiquidGlass")
 val DynamicIslandKey = booleanPreferencesKey("enableDynamicIsland")

@@ -565,6 +565,15 @@ class MainActivity : ComponentActivity() {
             val lyricsScreenStyle by rememberEnumPreference(com.darkxvenom.airbeats.constants.LyricsScreenStyleKey, defaultValue = com.darkxvenom.airbeats.constants.LyricsScreenStyle.LYRICS_2)
 
             val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
+            val themeAccentColor by rememberPreference(com.darkxvenom.airbeats.constants.ThemeAccentColorKey, defaultValue = 0xFF4285F4.toInt())
+            val themeColorEffectKey by rememberPreference(com.darkxvenom.airbeats.constants.ThemeColorEffectKey, defaultValue = com.darkxvenom.airbeats.constants.ThemeColorEffect.NONE.name)
+            val themeColorEffect = remember(themeColorEffectKey) {
+                try {
+                    com.darkxvenom.airbeats.constants.ThemeColorEffect.valueOf(themeColorEffectKey)
+                } catch (e: Exception) {
+                    com.darkxvenom.airbeats.constants.ThemeColorEffect.NONE
+                }
+            }
             val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
             val enableLiquidGlass by rememberPreference(LiquidGlassKey, defaultValue = false)
             val frostedGlassCardsButtons by rememberPreference(FrostedGlassCardsButtonsKey, defaultValue = true)
@@ -595,18 +604,18 @@ class MainActivity : ComponentActivity() {
                     com.darkxvenom.airbeats.voice.VoiceAssistantService.stop(this@MainActivity)
                 }
             }
-            var themeColor by rememberSaveable(stateSaver = ColorSaver) {
+            var dynamicColor by rememberSaveable(stateSaver = ColorSaver) {
                 mutableStateOf(DefaultThemeColor)
             }
 
             LaunchedEffect(playerConnection, enableDynamicTheme, isSystemInDarkTheme) {
                 val playerConnection = playerConnection
                 if (!enableDynamicTheme || playerConnection == null) {
-                    themeColor = DefaultThemeColor
+                    dynamicColor = DefaultThemeColor
                     return@LaunchedEffect
                 }
                 playerConnection.service.currentMediaMetadata.collectLatest { song ->
-                    themeColor =
+                    dynamicColor =
                         if (song != null) {
                             withContext(Dispatchers.IO) {
                                 val result =
@@ -626,11 +635,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val effectiveThemeColor = if (enableDynamicTheme) dynamicColor else Color(themeAccentColor)
+
             AirBeatsTheme(
                 darkTheme = useDarkTheme,
                 pureBlack = pureBlack && !enableLiquidGlass && !frostedGlassCardsButtons && !isPlayful,
                 appFont = appFont,
-                themeColor = themeColor,
+                themeColor = effectiveThemeColor,
+                colorEffect = themeColorEffect,
+                enableDynamicTheme = enableDynamicTheme,
             ) {
                 val rankPrefMgr = remember { RankPreferenceManager(this@MainActivity) }
                 val lastSeenRank by rankPrefMgr.lastSeenRank.collectAsState(initial = null)
