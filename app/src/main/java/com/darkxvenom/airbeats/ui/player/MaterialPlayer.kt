@@ -81,11 +81,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import coil.compose.AsyncImage
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.DefaultPlayPauseButtonShape
+import com.darkxvenom.airbeats.constants.EqualizerPresetKey
 import com.darkxvenom.airbeats.constants.PlayPauseButtonShapeKey
+import com.darkxvenom.airbeats.constants.TranslateLanguageKey
 import com.darkxvenom.airbeats.db.entities.LyricsEntity
+import com.darkxvenom.airbeats.lyrics.LyricsEntry
+import com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper
 import com.darkxvenom.airbeats.lyrics.LyricsUtils
 import com.darkxvenom.airbeats.models.MediaMetadata
 import com.darkxvenom.airbeats.playback.PlayerConnection
@@ -94,12 +101,17 @@ import com.darkxvenom.airbeats.ui.component.BottomSheetState
 import com.darkxvenom.airbeats.ui.component.BlurredBackground
 import com.darkxvenom.airbeats.ui.component.MenuState
 import com.darkxvenom.airbeats.ui.component.SongDetailsDialog
+import com.darkxvenom.airbeats.ui.menu.AudioEffectPreset
 import com.darkxvenom.airbeats.ui.menu.InAppEqualizerSheet
 import com.darkxvenom.airbeats.ui.menu.PlayerMenu
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
 import com.darkxvenom.airbeats.utils.getPlayPauseShape
 import com.darkxvenom.airbeats.utils.makeTimeString
 import com.darkxvenom.airbeats.utils.rememberPreference
+import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+
+
 
 private fun AudioDeviceInfo.isMaterialBluetoothOutput(): Boolean =
     type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
@@ -150,13 +162,19 @@ fun MaterialPlayer(
     val context = LocalContext.current
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
-    // Accent colors matching the screenshots (vibrant rose / primary)
-    val accentColor = Color(0xFFE51A53)
-    val onBackgroundColor = if (isDark) Color.White else Color(0xFF1E1517)
-    val surfaceContainer = if (isDark) Color(0xFF221719) else Color(0xFFF7ECEE)
-    val circularButtonBg = if (isDark) Color(0xFF2B1F21) else Color(0xFFFDE8EA)
-    val playControlsContainer = if (isDark) Color(0xFF261B1D) else Color(0xFFF0E3E5)
-    val inactiveTrackColor = if (isDark) Color(0x38FFFFFF) else Color(0xFFEAE0E2)
+    // Clean, high-contrast colors compatible with both Dark and Light themes:
+    // In Dark theme: White controls, icons, and text on subtle frosted glass surfaces.
+    // In Light theme: Deep dark charcoal controls, icons, and text on soft light surfaces.
+    val onBackgroundColor = if (isDark) Color.White else Color(0xFF1E1E1E)
+    val buttonIconColor = if (isDark) Color.White else Color(0xFF1E1E1E)
+    val primaryControlColor = if (isDark) Color.White else Color(0xFF1E1E1E)
+    val playPauseButtonBg = if (isDark) Color.White else Color(0xFF1E1E1E)
+    val playPauseIconColor = if (isDark) Color(0xFF121212) else Color.White
+
+    val surfaceContainer = if (isDark) Color(0x2EFFFFFF) else Color(0x12000000)
+    val circularButtonBg = if (isDark) Color(0x2EFFFFFF) else Color(0x12000000)
+    val playControlsContainer = if (isDark) Color(0x24FFFFFF) else Color(0x12000000)
+    val inactiveTrackColor = if (isDark) Color(0x38FFFFFF) else Color(0x20000000)
 
     var showDetailsDialog by rememberSaveable { mutableStateOf(false) }
     var showDeviceSheet by rememberSaveable { mutableStateOf(false) }
@@ -166,16 +184,106 @@ fun MaterialPlayer(
     val activeDevice = remember(availableDevices) { getActiveDevice(availableDevices) }
     val isBluetooth = activeDevice?.isMaterialBluetoothOutput() == true
 
-    // Synchronized lyrics line
-    val currentLyricText = remember(currentLyrics?.lyrics, position) {
-        val raw = currentLyrics?.lyrics
-        if (!raw.isNullOrBlank() && raw != LyricsEntity.LYRICS_NOT_FOUND) {
-            val parsed = LyricsUtils.parseLyrics(raw)
-            val line = parsed.findLast { it.time <= position }?.text
-            line?.takeIf { it.isNotBlank() } ?: parsed.firstOrNull()?.text?.takeIf { it.isNotBlank() }
+    val equalizerState by playerConnection.service.equalizerState.collectAsState()
+    val equalizerPreset by rememberPreference(EqualizerPresetKey, "Flat")
+
+    LaunchedEffect(Unit) {
+        playerConnection.service.ensureEqualizer()
+    }
+
+    val equalizerButtonLabel = remember(equalizerState.enabled, equalizerState.bandLevels, equalizerPreset) {
+        if (!equalizerState.enabled) {
+            "Equalizer"
         } else {
-            null
+            val currentLevels = equalizerState.bandLevels.map { it.toInt() }
+            val matchedPreset = AudioEffectPreset.presets.firstOrNull { preset ->
+                preset.levels.size == currentLevels.size && preset.levels.indices.all { i ->
+                    preset.levels[i] == currentLevels[i]
+                }
+            }
+            when {
+                matchedPreset != null -> matchedPreset.name
+                equalizerPreset.isNotBlank() && equalizerPreset != "Custom" -> {
+                    val namedPreset = AudioEffectPreset.presets.firstOrNull { it.name.equals(equalizerPreset, ignoreCase = true) }
+                    if (namedPreset != null && namedPreset.levels.size == currentLevels.size &&
+                        namedPreset.levels.indices.all { namedPreset.levels[it] == currentLevels[it] }
+                    ) {
+                        namedPreset.name
+                    } else {
+                        "Custom"
+                    }
+                }
+                else -> "Custom"
+            }
         }
+    }
+
+
+    // Translated synchronized lyrics
+    val targetLanguage by rememberPreference(TranslateLanguageKey, "hi-Latn")
+    val currentTranslationLang by LyricsTranslationHelper.currentLanguageCode.collectAsState()
+    val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
+
+    val parsedLyrics = remember(currentLyrics?.lyrics) {
+        LyricsTranslationHelper.parseLyricsToEntries(currentLyrics?.lyrics)
+    }
+
+    DisposableEffect(parsedLyrics) {
+        LyricsTranslationHelper.registerLyrics(parsedLyrics)
+        onDispose {
+            LyricsTranslationHelper.unregisterLyrics(parsedLyrics)
+        }
+    }
+
+    LaunchedEffect(parsedLyrics, mediaMetadata?.id, targetLanguage, currentTranslationLang, translationVersion) {
+        val songId = mediaMetadata?.id ?: return@LaunchedEffect
+        if (parsedLyrics.isEmpty()) return@LaunchedEffect
+
+        val activeLang = currentTranslationLang.ifBlank { targetLanguage }
+        var loaded = LyricsTranslationHelper.loadTranslationsFromCache(
+            lyrics = parsedLyrics,
+            context = context,
+            songId = songId,
+            targetLanguageCode = activeLang
+        )
+        if (!loaded && activeLang != targetLanguage) {
+            loaded = LyricsTranslationHelper.loadTranslationsFromCache(
+                lyrics = parsedLyrics,
+                context = context,
+                songId = songId,
+                targetLanguageCode = targetLanguage
+            )
+        }
+        if (!loaded) {
+            val dir = File(context.filesDir, "lyrics_translations")
+            val safeSongId = songId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val cachedFile = dir.listFiles { _, name -> name.startsWith("${safeSongId}_") && name.endsWith(".json") }?.firstOrNull()
+            if (cachedFile != null) {
+                val foundLang = cachedFile.name.removePrefix("${safeSongId}_").removeSuffix(".json")
+                if (foundLang.isNotBlank()) {
+                    LyricsTranslationHelper.loadTranslationsFromCache(
+                        lyrics = parsedLyrics,
+                        context = context,
+                        songId = songId,
+                        targetLanguageCode = foundLang
+                    )
+                }
+            }
+        }
+    }
+
+    val activeEntry = remember(parsedLyrics, position) {
+        if (parsedLyrics.isEmpty()) null
+        else {
+            parsedLyrics.findLast { it.time <= position } ?: parsedLyrics.firstOrNull()
+        }
+    }
+
+    val fallbackFlow = remember { MutableStateFlow<String?>(null) }
+    val activeTranslatedText by (activeEntry?.translatedTextFlow ?: fallbackFlow).collectAsState()
+
+    val currentLyricText = remember(activeEntry, activeTranslatedText) {
+        activeTranslatedText?.takeIf { it.isNotBlank() } ?: activeEntry?.text
     }
 
     // Play/Pause button shape controlled by user preference (Flower, Cookie, etc.)
@@ -328,7 +436,7 @@ fun MaterialPlayer(
                                 Icon(
                                     imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                                     contentDescription = "Like",
-                                    tint = accentColor,
+                                    tint = if (isLiked) Color(0xFFFF3B30) else buttonIconColor,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -345,7 +453,7 @@ fun MaterialPlayer(
                                 Icon(
                                     imageVector = Icons.Filled.Share,
                                     contentDescription = "Share",
-                                    tint = accentColor,
+                                    tint = buttonIconColor,
                                     modifier = Modifier.size(19.dp)
                                 )
                             }
@@ -362,7 +470,7 @@ fun MaterialPlayer(
                                 Icon(
                                     imageVector = Icons.Filled.MoreVert,
                                     contentDescription = "More",
-                                    tint = accentColor,
+                                    tint = buttonIconColor,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -411,8 +519,8 @@ fun MaterialPlayer(
                     onValueChange = { onSeek(it.toLong()) },
                     onValueChangeFinished = onSeekFinished,
                     colors = SliderDefaults.colors(
-                        thumbColor = accentColor,
-                        activeTrackColor = accentColor,
+                        thumbColor = primaryControlColor,
+                        activeTrackColor = primaryControlColor,
                         inactiveTrackColor = inactiveTrackColor,
                     ),
                     track = { sliderState ->
@@ -431,7 +539,7 @@ fun MaterialPlayer(
                                     .fillMaxWidth(fraction)
                                     .fillMaxHeight()
                                     .clip(RoundedCornerShape(50))
-                                    .background(accentColor)
+                                    .background(primaryControlColor)
                             )
                         }
                     },
@@ -483,7 +591,7 @@ fun MaterialPlayer(
                         Icon(
                             imageVector = Icons.Filled.SkipPrevious,
                             contentDescription = "Previous",
-                            tint = onBackgroundColor.copy(alpha = if (canSkipPrevious) 1f else 0.4f),
+                            tint = buttonIconColor.copy(alpha = if (canSkipPrevious) 1f else 0.4f),
                             modifier = Modifier.size(30.dp)
                         )
                     }
@@ -497,14 +605,14 @@ fun MaterialPlayer(
                         .size(76.dp)
                         .rotate(if (isPlaying) playPauseRotation else 0f)
                         .clip(currentPlayPauseShape.toShape())
-                        .background(accentColor)
+                        .background(playPauseButtonBg)
                         .clickable(onClick = onPlayPause),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(32.dp),
-                            color = Color.White,
+                            color = playPauseIconColor,
                             strokeWidth = 3.dp
                         )
                     } else {
@@ -513,7 +621,7 @@ fun MaterialPlayer(
                                 if (isPlaying) R.drawable.pause else R.drawable.play
                             ),
                             contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = Color.White,
+                            tint = playPauseIconColor,
                             modifier = Modifier
                                 .size(36.dp)
                                 .rotate(if (isPlaying) -playPauseRotation else 0f)
@@ -535,7 +643,7 @@ fun MaterialPlayer(
                         Icon(
                             imageVector = Icons.Filled.SkipNext,
                             contentDescription = "Next",
-                            tint = onBackgroundColor.copy(alpha = if (canSkipNext) 1f else 0.4f),
+                            tint = buttonIconColor.copy(alpha = if (canSkipNext) 1f else 0.4f),
                             modifier = Modifier.size(30.dp)
                         )
                     }
@@ -553,7 +661,7 @@ fun MaterialPlayer(
                 Icon(
                     painter = painterResource(R.drawable.volume_off),
                     contentDescription = "Volume Down",
-                    tint = onBackgroundColor.copy(alpha = 0.65f),
+                    tint = buttonIconColor.copy(alpha = 0.65f),
                     modifier = Modifier.size(19.dp)
                 )
 
@@ -562,8 +670,8 @@ fun MaterialPlayer(
                     valueRange = 0f..1f,
                     onValueChange = onVolumeChange,
                     colors = SliderDefaults.colors(
-                        thumbColor = accentColor,
-                        activeTrackColor = accentColor,
+                        thumbColor = primaryControlColor,
+                        activeTrackColor = primaryControlColor,
                         inactiveTrackColor = inactiveTrackColor,
                     ),
                     track = { sliderState ->
@@ -582,7 +690,7 @@ fun MaterialPlayer(
                                     .fillMaxWidth(fraction)
                                     .fillMaxHeight()
                                     .clip(RoundedCornerShape(50))
-                                    .background(accentColor)
+                                    .background(primaryControlColor)
                             )
                         }
                     },
@@ -595,7 +703,7 @@ fun MaterialPlayer(
                 Icon(
                     painter = painterResource(R.drawable.volume_up),
                     contentDescription = "Volume Up",
-                    tint = onBackgroundColor.copy(alpha = 0.65f),
+                    tint = buttonIconColor.copy(alpha = 0.65f),
                     modifier = Modifier.size(21.dp)
                 )
             }
@@ -613,14 +721,14 @@ fun MaterialPlayer(
                             Icon(
                                 painter = painterResource(R.drawable.ic_bluetooth),
                                 contentDescription = null,
-                                tint = accentColor,
+                                tint = buttonIconColor,
                                 modifier = Modifier.size(16.dp)
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Filled.PhoneAndroid,
                                 contentDescription = null,
-                                tint = accentColor,
+                                tint = buttonIconColor,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -638,11 +746,11 @@ fun MaterialPlayer(
                         Icon(
                             painter = painterResource(R.drawable.graphic_eq),
                             contentDescription = null,
-                            tint = accentColor,
+                            tint = buttonIconColor,
                             modifier = Modifier.size(16.dp)
                         )
                     },
-                    label = "Custom",
+                    label = equalizerButtonLabel,
                     onClick = { showEqualizerSheet = true },
                     containerColor = surfaceContainer,
                     contentColor = onBackgroundColor,
@@ -655,7 +763,7 @@ fun MaterialPlayer(
                         Icon(
                             painter = painterResource(R.drawable.queue_music),
                             contentDescription = null,
-                            tint = accentColor,
+                            tint = buttonIconColor,
                             modifier = Modifier.size(16.dp)
                         )
                     },
@@ -682,7 +790,7 @@ private fun MaterialPlayerBackdrop(
     modifier: Modifier = Modifier,
 ) {
     val lightSurface = MaterialTheme.colorScheme.surface
-    val baseBg = if (isDark) Color(0xFF0F080A) else lightSurface
+    val baseBg = if (isDark) Color(0xFF100F12) else lightSurface
 
     Box(
         modifier = modifier

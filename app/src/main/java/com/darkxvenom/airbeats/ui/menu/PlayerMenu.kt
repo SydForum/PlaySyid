@@ -91,6 +91,7 @@ import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.ui.component.LocalBackdrop
 import com.darkxvenom.airbeats.ui.component.drawBackdropCustomShape
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
+import com.darkxvenom.airbeats.constants.EqualizerPresetKey
 import com.darkxvenom.airbeats.playback.DeviceCodecs
 import com.darkxvenom.airbeats.utils.rememberPreference
 import androidx.compose.animation.core.Animatable
@@ -1104,6 +1105,7 @@ private fun ListenTogetherStatusCard(
 internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val equalizerState by playerConnection.service.equalizerState.collectAsState()
+    val (equalizerPreset, onEqualizerPresetChange) = rememberPreference(EqualizerPresetKey, "Flat")
     val (enableLiquidGlass) = rememberPreference(LiquidGlassKey, false)
     val isFrosted = isFrostedGlassUiEnabled()
     val backdrop = LocalBackdrop.current
@@ -1189,8 +1191,10 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
 
             if (equalizerState.isAvailable) {
                 AudioEffectPresets(
+                    selectedPreset = equalizerPreset,
                     onPresetSelected = { preset ->
                         playerConnection.service.setEqualizerEnabled(true)
+                        onEqualizerPresetChange(preset.name)
                         preset.levels.forEachIndexed { index, level ->
                             if (index in equalizerState.bandLevels.indices) {
                                 playerConnection.service.setEqualizerBandLevel(index, level.toShort())
@@ -1209,13 +1213,17 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
                         maxLevel = equalizerState.maxBandLevel,
                         enabled = equalizerState.enabled,
                         onLevelChange = { newLevel ->
+                            onEqualizerPresetChange("Custom")
                             playerConnection.service.setEqualizerBandLevel(index, newLevel)
                         }
                     )
                 }
 
                 TextButton(
-                    onClick = playerConnection.service::resetEqualizer,
+                    onClick = {
+                        onEqualizerPresetChange("Flat")
+                        playerConnection.service.resetEqualizer()
+                    },
                     modifier = Modifier.align(Alignment.End)
                 ) {
                     Text(stringResource(R.string.reset))
@@ -1226,7 +1234,10 @@ internal fun InAppEqualizerSheet(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun AudioEffectPresets(onPresetSelected: (AudioEffectPreset) -> Unit) {
+private fun AudioEffectPresets(
+    selectedPreset: String?,
+    onPresetSelected: (AudioEffectPreset) -> Unit,
+) {
     Text(
         text = stringResource(R.string.audio_effects),
         style = MaterialTheme.typography.titleSmall,
@@ -1241,13 +1252,22 @@ private fun AudioEffectPresets(onPresetSelected: (AudioEffectPreset) -> Unit) {
     ) {
         items(AudioEffectPreset.presets.size) { index ->
             val preset = AudioEffectPreset.presets[index]
+            val isSelected = preset.name.equals(selectedPreset, ignoreCase = true)
             Surface(
                 onClick = { onPresetSelected(preset) },
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.48f),
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.48f)
+                },
                 border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    width = if (isSelected) 1.5.dp else 1.dp,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    }
                 ),
                 modifier = Modifier.height(50.dp)
             ) {
@@ -1257,7 +1277,10 @@ private fun AudioEffectPresets(onPresetSelected: (AudioEffectPreset) -> Unit) {
                 ) {
                     Text(
                         text = preset.name,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        ),
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1267,7 +1290,7 @@ private fun AudioEffectPresets(onPresetSelected: (AudioEffectPreset) -> Unit) {
     }
 }
 
-private data class AudioEffectPreset(
+internal data class AudioEffectPreset(
     val name: String,
     val levels: List<Int>,
 ) {

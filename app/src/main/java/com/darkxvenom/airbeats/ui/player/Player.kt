@@ -2609,7 +2609,7 @@ fun BottomSheetPlayer(
                 playerConnection = playerConnection,
                 navController = navController,
                 menuState = menuState,
-                currentLyrics = currentLyrics,
+                currentLyrics = (spotifyLyricsEntity ?: currentLyrics),
                 playerVolume = playerVolume.value,
                 onVolumeChange = { playerConnection.service.playerVolume.value = it },
             )

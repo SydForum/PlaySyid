@@ -439,6 +439,8 @@ val TranslateLyricsKey = booleanPreferencesKey("translateLyrics")
 
 val PlayerVolumeKey = floatPreferencesKey("playerVolume")
 val EqualizerEnabledKey = booleanPreferencesKey("equalizerEnabled")
+val EqualizerPresetKey = stringPreferencesKey("equalizerPreset")
+
 val DolbyAtmosEnabledKey = booleanPreferencesKey("dolbyAtmosEnabled")
 val SpatialAudioEnabledKey = booleanPreferencesKey("spatialAudioEnabled")
 val AutomixEnabledKey = booleanPreferencesKey("automixEnabled")
