@@ -175,17 +175,52 @@ object DeveloperNewsManager {
     }
 
     private fun recalculateActivePopup(items: List<DeveloperNewsItem>) {
-        val dismissed = getDismissedPopupIds()
+        val dismissed = getDismissedPopupIds().toMutableSet()
+        val currentPopup = _activePopup.value
+
+        // If user is currently viewing a popup that got dismissed, clear it
+        if (currentPopup != null && dismissed.contains(currentPopup.id)) {
+            _activePopup.value = null
+        }
+
+        // Find the single highest priority / latest candidate popup
         val candidate = items.firstOrNull { it.showPopup && it.id.isNotBlank() && !dismissed.contains(it.id) }
-        _activePopup.value = candidate
+
+        if (candidate != null) {
+            // Only show this single highest priority/latest popup.
+            // Mark all other items with showPopup as dismissed so they do not chain-pop one by one!
+            var changed = false
+            items.forEach { item ->
+                if (item.id != candidate.id && item.id.isNotBlank() && !dismissed.contains(item.id)) {
+                    dismissed.add(item.id)
+                    changed = true
+                }
+            }
+            if (changed) {
+                prefs?.edit()?.putStringSet(KEY_DISMISSED_POPUPS, dismissed)?.apply()
+            }
+
+            // Only replace current popup if none is showing or candidate has strictly higher priority
+            if (_activePopup.value == null || candidate.priority > (_activePopup.value?.priority ?: 0)) {
+                _activePopup.value = candidate
+            }
+        } else {
+            _activePopup.value = null
+        }
     }
 
     fun dismissPopup(newsId: String) {
         if (newsId.isBlank()) return
         val dismissed = getDismissedPopupIds().toMutableSet()
         dismissed.add(newsId)
+        // Mark all current items as dismissed to guarantee no subsequent popups appear
+        _newsList.value.forEach { item ->
+            if (item.id.isNotBlank()) {
+                dismissed.add(item.id)
+            }
+        }
         prefs?.edit()?.putStringSet(KEY_DISMISSED_POPUPS, dismissed)?.apply()
-        recalculateActivePopup(_newsList.value)
+        _activePopup.value = null
     }
 
     private fun getDismissedPopupIds(): Set<String> {
