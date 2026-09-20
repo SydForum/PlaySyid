@@ -29,8 +29,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import javax.inject.Inject
+import com.darkxvenom.airbeats.constants.EnableJioSaavnKey
+import com.darkxvenom.airbeats.innertube.models.SongItem
 import com.darkxvenom.airbeats.innertube.pages.SearchSummary
+import com.darkxvenom.airbeats.jiosaavn.JioSaavnApi
+import kotlinx.coroutines.Dispatchers
+import javax.inject.Inject
 
 @HiltViewModel
 class OnlineSearchViewModel
@@ -43,8 +47,21 @@ constructor(
     val filter = MutableStateFlow<YouTube.SearchFilter?>(null)
     var summaryPage by mutableStateOf<SearchSummaryPage?>(null)
     val viewStateMap = mutableStateMapOf<String, ItemsPage?>()
+    var jioSaavnSongs by mutableStateOf<List<SongItem>>(emptyList())
+    var isJioSaavnExpanded by mutableStateOf(false)
 
     init {
+        viewModelScope.launch {
+            val enableJioSaavn = context.dataStore.get(EnableJioSaavnKey, true)
+            val hideExplicit = context.dataStore.get(HideExplicitKey, false)
+            if (enableJioSaavn) {
+                launch(Dispatchers.IO) {
+                    val jioResult = JioSaavnApi.searchSongs(query).getOrNull().orEmpty()
+                    jioSaavnSongs = jioResult.filterExplicit(hideExplicit)
+                }
+            }
+        }
+
         viewModelScope.launch {
             filter.collect { filter ->
                 val hideExplicit = context.dataStore.get(HideExplicitKey, false)
