@@ -1986,7 +1986,7 @@ class MusicService :
                                 mediaOkHttpClient,
                             ),
                         ),
-                    ),
+                    ).setFlags(FLAG_IGNORE_CACHE_ON_ERROR),
             ).setCacheWriteDataSinkFactory(null)
             .setFlags(FLAG_IGNORE_CACHE_ON_ERROR)
 
@@ -1996,9 +1996,15 @@ class MusicService :
             if (resolved.length != C.LENGTH_UNSET.toLong()) return resolved
 
             val remainingLength =
-                contentLength?.let { len ->
-                    (len - resolved.position).coerceAtLeast(0L)
-                } ?: C.LENGTH_UNSET.toLong()
+                if (contentLength != null && contentLength > 0L) {
+                    if (resolved.position >= contentLength) {
+                        0L
+                    } else {
+                        contentLength - resolved.position
+                    }
+                } else {
+                    C.LENGTH_UNSET.toLong()
+                }
 
             return if (remainingLength != C.LENGTH_UNSET.toLong()) {
                 resolved.buildUpon()
@@ -2017,9 +2023,14 @@ class MusicService :
             val mediaId = dataSpec.key ?: error("No media id")
 
             val checkLength = if (dataSpec.length > 0) dataSpec.length else 1L
-            if (downloadCache.isCached(mediaId, dataSpec.position, checkLength) ||
-                playerCache.isCached(mediaId, dataSpec.position, checkLength)
-            ) {
+            // If the song is downloaded in downloadCache, it is fully on disk and never needs network
+            if (downloadCache.isCached(mediaId, dataSpec.position, checkLength)) {
+                scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+                return@Factory dataSpec
+            }
+
+            // If offline, allow playing whatever chunks are available in playerCache
+            if (!isNetworkConnected.value && playerCache.isCached(mediaId, dataSpec.position, checkLength)) {
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
                 return@Factory dataSpec
             }
