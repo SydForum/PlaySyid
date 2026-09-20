@@ -546,6 +546,14 @@ fun AppearanceSettings(
                 SettingsGeneralCategory(
                     title = stringResource(R.string.theme),
                     items = listOf(
+                        {
+                            PreferenceEntry(
+                                title = { Text("App Icon") },
+                                description = "Customize app launcher icon and themes",
+                                icon = { Icon(painterResource(R.drawable.apps), null) },
+                                onClick = { navController.navigate("settings/appearance/app_icon") }
+                            )
+                        },
                         {EnumListPreference(
                             title = { Text(stringResource(R.string.home_screen_style)) },
                             icon = { Icon(painterResource(R.drawable.home), null) },

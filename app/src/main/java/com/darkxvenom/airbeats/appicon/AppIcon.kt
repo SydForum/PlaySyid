@@ -1,0 +1,19 @@
+package com.darkxvenom.airbeats.appicon
+
+import androidx.compose.ui.graphics.Color
+
+/**
+ * Data model representing an app launcher icon variant in AirBeats.
+ */
+data class AppIcon(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val author: String = "AirBeats Team",
+    val aliasName: String,
+    val bgColors: List<Color>,
+    val fgTint: Color?,
+    val isDefault: Boolean = false,
+    val isCommunity: Boolean = false,
+    val svgUrl: String? = null
+)

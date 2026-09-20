@@ -396,6 +396,9 @@ fun NavGraphBuilder.navigationBuilder(
     composable("settings/appearance") {
         AppearanceSettings(navController, scrollBehavior)
     }
+    composable("settings/appearance/app_icon") {
+        com.darkxvenom.airbeats.ui.screens.settings.AppIconScreen(navController, scrollBehavior)
+    }
     composable("settings/dynamic_island") {
         com.darkxvenom.airbeats.ui.screens.settings.DynamicIslandSettings(navController, scrollBehavior)
     }
