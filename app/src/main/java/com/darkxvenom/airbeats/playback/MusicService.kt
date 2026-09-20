@@ -214,54 +214,86 @@ class MusicService :
     private var scope = CoroutineScope(Dispatchers.Main) + Job()
 
     private val mediaOkHttpClient: okhttp3.OkHttpClient by lazy {
-        okhttp3.OkHttpClient
+        val baseBuilder = okhttp3.OkHttpClient
             .Builder()
-            .proxy(YouTube.proxy)
             .followRedirects(true)
             .followSslRedirects(true)
-            .addInterceptor { chain ->
-                val request = chain.request()
-                val host = request.url.host
-                val isYouTubeMediaHost =
-                    host.endsWith("googlevideo.com") ||
-                        host.endsWith("googleusercontent.com") ||
-                        host.endsWith("youtube.com") ||
-                        host.endsWith("youtube-nocookie.com") ||
-                        host.endsWith("ytimg.com")
 
-                val finalRequest = if (isYouTubeMediaHost) {
-                    val clientParam = request.url.queryParameter("c")?.trim().orEmpty()
-                    val userAgent = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveUserAgent(clientParam)
-                    val originReferer = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveOriginReferer(clientParam)
-
-                    val builder = request.newBuilder().header("User-Agent", userAgent)
-                    originReferer.origin?.let { builder.header("Origin", it) }
-                    originReferer.referer?.let { builder.header("Referer", it) }
-                    builder.build()
-                } else {
-                    request
+        val ytProxy = YouTube.proxy
+        if (ytProxy != null) {
+            baseBuilder.proxySelector(object : java.net.ProxySelector() {
+                override fun select(uri: java.net.URI?): List<java.net.Proxy> {
+                    val host = uri?.host.orEmpty()
+                    val isYouTubeHost =
+                        host.endsWith("googlevideo.com") ||
+                            host.endsWith("googleusercontent.com") ||
+                            host.endsWith("youtube.com") ||
+                            host.endsWith("youtube-nocookie.com") ||
+                            host.endsWith("ytimg.com")
+                    return if (isYouTubeHost) listOf(ytProxy) else listOf(java.net.Proxy.NO_PROXY)
                 }
 
-                val response = chain.proceed(finalRequest)
-
-                if (response.code == 416) {
-                    val rangeHeader = request.header("Range")
-                    if (rangeHeader != null) {
-                        Timber.tag("MusicService").w("Handling HTTP 416 for Range: $rangeHeader, returning empty EOF response")
-                        response.close()
-                        return@addInterceptor okhttp3.Response.Builder()
-                            .request(finalRequest)
-                            .protocol(response.protocol)
-                            .code(206)
-                            .message("Partial Content")
-                            .header("Content-Length", "0")
-                            .body(okhttp3.ResponseBody.create(response.body.contentType(), ByteArray(0)))
-                            .build()
-                    }
+                override fun connectFailed(uri: java.net.URI?, sa: java.net.SocketAddress?, ioe: java.io.IOException?) {
+                    // ignore
                 }
+            })
+        }
 
-                response
-            }.build()
+        baseBuilder.addInterceptor { chain ->
+            val request = chain.request()
+            val host = request.url.host
+            val isYouTubeMediaHost =
+                host.endsWith("googlevideo.com") ||
+                    host.endsWith("googleusercontent.com") ||
+                    host.endsWith("youtube.com") ||
+                    host.endsWith("youtube-nocookie.com") ||
+                    host.endsWith("ytimg.com")
+
+            val finalRequest = if (isYouTubeMediaHost) {
+                val clientParam = request.url.queryParameter("c")?.trim().orEmpty()
+                val userAgent = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveUserAgent(clientParam)
+                val originReferer = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveOriginReferer(clientParam)
+
+                val builder = request.newBuilder().header("User-Agent", userAgent)
+                originReferer.origin?.let { builder.header("Origin", it) }
+                originReferer.referer?.let { builder.header("Referer", it) }
+                builder.build()
+            } else {
+                request
+            }
+
+            val response = chain.proceed(finalRequest)
+
+            if (response.code == 416) {
+                val rangeHeader = request.header("Range")
+                if (rangeHeader != null) {
+                    Timber.tag("MusicService").w("Handling HTTP 416 for Range: $rangeHeader, returning empty EOF response")
+                    response.close()
+                    return@addInterceptor okhttp3.Response.Builder()
+                        .request(finalRequest)
+                        .protocol(response.protocol)
+                        .code(206)
+                        .message("Partial Content")
+                        .header("Content-Length", "0")
+                        .body(okhttp3.ResponseBody.create(response.body.contentType(), ByteArray(0)))
+                        .build()
+                }
+            }
+
+            if (response.isSuccessful) {
+                val contentType = response.header("Content-Type")?.lowercase().orEmpty()
+                if (contentType.contains("text/html") ||
+                    contentType.contains("text/plain") ||
+                    contentType.contains("application/json") ||
+                    contentType.contains("application/xml")
+                ) {
+                    response.close()
+                    throw java.io.IOException("Received invalid media Content-Type: $contentType from ${request.url}")
+                }
+            }
+
+            response
+        }.build()
     }
 
     private val binder = MusicBinder()
@@ -1954,7 +1986,10 @@ class MusicService :
 
         Log.e(TAG, "Player error: ${error.errorCodeName}, message: ${error.message}", error)
 
-        player.currentMediaItem?.mediaId?.let { songUrlCache.remove(it) }
+        player.currentMediaItem?.mediaId?.let { mediaId ->
+            songUrlCache.remove(mediaId)
+            tryOrNull { playerCache.removeResource(mediaId) }
+        }
 
         val isConnectionError = (error.cause?.cause is PlaybackException) &&
                 (error.cause?.cause as PlaybackException).errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
@@ -2152,7 +2187,7 @@ class MusicService :
                         val artistName = mediaMetadata.artists.firstOrNull()?.name ?: ""
                         val jsStreamUrl: String? = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
                             runCatching {
-                                kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                                kotlinx.coroutines.withTimeoutOrNull(4000L) {
                                     com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.findMatchAndStreamUrl(
                                         mediaMetadata.title,
                                         artistName,
@@ -2162,6 +2197,7 @@ class MusicService :
                             }.getOrNull()
                         }
                         if (jsStreamUrl != null) {
+                            tryOrNull { playerCache.removeResource(mediaId) }
                             Timber.tag("MusicService").d("JioSaavn Priority: Serving 320k for '${mediaMetadata.title}'")
                             database.query {
                                 upsert(
@@ -2282,6 +2318,7 @@ class MusicService :
                                 )
                             }
                             if (jsStreamUrl != null) {
+                                tryOrNull { playerCache.removeResource(mediaId) }
                                 database.query {
                                     upsert(
                                         FormatEntity(
@@ -2393,8 +2430,21 @@ class MusicService :
         }
     }
 
-    private fun createMediaSourceFactory() =
-        DefaultMediaSourceFactory(createDataSourceFactory())
+    private fun createMediaSourceFactory(): DefaultMediaSourceFactory {
+        val extractorsFactory = ExtractorsFactory {
+            arrayOf(
+                androidx.media3.extractor.mkv.MatroskaExtractor(),
+                androidx.media3.extractor.mp4.Mp4Extractor(androidx.media3.extractor.mp4.Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS),
+                androidx.media3.extractor.mp4.FragmentedMp4Extractor(androidx.media3.extractor.mp4.FragmentedMp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS),
+                androidx.media3.extractor.mp3.Mp3Extractor(),
+                androidx.media3.extractor.ts.AdtsExtractor(),
+                androidx.media3.extractor.ogg.OggExtractor(),
+                androidx.media3.extractor.flac.FlacExtractor(),
+                androidx.media3.extractor.wav.WavExtractor(),
+            )
+        }
+        return DefaultMediaSourceFactory(createDataSourceFactory(), extractorsFactory)
+    }
 
     private fun createRenderersFactory(
         audioProcessors: Array<androidx.media3.common.audio.AudioProcessor> = arrayOf(spatialAudioProcessor, eightDAudioProcessor)
