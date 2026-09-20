@@ -55,6 +55,7 @@ import com.darkxvenom.airbeats.appicon.AppIcon
 import com.darkxvenom.airbeats.appicon.AppIconRepository
 import com.darkxvenom.airbeats.ui.component.DefaultDialog
 import com.darkxvenom.airbeats.ui.component.IconButton
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -273,20 +274,38 @@ fun AppIconScreen(
                                     icon = icon,
                                     isSelected = icon.id == activeIconId,
                                     onClick = {
-                                        activeIconId = icon.id
-                                        coroutineScope.launch {
-                                            Toast.makeText(
-                                                context,
-                                                "Applying ${icon.title} to Home Screen...",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            val success = AppIconRepository.applyCommunityIcon(context, icon)
+                                        if (AppIconRepository.BUILT_IN_ICONS.any { it.id == icon.id }) {
+                                            val success = AppIconRepository.setActiveIcon(context, icon.id)
                                             if (success) {
+                                                activeIconId = icon.id
                                                 Toast.makeText(
                                                     context,
-                                                    "${icon.title} applied! Pin shortcut prompt created.",
-                                                    Toast.LENGTH_LONG
+                                                    "App icon updated to ${icon.title}",
+                                                    Toast.LENGTH_SHORT
                                                 ).show()
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Could not update app icon on this launcher",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        } else {
+                                            activeIconId = icon.id
+                                            coroutineScope.launch {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Applying ${icon.title} to Home Screen...",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                                val success = AppIconRepository.applyCommunityIcon(context, icon)
+                                                if (success) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "${icon.title} applied! Pin shortcut prompt created.",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
                                             }
                                         }
                                     }
