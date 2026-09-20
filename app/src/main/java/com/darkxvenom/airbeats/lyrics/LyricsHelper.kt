@@ -118,10 +118,14 @@ constructor(
         val allResult = mutableListOf<LyricsResult>()
         lyricsProviders.forEach { provider ->
             if (provider.isEnabled(context)) {
-                provider.getAllLyrics(mediaId, songTitle, songArtists, duration) { lyrics ->
-                    val result = LyricsResult(provider.name, lyrics)
-                    allResult += result
-                    callback(result)
+                runCatching {
+                    provider.getAllLyrics(mediaId, songTitle, songArtists, duration) { lyrics ->
+                        val result = LyricsResult(provider.name, lyrics)
+                        allResult += result
+                        callback(result)
+                    }
+                }.onFailure {
+                    reportException(it)
                 }
             }
         }

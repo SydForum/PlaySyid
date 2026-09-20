@@ -5,6 +5,7 @@ import com.darkxvenom.airbeats.lrclib.models.bestMatchingFor
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
@@ -26,6 +27,12 @@ object LrcLib {
                 )
             }
 
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000L
+                connectTimeoutMillis = 10000L
+                socketTimeoutMillis = 10000L
+            }
+
             defaultRequest {
                 url("https://lrclib.net")
             }
@@ -38,13 +45,15 @@ object LrcLib {
         artist: String,
         title: String,
         album: String? = null,
-    ) = client
-        .get("/api/search") {
-            parameter("track_name", title)
-            parameter("artist_name", artist)
-            if (album != null) parameter("album_name", album)
-        }.body<List<Track>>()
-        .filter { it.syncedLyrics != null }
+    ): List<Track> = runCatching {
+        client
+            .get("/api/search") {
+                parameter("track_name", title)
+                parameter("artist_name", artist)
+                if (album != null) parameter("album_name", album)
+            }.body<List<Track>>()
+            .filter { it.syncedLyrics != null }
+    }.getOrElse { emptyList() }
 
     suspend fun getLyrics(
         title: String,
@@ -68,7 +77,7 @@ object LrcLib {
         duration: Int,
         album: String? = null,
         callback: (String) -> Unit,
-    ) {
+    ) = runCatching {
         val tracks = queryLyrics(artist, title, album)
         var count = 0
         var plain = 0
