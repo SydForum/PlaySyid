@@ -1,4 +1,4 @@
-﻿package com.darkxvenom.airbeats.playback
+package com.darkxvenom.airbeats.playback
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
@@ -62,10 +62,14 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     override fun queueInput(inputBuffer: java.nio.ByteBuffer) {
         val frameCount = inputBuffer.remaining() / BYTES_PER_FRAME
         if (frameCount == 0) return
-        val outputBuffer = replaceOutputBuffer(frameCount * BYTES_PER_FRAME)
+        val bytesToProcess = frameCount * BYTES_PER_FRAME
+        val outputBuffer = replaceOutputBuffer(bytesToProcess)
 
         if (!enabled) {
+            val oldLimit = inputBuffer.limit()
+            inputBuffer.limit(inputBuffer.position() + bytesToProcess)
             outputBuffer.put(inputBuffer)
+            inputBuffer.limit(oldLimit)
             outputBuffer.flip()
             return
         }

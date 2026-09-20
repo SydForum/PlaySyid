@@ -107,11 +107,15 @@ class EightDAudioProcessor : BaseAudioProcessor() {
         val frameCount = inputBuffer.remaining() / BYTES_PER_FRAME
         if (frameCount == 0) return
 
-        val outputBuffer = replaceOutputBuffer(frameCount * BYTES_PER_FRAME)
+        val bytesToProcess = frameCount * BYTES_PER_FRAME
+        val outputBuffer = replaceOutputBuffer(bytesToProcess)
 
         // If completely disabled and fully crossfaded out, pass through untouched
         if (!enabled && currentEnabledAlpha <= 0f) {
+            val oldLimit = inputBuffer.limit()
+            inputBuffer.limit(inputBuffer.position() + bytesToProcess)
             outputBuffer.put(inputBuffer)
+            inputBuffer.limit(oldLimit)
             outputBuffer.flip()
             return
         }

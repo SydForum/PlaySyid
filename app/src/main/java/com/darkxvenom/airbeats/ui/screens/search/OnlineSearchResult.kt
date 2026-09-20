@@ -310,8 +310,13 @@ fun OnlineSearchResult(
         }
     }
 
+    val (pureBlack, _) = com.darkxvenom.airbeats.utils.rememberPreference(
+        com.darkxvenom.airbeats.constants.PureBlackKey,
+        defaultValue = false
+    )
+    val chipsBg = if (pureBlack) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.surface
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = chipsBg,
         tonalElevation = 0.dp,
         shadowElevation = 1.dp,
         modifier = Modifier
@@ -368,10 +373,16 @@ fun OnlineSearchResult(
             }
         }
     } else {
-        Box(modifier = Modifier.fillMaxSize()) {
-            com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground(
-                artworkUrl = mediaMetadata?.thumbnailUrl
-            )
+        val (pureBlackPref, _) = com.darkxvenom.airbeats.utils.rememberPreference(
+            com.darkxvenom.airbeats.constants.PureBlackKey,
+            defaultValue = false
+        )
+        val plainBg = if (pureBlackPref) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(plainBg)
+        ) {
             content()
         }
     }

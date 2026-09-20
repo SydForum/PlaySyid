@@ -75,10 +75,7 @@ internal class CrossfadeAudio(
     private var handoffSeekIssued = false
     private var handoffRampStarted = false
 
-    private val handoffReseekMinIntervalMs = 180L
-    private val handoffDriftCorrectionThresholdMs = 220L
-    private val handoffRampStartDriftToleranceMs = 120L
-    private val handoffTimeoutMs = 5000L
+    private val handoffTimeoutMs = 4000L
 
     // ── Buffer Requirement ────────────────────────────────────────────────────
 
@@ -225,7 +222,7 @@ internal class CrossfadeAudio(
                 }
 
                 val remainingMs = (durationMs - positionMs).coerceAtLeast(0L)
-                val tooFarFromEnd = !onTarget && remainingMs > effectiveFadeMs.toLong() + 2000L
+                val tooFarFromEnd = !onTarget && plannedStartMs == null && remainingMs > effectiveFadeMs.toLong() + 2000L
                 val nextChanged =
                     !onTarget && crossfadeTargetIndex != C.INDEX_UNSET && nextIndex != crossfadeTargetIndex
                 if (tooFarFromEnd || nextChanged) {
@@ -375,38 +372,12 @@ internal class CrossfadeAudio(
                 return
             }
 
-            val overlapPositionMs = overlap.currentPosition.coerceAtLeast(0L)
-            val mainPositionMs = player.currentPosition.coerceAtLeast(0L)
-            val positionDriftMs = mainPositionMs - overlapPositionMs
-
-            val shouldResyncMainToOverlap =
-                !handoffSeekIssued || (
-                        abs(positionDriftMs) > handoffDriftCorrectionThresholdMs &&
-                                nowElapsedMs - handoffLastSyncSeekElapsedMs >= handoffReseekMinIntervalMs
-                        )
-
-            if (shouldResyncMainToOverlap) {
-                handoffSeekIssued = true
-                handoffTargetPositionMs = overlapPositionMs
-                val currentIndex = player.currentMediaItemIndex
-                if (currentIndex != C.INDEX_UNSET) {
-                    player.seekTo(currentIndex, handoffTargetPositionMs)
-                    handoffLastSyncSeekElapsedMs = nowElapsedMs
-                }
-                playbackFadeFactor.value = 0f
-                overlap.volume = baseOverlapVolume
-                return
-            }
-
+            // Wait for main player to finish buffering and become ready before ramping
             if (!handoffRampStarted) {
-                val bufferedMs = player.totalBufferedDuration.coerceAtLeast(0L)
-                val mainStable =
-                    player.playbackState == Player.STATE_READY &&
-                            player.isPlaying &&
-                            bufferedMs >= 1200L &&
-                            abs(positionDriftMs) <= handoffRampStartDriftToleranceMs
+                val isPlayerReady = player.playbackState == Player.STATE_READY &&
+                        (player.isPlaying || player.playWhenReady)
 
-                if (!mainStable) {
+                if (!isPlayerReady) {
                     playbackFadeFactor.value = 0f
                     overlap.volume = baseOverlapVolume
                     return
@@ -420,9 +391,10 @@ internal class CrossfadeAudio(
             val elapsed = (nowElapsedMs - handoffStartElapsedMs).coerceAtLeast(0L)
             val t = (elapsed.toFloat() / denom.toFloat()).coerceIn(0f, 1f)
 
-            // Short linear ramp during handoff (450ms)
-            playbackFadeFactor.value = t
-            overlap.volume = (baseOverlapVolume * (1f - t)).coerceIn(0f, 1f)
+            // Smooth equal-power sin/cos ramp during handoff (250ms)
+            val radians = t.toDouble() * (PI / 2.0)
+            playbackFadeFactor.value = sin(radians).toFloat().coerceIn(0f, 1f)
+            overlap.volume = (baseOverlapVolume * cos(radians).toFloat()).coerceIn(0f, 1f)
 
             if (t >= 1f) completeHandoffFromOverlap()
             return
@@ -438,6 +410,16 @@ internal class CrossfadeAudio(
 
         overlap.volume =
             (baseOverlapVolume * sin(radians).toFloat()).coerceIn(0f, maxSafeGainFactor)
+
+        if (t >= 1f) {
+            // Equal-power crossfade completed. Hand over to main player smoothly.
+            val targetIndex = crossfadeTargetIndex
+            val overlapPos = overlap.currentPosition.coerceAtLeast(0L)
+            if (targetIndex != C.INDEX_UNSET && targetIndex < player.mediaItemCount && player.currentMediaItemIndex != targetIndex) {
+                player.seekTo(targetIndex, overlapPos)
+            }
+            beginHandoffFromOverlap()
+        }
     }
 
     // ── MediaItem Transition ──────────────────────────────────────────────────
@@ -467,14 +449,24 @@ internal class CrossfadeAudio(
         }
 
         val overlapPositionMs = overlap.currentPosition.coerceAtLeast(0L)
+        val currentIndex = player.currentMediaItemIndex
+        val targetIndex = crossfadeTargetIndex
+        if (targetIndex != C.INDEX_UNSET && currentIndex != targetIndex && targetIndex < player.mediaItemCount) {
+            player.seekTo(targetIndex, overlapPositionMs)
+        } else if (currentIndex != C.INDEX_UNSET) {
+            val mainPos = player.currentPosition.coerceAtLeast(0L)
+            if (abs(mainPos - overlapPositionMs) > 250L) {
+                player.seekTo(currentIndex, overlapPositionMs)
+            }
+        }
 
         handoffActive = true
-        handoffSeekIssued = false
+        handoffSeekIssued = true
         handoffRampStarted = false
         handoffTargetPositionMs = overlapPositionMs
         handoffStartElapsedMs = android.os.SystemClock.elapsedRealtime()
         handoffLastSyncSeekElapsedMs = 0L
-        handoffDurationMs = 450
+        handoffDurationMs = 250
         playbackFadeFactor.value = 0f
     }
 

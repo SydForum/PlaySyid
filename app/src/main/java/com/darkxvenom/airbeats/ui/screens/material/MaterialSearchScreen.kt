@@ -101,12 +101,17 @@ fun MaterialSearchScreen(
     val playerConnection = LocalPlayerConnection.current
     val mediaMetadata by playerConnection?.mediaMetadata?.collectAsState() ?: remember { mutableStateOf(null) }
 
+    val (pureBlack, _) = com.darkxvenom.airbeats.utils.rememberPreference(
+        com.darkxvenom.airbeats.constants.PureBlackKey,
+        defaultValue = false
+    )
+    val plainBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.background
+
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(plainBg)
     ) {
-        com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground(
-            artworkUrl = mediaMetadata?.thumbnailUrl
-        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
