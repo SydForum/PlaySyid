@@ -359,13 +359,13 @@ fun MaterialHomeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 MaterialQuickTile(
-                                    title = "New Releases",
-                                    subtitle = "Fresh drops",
-                                    icon = Icons.Filled.NewReleases,
+                                    title = "History",
+                                    subtitle = "Recent listens",
+                                    icon = Icons.Filled.History,
                                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { navController.navigate("new_release") }
+                                    onClick = { navController.navigate("history") }
                                 )
                                 MaterialQuickTile(
                                     title = "Stats",
