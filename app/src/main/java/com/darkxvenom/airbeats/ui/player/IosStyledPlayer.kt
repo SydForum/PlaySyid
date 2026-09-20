@@ -47,6 +47,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.darkxvenom.airbeats.ui.component.SongDetailsDialog
+import com.darkxvenom.airbeats.ui.component.AudioPipelineDialog
+import com.darkxvenom.airbeats.ui.component.AudioQualityTag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -442,48 +444,29 @@ private fun V8PlayerControlsContent(
 
         Spacer(Modifier.height(4.dp))
 
+        var showAudioPipelineDialog by rememberSaveable { mutableStateOf(false) }
+
+        if (showAudioPipelineDialog) {
+            AudioPipelineDialog(
+                currentFormat = currentFormat,
+                mediaMetadata = mediaMetadata,
+                onDismiss = { showAudioPipelineDialog = false },
+            )
+        }
+
         PlayerTimeLabel(
             sliderPosition = sliderPosition,
             position = position,
             duration = duration,
             textBackgroundColor = textBackgroundColor,
             showRemainingTime = true,
-            centerContent = currentFormat?.let { format ->
-                {
-                    val codec = format.mimeType.substringAfter("/").uppercase()
-                    val isDolbyAtmos = format.mimeType.contains("eac3", ignoreCase = true) || format.mimeType.contains("dolby", ignoreCase = true)
-                    val label = when {
-                        isDolbyAtmos -> "Dolby Atmos"
-                        codec.contains("FLAC") || codec.contains("ALAC") -> "Lossless"
-                        codec.contains("OPUS") -> codec
-                        codec.contains("AAC") -> codec
-                        codec.contains("MP4A") -> "AAC"
-                        codec.contains("VORBIS") -> "Vorbis"
-                        else -> codec
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = textBackgroundColor.copy(alpha = 0.12f),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        ) {
-                            Icon(
-                                painter = painterResource(if (isDolbyAtmos) R.drawable.ic_dolby_atmos else R.drawable.graphic_eq),
-                                contentDescription = null,
-                                modifier = Modifier.size(if (isDolbyAtmos) 16.dp else 14.dp),
-                                tint = textBackgroundColor.copy(alpha = 0.8f),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = textBackgroundColor.copy(alpha = 0.8f),
-                            )
-                        }
-                    }
-                }
+            centerContent = {
+                AudioQualityTag(
+                    currentFormat = currentFormat,
+                    mediaMetadata = mediaMetadata,
+                    tint = textBackgroundColor,
+                    onClick = { showAudioPipelineDialog = true },
+                )
             },
         )
 

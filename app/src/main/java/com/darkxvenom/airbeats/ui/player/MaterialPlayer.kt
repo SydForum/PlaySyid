@@ -115,6 +115,8 @@ import com.darkxvenom.airbeats.ui.component.BottomSheetState
 import com.darkxvenom.airbeats.ui.component.BlurredBackground
 import com.darkxvenom.airbeats.ui.component.MenuState
 import com.darkxvenom.airbeats.ui.component.SongDetailsDialog
+import com.darkxvenom.airbeats.ui.component.AudioPipelineDialog
+import com.darkxvenom.airbeats.ui.component.AudioQualityTag
 import com.darkxvenom.airbeats.ui.menu.AudioEffectPreset
 import com.darkxvenom.airbeats.ui.menu.InAppEqualizerSheet
 import com.darkxvenom.airbeats.ui.menu.PlayerMenu
@@ -193,6 +195,9 @@ fun MaterialPlayer(
     var showDetailsDialog by rememberSaveable { mutableStateOf(false) }
     var showDeviceSheet by rememberSaveable { mutableStateOf(false) }
     var showEqualizerSheet by rememberSaveable { mutableStateOf(false) }
+    var showAudioPipelineDialog by rememberSaveable { mutableStateOf(false) }
+
+    val currentFormat by playerConnection.currentFormat.collectAsState(initial = null)
 
     val availableDevices = remember { getAvailableDevices(context) }
     val activeDevice = remember(availableDevices) { getActiveDevice(availableDevices) }
@@ -419,6 +424,14 @@ fun MaterialPlayer(
     if (showEqualizerSheet) {
         InAppEqualizerSheet(
             onDismiss = { showEqualizerSheet = false }
+        )
+    }
+
+    if (showAudioPipelineDialog) {
+        AudioPipelineDialog(
+            currentFormat = currentFormat,
+            mediaMetadata = mediaMetadata,
+            onDismiss = { showAudioPipelineDialog = false }
         )
     }
 
@@ -695,6 +708,12 @@ fun MaterialPlayer(
                             fontSize = 13.sp
                         ),
                         color = onBackgroundColor.copy(alpha = 0.85f)
+                    )
+                    AudioQualityTag(
+                        currentFormat = currentFormat,
+                        mediaMetadata = mediaMetadata,
+                        tint = onBackgroundColor,
+                        onClick = { showAudioPipelineDialog = true }
                     )
                     Text(
                         text = if (duration > 0L) makeTimeString(duration) else "0:00",

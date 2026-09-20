@@ -2026,6 +2026,21 @@ class MusicService :
                 }
 
                 if (streamUrl != null) {
+                    database.query {
+                        upsert(
+                            FormatEntity(
+                                id = mediaId,
+                                itag = 141,
+                                mimeType = "audio/mp4",
+                                codecs = "mp4a.40.2",
+                                bitrate = 320000,
+                                sampleRate = 44100,
+                                contentLength = 0L,
+                                loudnessDb = null,
+                                playbackUrl = streamUrl
+                            )
+                        )
+                    }
                     songUrlCache[mediaId] = CachedSongUrl(
                         url = streamUrl,
                         expiresAt = System.currentTimeMillis() + 3600000L,
@@ -2122,6 +2137,21 @@ class MusicService :
                         }
                         if (jsStreamUrl != null) {
                             Timber.tag("MusicService").d("JioSaavn Priority: Serving 320k for '${mediaMetadata.title}'")
+                            database.query {
+                                upsert(
+                                    FormatEntity(
+                                        id = mediaId,
+                                        itag = 141,
+                                        mimeType = "audio/mp4",
+                                        codecs = "mp4a.40.2",
+                                        bitrate = 320000,
+                                        sampleRate = 44100,
+                                        contentLength = 0L,
+                                        loudnessDb = null,
+                                        playbackUrl = jsStreamUrl
+                                    )
+                                )
+                            }
                             songUrlCache[mediaId] = CachedSongUrl(
                                 url = jsStreamUrl,
                                 expiresAt = System.currentTimeMillis() + 3600000L,
@@ -2226,6 +2256,21 @@ class MusicService :
                                 )
                             }
                             if (jsStreamUrl != null) {
+                                database.query {
+                                    upsert(
+                                        FormatEntity(
+                                            id = mediaId,
+                                            itag = 141,
+                                            mimeType = "audio/mp4",
+                                            codecs = "mp4a.40.2",
+                                            bitrate = 320000,
+                                            sampleRate = 44100,
+                                            contentLength = 0L,
+                                            loudnessDb = null,
+                                            playbackUrl = jsStreamUrl
+                                        )
+                                    )
+                                }
                                 songUrlCache[mediaId] = CachedSongUrl(
                                     url = jsStreamUrl,
                                     expiresAt = System.currentTimeMillis() + 3600000L,

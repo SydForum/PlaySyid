@@ -190,6 +190,8 @@ import com.darkxvenom.airbeats.ui.component.LocalBottomSheetPageState
 import com.darkxvenom.airbeats.ui.component.PlayerSliderTrack
 import com.darkxvenom.airbeats.ui.component.ResizableIconButton
 import com.darkxvenom.airbeats.ui.component.rememberBottomSheetState
+import com.darkxvenom.airbeats.ui.component.AudioPipelineDialog
+import com.darkxvenom.airbeats.ui.component.AudioQualityTag
 import com.darkxvenom.airbeats.ui.menu.PlayerMenu
 import com.darkxvenom.airbeats.ui.menu.AddToPlaylistDialog
 import com.darkxvenom.airbeats.innertube.YouTube
@@ -757,6 +759,18 @@ fun BottomSheetPlayer(
     }
 
     val currentFormat by playerConnection.currentFormat.collectAsState(initial = null)
+
+    var showAudioPipelineDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showAudioPipelineDialog) {
+        AudioPipelineDialog(
+            currentFormat = currentFormat,
+            mediaMetadata = mediaMetadata,
+            onDismiss = { showAudioPipelineDialog = false }
+        )
+    }
 
     var showDetailsDialog by rememberSaveable {
         mutableStateOf(false)
@@ -1424,6 +1438,13 @@ fun BottomSheetPlayer(
                     overflow = TextOverflow.Ellipsis,
                 )
 
+                AudioQualityTag(
+                    currentFormat = currentFormat,
+                    mediaMetadata = mediaMetadata,
+                    tint = TextBackgroundColor,
+                    onClick = { showAudioPipelineDialog = true }
+                )
+
                 Text(
                     text = if (duration != C.TIME_UNSET) makeTimeString(duration) else "",
                     style = MaterialTheme.typography.labelMedium,
@@ -1774,29 +1795,12 @@ fun BottomSheetPlayer(
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White.copy(alpha = 0.88f),
                     )
-                    codecLabel?.let { label ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(Color.White.copy(alpha = 0.14f))
-                                .padding(horizontal = 9.dp, vertical = 4.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Image(
-                                    painter = painterResource(if (isDolbyAtmos) R.drawable.ic_dolby_atmos else R.drawable.graphic_eq),
-                                    contentDescription = null,
-                                    colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.78f)),
-                                    modifier = Modifier.size(if (isDolbyAtmos) 16.dp else 14.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.78f),
-                                )
-                            }
-                        }
-                    }
+                    AudioQualityTag(
+                        currentFormat = currentFormat,
+                        mediaMetadata = mediaMetadata,
+                        tint = Color.White,
+                        onClick = { showAudioPipelineDialog = true }
+                    )
                     Text(
                         text = if (duration != C.TIME_UNSET) "-${makeTimeString((duration - (sliderPosition ?: position)).coerceAtLeast(0L))}" else "",
                         style = MaterialTheme.typography.labelMedium,
