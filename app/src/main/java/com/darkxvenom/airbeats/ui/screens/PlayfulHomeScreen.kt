@@ -177,7 +177,7 @@ fun PlayfulHomeScreen(
                         hazeState = hazeState,
                         pageColor = Color(0xFFFFD54F),
                         scrimColor = Color(0xFFFFD54F),
-                        height = padding.calculateTopPadding() + 76.dp + 36.dp,
+                        height = padding.calculateTopPadding() + 76.dp + com.darkxvenom.airbeats.ui.component.FADE_RUN,
                         alpha = blurAlpha,
                         modifier = Modifier.align(Alignment.TopCenter)
                     )

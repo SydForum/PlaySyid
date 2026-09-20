@@ -25,7 +25,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 
-private val FADE_RUN = 36.dp
+val FADE_RUN = 56.dp
 private const val PEAK = 0.75f
 private const val SCRIM_PEAK = 0.42f
 private const val SCRIM_STOPS = 12

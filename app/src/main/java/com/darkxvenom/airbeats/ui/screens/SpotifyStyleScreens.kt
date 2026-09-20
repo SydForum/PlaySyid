@@ -704,7 +704,7 @@ private fun SpotifyHeader(
                 hazeState = hazeState,
                 pageColor = SpotifyBg,
                 scrimColor = SpotifyBg,
-                height = statusBarPadding + headerContentHeight + 36.dp,
+                height = statusBarPadding + headerContentHeight + com.darkxvenom.airbeats.ui.component.FADE_RUN,
                 alpha = blurAlpha,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
