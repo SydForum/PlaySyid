@@ -12,7 +12,7 @@
 #   public *;
 #}
 
-# Preserve line number information for Crashlytics and debugging stack traces
+# Preserve line number information for debugging stack traces
 -keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to

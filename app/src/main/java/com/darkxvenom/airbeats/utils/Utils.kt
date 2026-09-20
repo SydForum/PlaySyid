@@ -1,6 +1,6 @@
 package com.darkxvenom.airbeats.utils
 
-import com.google.firebase.crashlytics.FirebaseCrashlytics
+import timber.log.Timber
 
 fun reportException(throwable: Throwable) {
     if (throwable is java.util.concurrent.CancellationException ||
@@ -8,7 +8,5 @@ fun reportException(throwable: Throwable) {
         return
     }
     throwable.printStackTrace()
-    runCatching {
-        FirebaseCrashlytics.getInstance().recordException(throwable)
-    }
+    Timber.e(throwable, "Non-fatal exception reported")
 }

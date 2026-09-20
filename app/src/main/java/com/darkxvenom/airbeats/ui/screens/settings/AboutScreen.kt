@@ -599,10 +599,10 @@ fun AboutScreen(
                                         versionTapCount = 0
                                         android.widget.Toast.makeText(
                                             context,
-                                            "Triggering test crash for Firebase Crashlytics...",
+                                            "Triggering test crash...",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
-                                        throw RuntimeException("AirBeats Test Crash for Firebase Crashlytics & Telegram Topic 224")
+                                        throw RuntimeException("AirBeats Test Crash for Telegram Topic 224")
                                     }
                                 }
                                 .border(

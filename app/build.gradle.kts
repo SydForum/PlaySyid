@@ -8,7 +8,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     kotlin("kapt")
     id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.compose.compiler)
@@ -212,16 +211,12 @@ dependencies {
     implementation(libs.work.runtime.ktx)
     implementation(libs.constraintlayout)
     implementation(libs.constraintlayout.compose)
-    implementation(libs.itextg)
-    implementation(libs.mpandroidchart)
     implementation(libs.foundation)
     implementation(libs.ui.graphics)
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
     implementation("com.google.firebase:firebase-messaging")
-    implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-config")
     implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-analytics")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)
@@ -268,11 +263,3 @@ dependencies {
     implementation(libs.timber)
     testImplementation(libs.junit)
 }
-
-
-
-
-
-
-
-
