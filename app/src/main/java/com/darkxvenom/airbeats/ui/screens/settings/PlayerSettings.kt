@@ -54,8 +54,17 @@ import com.darkxvenom.airbeats.constants.AutoLoadMoreKey
 import com.darkxvenom.airbeats.constants.AutomixEnabledKey
 import com.darkxvenom.airbeats.constants.AutomixPerformanceMode
 import com.darkxvenom.airbeats.constants.AutomixPerformanceModeKey
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material3.SliderDefaults
+import kotlin.math.roundToInt
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
 import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
+import com.darkxvenom.airbeats.constants.EightDAudioEnabledKey
+import com.darkxvenom.airbeats.constants.EightDAudioLevelKey
 import com.darkxvenom.airbeats.constants.BitPerfectEnabledKey
 import com.darkxvenom.airbeats.constants.StreamingQualityPresetKey
 import com.darkxvenom.airbeats.constants.QualityTiers
@@ -98,6 +107,14 @@ fun PlayerSettings(
     val (spatialAudio, onSpatialAudioChange) = rememberPreference(
         SpatialAudioEnabledKey,
         defaultValue = false
+    )
+    val (eightDAudio, onEightDAudioChange) = rememberPreference(
+        EightDAudioEnabledKey,
+        defaultValue = false
+    )
+    val (eightDAudioLevel, onEightDAudioLevelChange) = rememberPreference(
+        EightDAudioLevelKey,
+        defaultValue = 8
     )
     val (automix, onAutomixChange) = rememberPreference(
         AutomixEnabledKey,
@@ -248,6 +265,118 @@ fun PlayerSettings(
                         playerConnection?.service?.setSpatialAudioEnabled(enabled)
                     }
                 )},
+
+                {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        SwitchPreference(
+                            title = { Text("8D Audio") },
+                            description = if (eightDAudio) "${eightDAudioLevel}D Spatial Orbit • Best with headphones or dual speakers" else "Rotates music in a 360° circle around your head (requires headphones or dual speakers)",
+                            icon = { Icon(painterResource(R.drawable.graphic_eq), null) },
+                            checked = eightDAudio,
+                            onCheckedChange = { enabled ->
+                                onEightDAudioChange(enabled)
+                                playerConnection?.service?.setEightDAudioEnabled(enabled)
+                            }
+                        )
+
+                        AnimatedVisibility(
+                            visible = eightDAudio,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 20.dp, end = 20.dp, bottom = 14.dp, top = 2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "8D Effect Intensity",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = MaterialTheme.colorScheme.primary,
+                                            ) {
+                                                Text(
+                                                    text = "${eightDAudioLevel}D",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = when {
+                                                eightDAudioLevel <= 3 -> "Gentle & Slow Orbit (~25s per circle)"
+                                                eightDAudioLevel <= 7 -> "Moderate Spatial Rotation (~14s per circle)"
+                                                eightDAudioLevel == 8 -> "Classic 8D Orbit (~9s per circle)"
+                                                eightDAudioLevel <= 12 -> "Fast Dynamic Orbit (~6s per circle)"
+                                                else -> "Extreme Rapid 16D Orbit (~3.5s per circle)"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(4.dp))
+
+                                Slider(
+                                    value = eightDAudioLevel.toFloat(),
+                                    onValueChange = { newLevel ->
+                                        val intLevel = newLevel.roundToInt().coerceIn(1, 16)
+                                        if (intLevel != eightDAudioLevel) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onEightDAudioLevelChange(intLevel)
+                                            playerConnection?.service?.setEightDAudioLevel(intLevel)
+                                        }
+                                    },
+                                    valueRange = 1f..16f,
+                                    steps = 14,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "1D (Subtle)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    )
+                                    Text(
+                                        text = "8D (Classic)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    )
+                                    Text(
+                                        text = "16D (Extreme)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
 
                 {PreferenceEntry(
                     title = { Text(stringResource(R.string.dolby_atmos_system_panel)) },

@@ -443,6 +443,8 @@ val EqualizerPresetKey = stringPreferencesKey("equalizerPreset")
 
 val DolbyAtmosEnabledKey = booleanPreferencesKey("dolbyAtmosEnabled")
 val SpatialAudioEnabledKey = booleanPreferencesKey("spatialAudioEnabled")
+val EightDAudioEnabledKey = booleanPreferencesKey("eight_d_audio_enabled")
+val EightDAudioLevelKey = intPreferencesKey("eight_d_audio_level")
 val AutomixEnabledKey = booleanPreferencesKey("automixEnabled")
 val AutomixPerformanceModeKey = stringPreferencesKey("automixPerformanceMode")
 val RepeatModeKey = intPreferencesKey("repeatMode")

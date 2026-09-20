@@ -82,6 +82,8 @@ import com.darkxvenom.airbeats.constants.DynamicIslandKey
 import com.darkxvenom.airbeats.constants.EnableDiscordRPCKey
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
 import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
+import com.darkxvenom.airbeats.constants.EightDAudioEnabledKey
+import com.darkxvenom.airbeats.constants.EightDAudioLevelKey
 import com.darkxvenom.airbeats.constants.BitPerfectEnabledKey
 import com.darkxvenom.airbeats.constants.StreamingQualityPresetKey
 import com.darkxvenom.airbeats.constants.QualityTiers
@@ -296,8 +298,11 @@ class MusicService :
     private var equalizerSessionId: Int = C.AUDIO_SESSION_ID_UNSET
     val equalizerState = MutableStateFlow(EqualizerUiState())
     val spatialAudioProcessor = SpatialAudioProcessor()
+    val eightDAudioProcessor = EightDAudioProcessor()
     val dolbyAtmosEnabled = MutableStateFlow(true)
     val spatialAudioEnabled = MutableStateFlow(false)
+    val eightDAudioEnabled = MutableStateFlow(false)
+    val eightDAudioLevel = MutableStateFlow(8)
     val isTrackDolbyAtmos = MutableStateFlow(false)
     val automixEnabled = MutableStateFlow(false)
     val automixPerformanceMode = MutableStateFlow(AutomixPerformanceMode.BALANCED)
@@ -439,10 +444,12 @@ class MusicService :
                     equalizer?.enabled = false
                     loudnessEnhancer?.enabled = false
                     spatialAudioProcessor.enabled = false
+                    eightDAudioProcessor.enabled = false
                 } else {
                     setupEqualizer()
                     setupLoudnessEnhancer()
                     updateSpatialAudio()
+                    updateEightDAudio()
                 }
             }
 
@@ -477,6 +484,22 @@ class MusicService :
             .collectLatest(scope) { enabled ->
                 spatialAudioEnabled.value = enabled
                 updateSpatialAudio()
+            }
+
+        dataStore.data
+            .map { it[EightDAudioEnabledKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                eightDAudioEnabled.value = enabled
+                updateEightDAudio()
+            }
+
+        dataStore.data
+            .map { it[EightDAudioLevelKey] ?: 8 }
+            .distinctUntilChanged()
+            .collectLatest(scope) { level ->
+                eightDAudioLevel.value = level
+                eightDAudioProcessor.level = level
             }
 
         dataStore.data
@@ -1621,6 +1644,35 @@ class MusicService :
         spatialAudioProcessor.enabled = (spatialAudioEnabled.value || dolbyAtmosEnabled.value) && !isNativeAtmos
     }
 
+    fun setEightDAudioEnabled(enabled: Boolean) {
+        eightDAudioEnabled.value = enabled
+        updateEightDAudio()
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[EightDAudioEnabledKey] = enabled
+            }
+        }
+    }
+
+    fun setEightDAudioLevel(level: Int) {
+        val clamped = level.coerceIn(1, 16)
+        eightDAudioLevel.value = clamped
+        eightDAudioProcessor.level = clamped
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[EightDAudioLevelKey] = clamped
+            }
+        }
+    }
+
+    fun updateEightDAudio() {
+        if (bitPerfectEnabled.value && isBitPerfectActive.value) {
+            eightDAudioProcessor.enabled = false
+            return
+        }
+        eightDAudioProcessor.enabled = eightDAudioEnabled.value
+    }
+
     override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
         var isDolby = false
         for (group in tracks.groups) {
@@ -2187,7 +2239,7 @@ class MusicService :
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                 .setAudioProcessorChain(
                     DefaultAudioSink.DefaultAudioProcessorChain(
-                        arrayOf(spatialAudioProcessor),
+                        arrayOf(spatialAudioProcessor, eightDAudioProcessor),
                         SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
                         SonicAudioProcessor(),
                     ),
