@@ -4,15 +4,29 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceInfo
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.TextUnit
+import com.darkxvenom.airbeats.lyrics.WordTimestamp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -225,7 +239,43 @@ fun MaterialPlayer(
     val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
 
     val parsedLyrics = remember(currentLyrics?.lyrics) {
-        LyricsTranslationHelper.parseLyricsToEntries(currentLyrics?.lyrics)
+        val raw = LyricsTranslationHelper.parseLyricsToEntries(currentLyrics?.lyrics)
+        raw.mapIndexed { index, entry ->
+            if (entry.words != null || entry.text.isBlank() || entry.time < 0) {
+                entry
+            } else {
+                val nextEntry = raw.getOrNull(index + 1)
+                val lineDurationMs = if (nextEntry != null && nextEntry.time > entry.time) {
+                    (nextEntry.time - entry.time).coerceIn(800L, 10000L)
+                } else {
+                    4000L
+                }
+                val lineStartSec = entry.time / 1000.0
+                val tokens = entry.text.split(Regex("\\s+")).filter { it.isNotBlank() }
+                if (tokens.isEmpty()) return@mapIndexed entry
+
+                val totalChars = tokens.sumOf { it.length }.coerceAtLeast(1)
+                val words = mutableListOf<WordTimestamp>()
+                var currentOffsetMs = 0.0
+
+                tokens.forEachIndexed { wordIdx, token ->
+                    val weight = token.length.toDouble() / totalChars
+                    val wordDurMs = lineDurationMs * weight
+                    val wordStartSec = lineStartSec + (currentOffsetMs / 1000.0)
+                    val wordEndSec = wordStartSec + (wordDurMs / 1000.0)
+                    val wordText = if (wordIdx < tokens.lastIndex) "$token " else token
+                    words.add(
+                        WordTimestamp(
+                            text = wordText,
+                            startTime = wordStartSec,
+                            endTime = wordEndSec,
+                        )
+                    )
+                    currentOffsetMs += wordDurMs
+                }
+                entry.copy(words = words)
+            }
+        }
     }
 
     DisposableEffect(parsedLyrics) {
@@ -284,6 +334,48 @@ fun MaterialPlayer(
 
     val currentLyricText = remember(activeEntry, activeTranslatedText) {
         activeTranslatedText?.takeIf { it.isNotBlank() } ?: activeEntry?.text
+    }
+
+    val activeWords = remember(activeEntry, activeTranslatedText) {
+        if (!activeTranslatedText.isNullOrBlank() && activeEntry != null && activeEntry.time >= 0) {
+            val nextEntry = parsedLyrics.getOrNull(parsedLyrics.indexOf(activeEntry) + 1)
+            val lineDurationMs = if (nextEntry != null && nextEntry.time > activeEntry.time) {
+                (nextEntry.time - activeEntry.time).coerceIn(800L, 10000L)
+            } else {
+                4000L
+            }
+            val lineStartSec = activeEntry.time / 1000.0
+            val tokens = activeTranslatedText!!.split(Regex("\\s+")).filter { it.isNotBlank() }
+            val totalChars = tokens.sumOf { it.length }.coerceAtLeast(1)
+            val words = mutableListOf<WordTimestamp>()
+            var currentOffsetMs = 0.0
+            tokens.forEachIndexed { wordIdx, token ->
+                val weight = token.length.toDouble() / totalChars
+                val wordDurMs = lineDurationMs * weight
+                val wordStartSec = lineStartSec + (currentOffsetMs / 1000.0)
+                val wordEndSec = wordStartSec + (wordDurMs / 1000.0)
+                val wordText = if (wordIdx < tokens.lastIndex) "$token " else token
+                words.add(
+                    WordTimestamp(
+                        text = wordText,
+                        startTime = wordStartSec,
+                        endTime = wordEndSec,
+                    )
+                )
+                currentOffsetMs += wordDurMs
+            }
+            words
+        } else {
+            activeEntry?.words
+        }
+    }
+
+    val lyricLineData = remember(activeEntry, currentLyricText, activeWords) {
+        LyricsLineData(
+            time = activeEntry?.time ?: -1L,
+            text = currentLyricText,
+            words = activeWords,
+        )
     }
 
     // Play/Pause button shape controlled by user preference (Flower, Cookie, etc.)
@@ -485,19 +577,61 @@ fun MaterialPlayer(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(onClick = onOpenFullscreenLyrics)
-                        .padding(vertical = 2.dp)
+                        .padding(vertical = 4.dp)
                 ) {
-                    Text(
-                        text = currentLyricText?.takeIf { it.isNotBlank() } ?: "Tap to view lyrics",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        ),
-                        color = onBackgroundColor.copy(alpha = 0.70f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    AnimatedContent(
+                        targetState = lyricLineData,
+                        transitionSpec = {
+                            (slideInVertically(animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)) { (it * 0.75f).toInt() } + fadeIn(tween(350)))
+                                .togetherWith(slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { -(it * 0.75f).toInt() } + fadeOut(tween(200)))
+                        },
+                        contentAlignment = Alignment.CenterStart,
+                        label = "lyrics_line_transition",
                         modifier = Modifier.weight(1f, fill = false)
-                    )
+                    ) { state ->
+                        if (state.text.isNullOrBlank()) {
+                            Text(
+                                text = "Tap to view lyrics",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp
+                                ),
+                                color = onBackgroundColor.copy(alpha = 0.55f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        } else {
+                            val words = state.words
+                            if (!words.isNullOrEmpty()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                                ) {
+                                    words.forEach { word ->
+                                        AnimatedWordPreview(
+                                            word = word,
+                                            currentPositionMs = position,
+                                            activeColor = onBackgroundColor,
+                                            dimColor = onBackgroundColor.copy(alpha = 0.40f),
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = state.text,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp
+                                    ),
+                                    color = onBackgroundColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.width(6.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
@@ -890,6 +1024,105 @@ private fun MaterialPillButton(
                 contentDescription = null,
                 tint = contentColor.copy(alpha = 0.50f),
                 modifier = Modifier.size(10.dp)
+            )
+        }
+    }
+}
+
+private data class LyricsLineData(
+    val time: Long,
+    val text: String?,
+    val words: List<WordTimestamp>?,
+)
+
+@Composable
+private fun AnimatedWordPreview(
+    word: WordTimestamp,
+    currentPositionMs: Long,
+    activeColor: Color,
+    dimColor: Color,
+    fontSize: TextUnit = 14.sp,
+) {
+    val wordStartMs = (word.startTime * 1000).toLong()
+    val wordEndMs = (word.endTime * 1000).toLong()
+    val wordDuration = (wordEndMs - wordStartMs).coerceAtLeast(1L)
+    val isWordComplete = currentPositionMs >= wordEndMs
+    val isWordActive = currentPositionMs in wordStartMs until wordEndMs
+
+    val progress = when {
+        isWordComplete -> 1f
+        currentPositionMs <= wordStartMs -> 0f
+        else -> ((currentPositionMs - wordStartMs).toFloat() / wordDuration).coerceIn(0f, 1f)
+    }
+
+    val sinProgress = kotlin.math.sin(progress * kotlin.math.PI).toFloat()
+    val wordScale = 1f + (0.015f * sinProgress)
+    val targetFloat = if (isWordActive) -3.5f * sinProgress else 0f
+    val floatOffset by animateFloatAsState(
+        targetValue = targetFloat,
+        animationSpec = tween(
+            durationMillis = if (isWordActive) 50 else 350,
+            easing = FastOutSlowInEasing
+        ),
+        label = "word_float"
+    )
+    val glowProgress = (progress * 2f).coerceAtMost(1f)
+    val glowAlpha = if (isWordActive) glowProgress * 0.45f else 0f
+    val glowRadius = if (isWordActive) glowProgress * 10f else 0f
+
+    Box(
+        modifier = Modifier.graphicsLayer {
+            translationY = floatOffset * density
+            scaleX = wordScale
+            scaleY = wordScale
+        }
+    ) {
+        // Dimmed base text
+        Text(
+            text = word.text,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = fontSize,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = dimColor,
+            maxLines = 1,
+            softWrap = false,
+        )
+        // Liquid sweep overlay text: pops up, adds soft glow, and sweeps to pure active color
+        if (isWordComplete || isWordActive) {
+            Text(
+                text = word.text,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = fontSize,
+                    fontWeight = FontWeight.SemiBold,
+                    shadow = if (glowAlpha > 0f) {
+                        Shadow(
+                            color = activeColor.copy(alpha = glowAlpha),
+                            offset = Offset.Zero,
+                            blurRadius = glowRadius.coerceAtLeast(1f)
+                        )
+                    } else null,
+                ),
+                color = activeColor,
+                maxLines = 1,
+                softWrap = false,
+                modifier = if (isWordActive && !isWordComplete) {
+                    Modifier
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            drawContent()
+                            val edgeWidth = 6.dp.toPx()
+                            val center = (size.width + edgeWidth * 2) * progress - edgeWidth
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(Color.Black, Color.Transparent),
+                                    startX = center - edgeWidth,
+                                    endX = center + edgeWidth,
+                                ),
+                                blendMode = BlendMode.DstIn,
+                            )
+                        }
+                } else Modifier
             )
         }
     }
