@@ -45,6 +45,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.res.painterResource
+import com.darkxvenom.airbeats.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -112,6 +114,11 @@ fun MaterialSearchScreen(
     val plainBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.background
     var selectedTab by remember { mutableStateOf(com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL) }
     val chartsViewModel: com.darkxvenom.airbeats.viewmodels.ChartsViewModel = hiltViewModel()
+    var showRegionSheet by remember { mutableStateOf(false) }
+    var regionCode by com.darkxvenom.airbeats.utils.rememberPreference(
+        com.darkxvenom.airbeats.charts.ChartRegionKey,
+        defaultValue = "system"
+    )
 
     Box(
         modifier = Modifier
@@ -302,6 +309,14 @@ fun MaterialSearchScreen(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                        } else if (selectedTab == com.darkxvenom.airbeats.ui.component.SearchTab.AIRBEATS_CHARTS) {
+                            IconButton(onClick = { showRegionSheet = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.globe_search),
+                                    contentDescription = "Select Region",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     },
                     singleLine = true,
@@ -317,6 +332,17 @@ fun MaterialSearchScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+
+        if (showRegionSheet) {
+            com.darkxvenom.airbeats.charts.ChartRegionSheet(
+                currentRegionSlug = regionCode,
+                onRegionSelected = { selected ->
+                    regionCode = selected
+                    showRegionSheet = false
+                },
+                onDismiss = { showRegionSheet = false }
+            )
         }
     }
 }

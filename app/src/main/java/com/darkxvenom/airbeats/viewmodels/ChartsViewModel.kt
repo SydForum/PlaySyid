@@ -2,79 +2,214 @@ package com.darkxvenom.airbeats.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
+import com.darkxvenom.airbeats.charts.AppleMusicChartsScraper
+import com.darkxvenom.airbeats.charts.ChartAlbum
+import com.darkxvenom.airbeats.charts.ChartArtist
+import com.darkxvenom.airbeats.charts.ChartTrack
 import com.darkxvenom.airbeats.innertube.YouTube
-import com.darkxvenom.airbeats.innertube.pages.ChartsPage
+import com.darkxvenom.airbeats.innertube.models.AlbumItem
+import com.darkxvenom.airbeats.innertube.models.ArtistItem
+import com.darkxvenom.airbeats.innertube.models.SongItem
+import com.darkxvenom.airbeats.innertube.models.WatchEndpoint
+import com.darkxvenom.airbeats.models.toMediaMetadata
+import com.darkxvenom.airbeats.playback.PlayerConnection
+import com.darkxvenom.airbeats.playback.queues.YouTubeQueue
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
 class ChartsViewModel @Inject constructor() : ViewModel() {
-    private val _chartsPage = MutableStateFlow<ChartsPage?>(null)
-    val chartsPage = _chartsPage.asStateFlow()
+    private var currentLoadedRegion: String? = null
+
+    private val _chartTracks = MutableStateFlow<List<ChartTrack>?>(null)
+    val chartTracks = _chartTracks.asStateFlow()
+
+    private val _chartArtists = MutableStateFlow<List<ChartArtist>?>(null)
+    val chartArtists = _chartArtists.asStateFlow()
+
+    private val _chartAlbums = MutableStateFlow<List<ChartAlbum>?>(null)
+    val chartAlbums = _chartAlbums.asStateFlow()
+
+    private val _chartVideos = MutableStateFlow<List<ChartTrack>?>(null)
+    val chartVideos = _chartVideos.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
+    private val _isManualLoading = MutableStateFlow(false)
+    val isManualLoading = _isManualLoading.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
-    fun loadCharts() {
-        val current = _chartsPage.value
-        if (current != null && current.sections.isNotEmpty()) {
-            Timber.tag("AirBeatsCharts").d("loadCharts(): Cache hit with %d sections", current.sections.size)
-            return
+    fun loadCharts(countryCode: String = "system") {
+        refresh(countryCode = countryCode, force = false)
+    }
+
+    fun retry(countryCode: String = "system") {
+        refresh(countryCode = countryCode, force = true)
+    }
+
+    fun refresh(countryCode: String = "system", force: Boolean = false) {
+        val resolvedCode = if (countryCode == "system") {
+            Locale.getDefault().country.lowercase().ifEmpty { "us" }
+        } else {
+            countryCode.lowercase()
         }
-        viewModelScope.launch {
-            Timber.tag("AirBeatsCharts").i("loadCharts(): Fetching charts data from YouTube...")
+
+        if (_isLoading.value && !force && currentLoadedRegion == resolvedCode) return
+
+        viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             _error.value = null
+            if (force) _isManualLoading.value = true
 
-            YouTube.getChartsPage()
-                .onSuccess { page ->
-                    Timber.tag("AirBeatsCharts").i(
-                        "loadCharts() SUCCESS: %d sections loaded -> %s",
-                        page.sections.size,
-                        page.sections.map { "${it.title} (${it.items.size} items)" }
-                    )
-                    _chartsPage.value = page
-                }
-                .onFailure { e ->
-                    Timber.tag("AirBeatsCharts").e(e, "loadCharts() FAILED: %s", e.message)
-                    _error.value = e.message ?: "Failed to load charts"
+            if (currentLoadedRegion != resolvedCode || force) {
+                _chartTracks.value = null
+                _chartArtists.value = null
+                _chartAlbums.value = null
+                _chartVideos.value = null
+            }
+
+            try {
+                coroutineScope {
+                    launch {
+                        try {
+                            val tracks = AppleMusicChartsScraper.fetchTopSongs(resolvedCode)
+                            if (tracks.isNotEmpty()) {
+                                _chartTracks.value = tracks
+                                _chartArtists.value = AppleMusicChartsScraper.getTrendingArtists(tracks)
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ChartsViewModel").e(e, "Failed to fetch top songs for %s", resolvedCode)
+                        }
+                    }
+
+                    launch {
+                        try {
+                            val albums = AppleMusicChartsScraper.fetchTopAlbums(resolvedCode)
+                            if (albums.isNotEmpty()) {
+                                _chartAlbums.value = albums
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ChartsViewModel").e(e, "Failed to fetch top albums for %s", resolvedCode)
+                        }
+                    }
+
+                    launch {
+                        try {
+                            val videos = AppleMusicChartsScraper.fetchTopVideos(resolvedCode)
+                            if (videos.isNotEmpty()) {
+                                _chartVideos.value = videos
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ChartsViewModel").e(e, "Failed to fetch top videos for %s", resolvedCode)
+                        }
+                    }
                 }
 
-            _isLoading.value = false
+                currentLoadedRegion = resolvedCode
+            } catch (e: Exception) {
+                Timber.tag("ChartsViewModel").e(e, "Failed to load Apple Music charts")
+                _error.value = e.message ?: "Failed to load charts"
+            } finally {
+                _isLoading.value = false
+                _isManualLoading.value = false
+            }
         }
     }
 
-    fun retry() {
-        Timber.tag("AirBeatsCharts").d("retry() called: Clearing cache and reloading charts")
-        _chartsPage.value = null
-        loadCharts()
+    private fun artistMatches(ytArtistName: String, appleArtistName: String): Boolean {
+        val ytNorm = ytArtistName.trim().lowercase()
+        val apNorm = appleArtistName.trim().lowercase()
+        return apNorm.contains(ytNorm) || ytNorm.contains(apNorm)
     }
 
-    fun loadMore() {
-        viewModelScope.launch {
-            _chartsPage.value?.continuation?.let { continuation ->
-                Timber.tag("AirBeatsCharts").d("loadMore(): Requesting continuation %s", continuation)
-                _isLoading.value = true
-                YouTube.getChartsPage(continuation)
-                    .onSuccess { newPage ->
-                        Timber.tag("AirBeatsCharts").i("loadMore() SUCCESS: %d new sections loaded", newPage.sections.size)
-                        _chartsPage.value = _chartsPage.value?.copy(
-                            sections = _chartsPage.value?.sections.orEmpty() + newPage.sections,
-                            continuation = newPage.continuation
+    fun playTrack(track: ChartTrack, playerConnection: PlayerConnection?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val query = "${track.title} ${track.artist}"
+            Timber.tag("ChartsViewModel").d("Searching YouTube for track: %s", query)
+            YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).onSuccess { searchResult ->
+                val songs = searchResult.items.filterIsInstance<SongItem>()
+                val bestMatch = songs.firstOrNull { s ->
+                    s.title.equals(track.title, ignoreCase = true) &&
+                        s.artists.any { a -> artistMatches(a.name, track.artist) }
+                } ?: songs.firstOrNull { s ->
+                    s.title.contains(track.title, ignoreCase = true) &&
+                        s.artists.any { a -> artistMatches(a.name, track.artist) }
+                } ?: songs.firstOrNull { s ->
+                    s.artists.any { a -> artistMatches(a.name, track.artist) }
+                } ?: songs.firstOrNull()
+
+                if (bestMatch != null) {
+                    withContext(Dispatchers.Main) {
+                        playerConnection?.playQueue(
+                            YouTubeQueue(
+                                endpoint = WatchEndpoint(videoId = bestMatch.id),
+                                preloadItem = bestMatch.toMediaMetadata()
+                            )
                         )
                     }
-                    .onFailure { e ->
-                        Timber.tag("AirBeatsCharts").e(e, "loadMore() FAILED: %s", e.message)
-                        _error.value = e.message ?: "Failed to load more charts"
+                } else {
+                    Timber.tag("ChartsViewModel").w("No YouTube match found for: %s", query)
+                }
+            }.onFailure { e ->
+                Timber.tag("ChartsViewModel").e(e, "YouTube search failed for: %s", query)
+            }
+        }
+    }
+
+    fun navigateToArtist(artist: ChartArtist, navController: NavController) {
+        viewModelScope.launch(Dispatchers.IO) {
+            YouTube.search(artist.name, YouTube.SearchFilter.FILTER_ARTIST).onSuccess { searchResult ->
+                val firstArtist = searchResult.items.filterIsInstance<ArtistItem>().firstOrNull()
+                if (firstArtist != null) {
+                    withContext(Dispatchers.Main) {
+                        navController.navigate("artist/${firstArtist.id}")
                     }
-                _isLoading.value = false
+                }
+            }
+        }
+    }
+
+    fun navigateToAlbum(album: ChartAlbum, navController: NavController) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val query = "${album.title} ${album.artist}"
+            YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM).onSuccess { searchResult ->
+                val firstAlbum = searchResult.items.filterIsInstance<AlbumItem>().firstOrNull()
+                if (firstAlbum != null) {
+                    withContext(Dispatchers.Main) {
+                        navController.navigate("album/${firstAlbum.id}")
+                    }
+                }
+            }
+        }
+    }
+
+    fun playVideo(video: ChartTrack, playerConnection: PlayerConnection?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val query = "${video.title} ${video.artist}"
+            YouTube.search(query, YouTube.SearchFilter.FILTER_VIDEO).onSuccess { searchResult ->
+                val songMatch = searchResult.items.filterIsInstance<SongItem>().firstOrNull()
+                if (songMatch != null) {
+                    withContext(Dispatchers.Main) {
+                        playerConnection?.playQueue(
+                            YouTubeQueue(
+                                endpoint = WatchEndpoint(videoId = songMatch.id),
+                                preloadItem = songMatch.toMediaMetadata()
+                            )
+                        )
+                    }
+                }
             }
         }
     }
