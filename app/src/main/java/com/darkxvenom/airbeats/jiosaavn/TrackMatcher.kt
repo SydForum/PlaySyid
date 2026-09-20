@@ -5,7 +5,6 @@ import java.util.Locale
 import kotlin.math.abs
 
 /**
- * Ported directly from BitChord's TrackMatcher.
  * Decides whether a track from one catalogue (e.g. JioSaavn) is genuinely the same
  * recording as another (e.g. YouTube), stripping packaging and comparing core identity.
  */

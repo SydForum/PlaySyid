@@ -144,7 +144,7 @@ object JioSaavnApi {
 
     /**
      * Decrypts JioSaavn's DES-ECB encrypted media URL and converts it to high-fidelity 320kbps MP4 audio
-     * when supported by the catalogue, mirroring BitChord's JioSaavnService bestStream implementation.
+     * when supported by the catalogue.
      */
     private fun decryptMediaUrl(encryptedUrl: String, supports320: Boolean = true): String? {
         if (encryptedUrl.isBlank()) return null

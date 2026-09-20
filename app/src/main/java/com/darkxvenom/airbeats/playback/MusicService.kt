@@ -2101,7 +2101,7 @@ class MusicService :
                 }.first()
             }
 
-            // BitChord Architecture: When JioSaavn integration is enabled, prioritize JioSaavn 320kbps streams first
+            // When JioSaavn integration is enabled, prioritize JioSaavn 320kbps streams first
             if (enableJioSaavn && !mediaId.startsWith("JS:") && !mediaId.startsWith("local:")) {
                 try {
                     val mediaMetadata = kotlinx.coroutines.runBlocking(Dispatchers.Main) {
@@ -2121,7 +2121,7 @@ class MusicService :
                             }.getOrNull()
                         }
                         if (jsStreamUrl != null) {
-                            Timber.tag("MusicService").d("BitChord Priority: Serving JioSaavn 320k for '${mediaMetadata.title}'")
+                            Timber.tag("MusicService").d("JioSaavn Priority: Serving 320k for '${mediaMetadata.title}'")
                             songUrlCache[mediaId] = CachedSongUrl(
                                 url = jsStreamUrl,
                                 expiresAt = System.currentTimeMillis() + 3600000L,
