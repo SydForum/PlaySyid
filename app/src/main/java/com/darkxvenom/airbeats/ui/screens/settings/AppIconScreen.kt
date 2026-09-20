@@ -66,10 +66,10 @@ fun AppIconScreen(
     var activeIconId by remember { mutableStateOf(AppIconRepository.getActiveIconId(context)) }
     val allIcons = remember { AppIconRepository.getAvailableIcons() }
     val communityIcons by produceState<List<AppIcon>>(initialValue = emptyList()) {
-        value = AppIconRepository.fetchCommunityIcons()
+        value = AppIconRepository.fetchCommunityIcons(context)
     }
-    val selectedIcon = remember(activeIconId) {
-        allIcons.find { it.id == activeIconId } ?: AppIconRepository.DEFAULT_ICON
+    val selectedIcon = remember(activeIconId, communityIcons) {
+        (allIcons + communityIcons).find { it.id == activeIconId } ?: AppIconRepository.DEFAULT_ICON
     }
 
     var showSubmitDialog by rememberSaveable { mutableStateOf(false) }
@@ -234,9 +234,10 @@ fun AppIconScreen(
                                     icon = icon,
                                     isSelected = icon.id == activeIconId,
                                     onClick = {
+                                        activeIconId = icon.id
                                         Toast.makeText(
                                             context,
-                                            "Community theme: ${icon.title} by ${icon.author}",
+                                            "Previewing: ${icon.title} by ${icon.author}",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
@@ -349,7 +350,17 @@ private fun HomeScreenMockupCard(icon: AppIcon) {
                         .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(22.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (icon.fgTint != null) {
+                    if (icon.isCommunity && !icon.svgUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(icon.svgUrl)
+                                .decoderFactory(SvgDecoder.Factory())
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = icon.title,
+                            modifier = Modifier.fillMaxSize(0.72f)
+                        )
+                    } else if (icon.fgTint != null) {
                         Image(
                             painter = painterResource(R.mipmap.ic_launcher_foreground),
                             contentDescription = icon.title,

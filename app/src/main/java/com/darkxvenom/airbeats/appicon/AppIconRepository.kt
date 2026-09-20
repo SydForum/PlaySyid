@@ -208,42 +208,79 @@ object AppIconRepository {
      * Fetches community SVG icons hosted in the GitHub repository catalog.
      * File: assets/icons/community_icons.json
      */
-    suspend fun fetchCommunityIcons(): List<AppIcon> = withContext(Dispatchers.IO) {
+    private fun parseCommunityJson(jsonStr: String, destination: MutableList<AppIcon>) {
+        try {
+            val jsonArray = JSONArray(jsonStr)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val id = obj.optString("id", "community_$i")
+                val title = obj.optString("title", obj.optString("name", "Community Icon"))
+                val author = obj.optString("author", "Community Designer")
+                val subtitle = obj.optString("subtitle", "Designed by $author")
+                var svgUrl = obj.optString("svgUrl", "")
+                if (svgUrl.startsWith("http://")) {
+                    svgUrl = "https://" + svgUrl.substring(7)
+                }
+                if (svgUrl.isNotBlank()) {
+                    destination.add(
+                        AppIcon(
+                            id = id,
+                            title = title,
+                            subtitle = subtitle,
+                            author = author,
+                            aliasName = DEFAULT_ICON.aliasName,
+                            bgColors = listOf(Color(0xFF1E1E24), Color(0xFF282830)),
+                            fgTint = null,
+                            isCommunity = true,
+                            svgUrl = svgUrl
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error parsing community icons JSON")
+        }
+    }
+
+    /**
+     * Fetches community SVG icons hosted in the GitHub repository catalog and bundled assets.
+     */
+    suspend fun fetchCommunityIcons(context: Context? = null): List<AppIcon> = withContext(Dispatchers.IO) {
         val list = mutableListOf<AppIcon>()
+
+        // 1. Load locally bundled assets/icons/community_icons.json first for instant display
+        if (context != null) {
+            try {
+                val assetJson = context.assets.open("icons/community_icons.json").bufferedReader().use { it.readText() }
+                parseCommunityJson(assetJson, list)
+            } catch (e: Exception) {
+                Timber.d("No bundled community icons: ${e.message}")
+            }
+        }
+
+        // 2. Fetch latest remote icons from GitHub
         try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
+                .followRedirects(true)
+                .followSslRedirects(true)
                 .build()
             val request = Request.Builder()
                 .url(GITHUB_COMMUNITY_ICONS_URL)
                 .build()
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
-                val body = response.body.string()
+                val body = response.body?.string()
                 if (!body.isNullOrBlank()) {
-                    val jsonArray = JSONArray(body)
-                    for (i in 0 until jsonArray.length()) {
-                        val obj = jsonArray.getJSONObject(i)
-                        val id = obj.optString("id", "community_$i")
-                        val title = obj.optString("title", obj.optString("name", "Community Icon"))
-                        val author = obj.optString("author", "Community Designer")
-                        val subtitle = obj.optString("subtitle", "Designed by $author")
-                        val svgUrl = obj.optString("svgUrl", "")
-                        if (svgUrl.isNotBlank()) {
-                            list.add(
-                                AppIcon(
-                                    id = id,
-                                    title = title,
-                                    subtitle = subtitle,
-                                    author = author,
-                                    aliasName = DEFAULT_ICON.aliasName,
-                                    bgColors = listOf(Color(0xFF1E1E24), Color(0xFF282830)),
-                                    fgTint = null,
-                                    isCommunity = true,
-                                    svgUrl = svgUrl
-                                )
-                            )
+                    val remoteList = mutableListOf<AppIcon>()
+                    parseCommunityJson(body, remoteList)
+                    for (remoteIcon in remoteList) {
+                        val existingIndex = list.indexOfFirst { it.id == remoteIcon.id }
+                        if (existingIndex >= 0) {
+                            list[existingIndex] = remoteIcon
+                        } else {
+                            list.add(remoteIcon)
                         }
                     }
                 }
@@ -251,6 +288,7 @@ object AppIconRepository {
         } catch (e: Exception) {
             Timber.d("No remote community icons loaded: ${e.message}")
         }
+
         list
     }
 }
