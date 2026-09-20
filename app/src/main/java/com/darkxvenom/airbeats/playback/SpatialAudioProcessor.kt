@@ -60,19 +60,24 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun queueInput(inputBuffer: java.nio.ByteBuffer) {
-        val frameCount = inputBuffer.remaining() / BYTES_PER_FRAME
-        if (frameCount == 0) return
-        val bytesToProcess = frameCount * BYTES_PER_FRAME
-        val outputBuffer = replaceOutputBuffer(bytesToProcess)
+        val remaining = inputBuffer.remaining()
+        if (remaining == 0) return
 
         if (!enabled) {
-            val oldLimit = inputBuffer.limit()
-            inputBuffer.limit(inputBuffer.position() + bytesToProcess)
+            val outputBuffer = replaceOutputBuffer(remaining)
             outputBuffer.put(inputBuffer)
-            inputBuffer.limit(oldLimit)
             outputBuffer.flip()
             return
         }
+
+        val frameCount = remaining / BYTES_PER_FRAME
+        if (frameCount == 0) {
+            inputBuffer.position(inputBuffer.limit())
+            return
+        }
+
+        val bytesToProcess = frameCount * BYTES_PER_FRAME
+        val outputBuffer = replaceOutputBuffer(bytesToProcess)
 
         inputBuffer.order(ByteOrder.nativeOrder())
         outputBuffer.order(ByteOrder.nativeOrder())
@@ -100,6 +105,9 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
 
             outputBuffer.putShort(clampToShort(widenedLeft * outputGain))
             outputBuffer.putShort(clampToShort(widenedRight * outputGain))
+        }
+        if (inputBuffer.hasRemaining()) {
+            inputBuffer.position(inputBuffer.limit())
         }
         outputBuffer.flip()
     }

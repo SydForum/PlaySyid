@@ -537,7 +537,7 @@ class MusicService :
                     ExoPlayer
                         .Builder(this)
                         .setMediaSourceFactory(createMediaSourceFactory())
-                        .setRenderersFactory(createRenderersFactory())
+                        .setRenderersFactory(createRenderersFactory(audioProcessors = emptyArray()))
                         .setHandleAudioBecomingNoisy(false)
                         .setWakeMode(C.WAKE_MODE_NETWORK)
                         .setAudioAttributes(
@@ -2370,7 +2370,9 @@ class MusicService :
     private fun createMediaSourceFactory() =
         DefaultMediaSourceFactory(createDataSourceFactory())
 
-    private fun createRenderersFactory() =
+    private fun createRenderersFactory(
+        audioProcessors: Array<androidx.media3.common.audio.AudioProcessor> = arrayOf(spatialAudioProcessor, eightDAudioProcessor)
+    ) =
         object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
@@ -2382,7 +2384,7 @@ class MusicService :
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                 .setAudioProcessorChain(
                     DefaultAudioSink.DefaultAudioProcessorChain(
-                        arrayOf(spatialAudioProcessor, eightDAudioProcessor),
+                        audioProcessors,
                         SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
                         SonicAudioProcessor(),
                     ),

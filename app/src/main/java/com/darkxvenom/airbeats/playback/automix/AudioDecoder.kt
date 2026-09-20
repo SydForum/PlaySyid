@@ -159,11 +159,13 @@ object AudioDecoder {
 
     private fun toMono(buffer: ByteBuffer, info: MediaCodec.BufferInfo, channels: Int): FloatArray {
         val safeChannels = max(1, channels)
-        val shorts = buffer.duplicate().apply {
-            order(ByteOrder.LITTLE_ENDIAN)
-            position(info.offset)
-            limit(info.offset + info.size)
-        }.asShortBuffer()
+        val dup = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        val safeOffset = info.offset.coerceIn(0, dup.capacity())
+        val safeLimit = (info.offset + info.size).coerceIn(safeOffset, dup.capacity())
+        dup.clear()
+        dup.limit(safeLimit)
+        dup.position(safeOffset)
+        val shorts = dup.asShortBuffer()
         val frames = shorts.remaining() / safeChannels
         val mono = FloatArray(frames)
         val frame = ShortArray(safeChannels)

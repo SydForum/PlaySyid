@@ -104,21 +104,25 @@ class EightDAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val frameCount = inputBuffer.remaining() / BYTES_PER_FRAME
-        if (frameCount == 0) return
-
-        val bytesToProcess = frameCount * BYTES_PER_FRAME
-        val outputBuffer = replaceOutputBuffer(bytesToProcess)
+        val remaining = inputBuffer.remaining()
+        if (remaining == 0) return
 
         // If completely disabled and fully crossfaded out, pass through untouched
         if (!enabled && currentEnabledAlpha <= 0f) {
-            val oldLimit = inputBuffer.limit()
-            inputBuffer.limit(inputBuffer.position() + bytesToProcess)
+            val outputBuffer = replaceOutputBuffer(remaining)
             outputBuffer.put(inputBuffer)
-            inputBuffer.limit(oldLimit)
             outputBuffer.flip()
             return
         }
+
+        val frameCount = remaining / BYTES_PER_FRAME
+        if (frameCount == 0) {
+            inputBuffer.position(inputBuffer.limit())
+            return
+        }
+
+        val bytesToProcess = frameCount * BYTES_PER_FRAME
+        val outputBuffer = replaceOutputBuffer(bytesToProcess)
 
         inputBuffer.order(ByteOrder.nativeOrder())
         outputBuffer.order(ByteOrder.nativeOrder())
@@ -246,7 +250,9 @@ class EightDAudioProcessor : BaseAudioProcessor() {
             outputBuffer.putShort(clampToShort(outSampleL))
             outputBuffer.putShort(clampToShort(outSampleR))
         }
-
+        if (inputBuffer.hasRemaining()) {
+            inputBuffer.position(inputBuffer.limit())
+        }
         outputBuffer.flip()
     }
 
