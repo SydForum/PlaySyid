@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.appicon.AppIcon
@@ -63,6 +65,9 @@ fun AppIconScreen(
     val context = LocalContext.current
     var activeIconId by remember { mutableStateOf(AppIconRepository.getActiveIconId(context)) }
     val allIcons = remember { AppIconRepository.getAvailableIcons() }
+    val communityIcons by produceState<List<AppIcon>>(initialValue = emptyList()) {
+        value = AppIconRepository.fetchCommunityIcons()
+    }
     val selectedIcon = remember(activeIconId) {
         allIcons.find { it.id == activeIconId } ?: AppIconRepository.DEFAULT_ICON
     }
@@ -194,7 +199,58 @@ fun AppIconScreen(
                 }
             }
 
-            // 4. Community Submission Banner
+            // 4. Community Creations Section (if available)
+            if (communityIcons.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Community Creations",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        )
+                        Text(
+                            text = "${communityIcons.size} from GitHub",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                items(communityIcons.chunked(2).size) { rowIndex ->
+                    val rowIcons = communityIcons.chunked(2)[rowIndex]
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        for (icon in rowIcons) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                AppIconItemCard(
+                                    icon = icon,
+                                    isSelected = icon.id == activeIconId,
+                                    onClick = {
+                                        Toast.makeText(
+                                            context,
+                                            "Community theme: ${icon.title} by ${icon.author}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                            }
+                        }
+                        if (rowIcons.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+
+            // 5. Community Submission Banner
             item {
                 CommunitySubmissionBanner(
                     onOpenSubmitDialog = { showSubmitDialog = true }
@@ -384,7 +440,17 @@ private fun AppIconItemCard(
                         .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (icon.fgTint != null) {
+                    if (icon.isCommunity && !icon.svgUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(icon.svgUrl)
+                                .decoderFactory(SvgDecoder.Factory())
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = icon.title,
+                            modifier = Modifier.fillMaxSize(0.72f)
+                        )
+                    } else if (icon.fgTint != null) {
                         Image(
                             painter = painterResource(R.mipmap.ic_launcher_foreground),
                             contentDescription = icon.title,

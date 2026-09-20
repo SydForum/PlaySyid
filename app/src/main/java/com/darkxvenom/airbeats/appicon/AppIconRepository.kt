@@ -5,7 +5,13 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
 
 object AppIconRepository {
 
@@ -13,6 +19,9 @@ object AppIconRepository {
     private const val KEY_SELECTED_ICON = "selected_app_icon_id"
 
     private const val PACKAGE_NAME = "com.darkxvenom.airbeats"
+
+    const val GITHUB_COMMUNITY_ICONS_URL =
+        "https://raw.githubusercontent.com/d0x-dev/AirBeats/main/assets/icons/community_icons.json"
 
     val DEFAULT_ICON = AppIcon(
         id = "default",
@@ -193,5 +202,55 @@ object AppIconRepository {
         """.trimIndent()
         val bodyEncoded = java.net.URLEncoder.encode(bodyContent, "UTF-8")
         return "https://github.com/d0x-dev/AirBeats/issues/new?title=$titleEncoded&body=$bodyEncoded"
+    }
+
+    /**
+     * Fetches community SVG icons hosted in the GitHub repository catalog.
+     * File: assets/icons/community_icons.json
+     */
+    suspend fun fetchCommunityIcons(): List<AppIcon> = withContext(Dispatchers.IO) {
+        val list = mutableListOf<AppIcon>()
+        try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+            val request = Request.Builder()
+                .url(GITHUB_COMMUNITY_ICONS_URL)
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body.string()
+                if (!body.isNullOrBlank()) {
+                    val jsonArray = JSONArray(body)
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        val id = obj.optString("id", "community_$i")
+                        val title = obj.optString("title", obj.optString("name", "Community Icon"))
+                        val author = obj.optString("author", "Community Designer")
+                        val subtitle = obj.optString("subtitle", "Designed by $author")
+                        val svgUrl = obj.optString("svgUrl", "")
+                        if (svgUrl.isNotBlank()) {
+                            list.add(
+                                AppIcon(
+                                    id = id,
+                                    title = title,
+                                    subtitle = subtitle,
+                                    author = author,
+                                    aliasName = DEFAULT_ICON.aliasName,
+                                    bgColors = listOf(Color(0xFF1E1E24), Color(0xFF282830)),
+                                    fgTint = null,
+                                    isCommunity = true,
+                                    svgUrl = svgUrl
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.d("No remote community icons loaded: ${e.message}")
+        }
+        list
     }
 }
