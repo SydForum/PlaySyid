@@ -6,7 +6,7 @@
 
 <div align="center">
 
-<img src="[https://raw.githubusercontent.com/drkvenom786/Airbeats/refs/heads/main/sc.png](https://raw.githubusercontent.com/d0x-dev/Storage/refs/heads/main/Airbeats/Airbeats-preview-readme.png)" alt="AirBeats Preview" width="100%"/>
+<img src="[https://raw.githubusercontent.com/d0x-dev/Storage/refs/heads/main/Airbeats/Airbeats-preview-readme.png](https://raw.githubusercontent.com/d0x-dev/Storage/refs/heads/main/Airbeats/Airbeats-preview-readme.png)" alt="AirBeats Preview" width="100%"/>
 
 ### 🚀 Advanced YouTube Music Client with Material Design 3
 
