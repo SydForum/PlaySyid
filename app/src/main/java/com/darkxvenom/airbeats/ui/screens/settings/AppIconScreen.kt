@@ -275,26 +275,19 @@ fun AppIconScreen(
                                     isSelected = icon.id == activeIconId,
                                     onClick = {
                                         activeIconId = icon.id
-                                        coroutineScope.launch {
+                                        val success = AppIconRepository.setActiveIcon(context, icon.id)
+                                        if (success) {
                                             Toast.makeText(
                                                 context,
-                                                "Downloading & adding ${icon.title} to Home Screen...",
+                                                "App icon updated to ${icon.title}",
                                                 Toast.LENGTH_SHORT
                                             ).show()
-                                            val success = AppIconRepository.applyCommunityIcon(context, icon)
-                                            if (success) {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Confirm 'Add to Home screen' to place the custom icon!",
-                                                    Toast.LENGTH_LONG
-                                                ).show()
-                                            } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Could not download or apply icon from GitHub",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "Could not update app icon on this launcher",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                     }
                                 )

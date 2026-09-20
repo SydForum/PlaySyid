@@ -97,13 +97,24 @@ object AppIconRepository {
             aliasName = "$PACKAGE_NAME.launcher.MinimalistMono",
             bgColors = listOf(Color(0xFF1A1A1E), Color(0xFF24242B)),
             fgTint = Color(0xFFFFFFFF)
+        ),
+        AppIcon(
+            id = "airbeats_winters",
+            title = "Airbeats Winters",
+            subtitle = "Winter season frosted cabin & glowing headphones",
+            author = "@Dark",
+            aliasName = "$PACKAGE_NAME.launcher.AirbeatsWinters",
+            bgColors = listOf(Color(0xFF061838), Color(0xFF0F386E)),
+            fgTint = null,
+            isCommunity = true,
+            svgUrl = "https://raw.githubusercontent.com/d0x-dev/Storage/2521b636c97df62751066a548d2819f4fa2cca38/Airbeats/icons/ChatGPT%20Image%20Sep%2020%2C%202026%2C%2011_02_07%20PM.svg"
         )
     )
 
     /**
      * Returns all available built-in styles for the app.
      */
-    fun getAvailableIcons(): List<AppIcon> = BUILT_IN_ICONS
+    fun getAvailableIcons(): List<AppIcon> = BUILT_IN_ICONS.filter { !it.isCommunity }
 
     /**
      * Determines which icon is currently active on the device.
