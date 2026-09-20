@@ -124,6 +124,17 @@ object JioSaavnApi {
         null
     }
 
+    suspend fun findMatch(title: String, artist: String? = null): SongItem? = withContext(Dispatchers.IO) {
+        val query = if (!artist.isNullOrBlank()) "$title $artist" else title
+        val songs = searchSongs(query).getOrNull() ?: return@withContext null
+        songs.firstOrNull()
+    }
+
+    suspend fun findMatchAndStreamUrl(title: String, artist: String? = null): String? = withContext(Dispatchers.IO) {
+        val match = findMatch(title, artist) ?: return@withContext null
+        getStreamUrl(match.id)
+    }
+
     /**
      * Decrypts JioSaavn's DES-ECB encrypted media URL and converts it to high-fidelity 320kbps MP4 audio.
      */

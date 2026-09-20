@@ -35,6 +35,10 @@ fun ContentSettings(
         key = ContentLanguageKey,
         defaultValue = SYSTEM_DEFAULT
     )
+    val (enableJioSaavn, onEnableJioSaavnChange) = rememberPreference(
+        key = EnableJioSaavnKey,
+        defaultValue = true
+    )
     val (musicProvider, onMusicProviderChange) = rememberPreference(
         key = MusicProviderKey,
         defaultValue = "YT"
@@ -80,16 +84,15 @@ fun ContentSettings(
         SettingsGeneralCategory(
             title = stringResource(R.string.general),
             items = listOf(
-                {ListPreference(
-                    title = { Text(stringResource(R.string.module)) },
-                    icon = { Icon(painterResource(R.drawable.music_note), null) },
-                    selectedValue = musicProvider,
-                    values = listOf("YT", "JIOSAAVN"),
-                    valueText = {
-                        if (it == "YT") "YT (Compatible)" else "Jio Saavn (Incompatible Supported VPN)"
-                    },
-                    onValueSelected = onMusicProviderChange,
-                )},
+                {
+                    SwitchPreference(
+                        title = { Text(stringResource(R.string.enable_jiosaavn)) },
+                        description = stringResource(R.string.enable_jiosaavn_desc),
+                        icon = { Icon(painterResource(R.drawable.music_note), null) },
+                        checked = enableJioSaavn,
+                        onCheckedChange = onEnableJioSaavnChange,
+                    )
+                },
                 {ListPreference(
                     title = { Text(stringResource(R.string.content_language)) },
                     icon = { Icon(painterResource(R.drawable.language), null) },

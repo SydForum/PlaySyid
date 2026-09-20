@@ -215,9 +215,31 @@ class HomeViewModel @Inject constructor(
                 }
 
                 launch(Dispatchers.IO) {
+                    val enableJioSaavn = context.dataStore.get(com.darkxvenom.airbeats.constants.EnableJioSaavnKey, true)
+                    val jioSection = if (enableJioSaavn) {
+                        com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.getTrendingSongs().getOrNull()?.let { songs ->
+                            HomePage.Section(
+                                title = "Trending on JioSaavn (320k)",
+                                label = "JioSaavn",
+                                thumbnail = null,
+                                endpoint = null,
+                                items = songs
+                            )
+                        }
+                    } else null
+
                     YouTube.home().onSuccess { page ->
-                        homePage.value = page
-                    }.onFailure { reportException(it) }
+                        homePage.value = if (jioSection != null) {
+                            page.copy(sections = listOf(jioSection) + page.sections)
+                        } else {
+                            page
+                        }
+                    }.onFailure {
+                        if (jioSection != null) {
+                            homePage.value = HomePage(chips = null, sections = listOf(jioSection))
+                        }
+                        reportException(it)
+                    }
                 }
 
                 launch(Dispatchers.IO) {

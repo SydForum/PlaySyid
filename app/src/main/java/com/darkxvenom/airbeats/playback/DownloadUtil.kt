@@ -73,6 +73,16 @@ constructor(
                 return@Factory dataSpec.withUri(it.first.toUri())
             }
 
+            if (mediaId.startsWith("JS:")) {
+                val streamUrl = runBlocking(Dispatchers.IO) {
+                    com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.getStreamUrl(mediaId)
+                }
+                if (streamUrl != null) {
+                    songUrlCache[mediaId] = Pair(streamUrl, System.currentTimeMillis() + 3600000L)
+                    return@Factory dataSpec.withUri(streamUrl.toUri())
+                }
+            }
+
             val playedFormat = runBlocking(Dispatchers.IO) { database.format(mediaId).first() }
             val playbackData = runBlocking(Dispatchers.IO) {
                 YTPlayerUtils.playerResponseForPlayback(

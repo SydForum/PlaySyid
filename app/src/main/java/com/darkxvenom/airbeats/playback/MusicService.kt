@@ -73,6 +73,7 @@ import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.AudioNormalizationKey
 import com.darkxvenom.airbeats.constants.AudioQualityKey
 import com.darkxvenom.airbeats.constants.AutoLoadMoreKey
+import com.darkxvenom.airbeats.constants.EnableJioSaavnKey
 import com.darkxvenom.airbeats.constants.AutoSkipNextOnErrorKey
 import com.darkxvenom.airbeats.constants.CrossfadeKey
 import com.darkxvenom.airbeats.constants.DisableLoadMoreWhenRepeatAllKey
@@ -1021,7 +1022,7 @@ class MusicService :
             if (song == null) insert(mediaMetadata.copy(duration = duration))
             else if (song.song.duration == -1) update(song.song.copy(duration = duration))
         }
-        if (!database.hasRelatedSongs(mediaId)) {
+        if (!database.hasRelatedSongs(mediaId) && !mediaId.startsWith("JS:")) {
             val relatedEndpoint =
                 YouTube.next(WatchEndpoint(videoId = mediaId)).getOrNull()?.relatedEndpoint
                     ?: return
@@ -2013,36 +2014,58 @@ class MusicService :
                 return@Factory dataSpec.withStreamUrl(it.url, it.contentLength)
             }
 
+            var actualMediaId = mediaId
             if (mediaId.startsWith("JS:")) {
+                var streamUrl: String? = null
                 try {
-                    val streamUrl = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                    streamUrl = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
                         com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.getStreamUrl(mediaId)
                     }
-                    if (streamUrl != null) {
-                        songUrlCache[mediaId] = CachedSongUrl(
-                            url = streamUrl,
-                            expiresAt = System.currentTimeMillis() + 3600000L,
-                            contentLength = null,
-                        )
-                        scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                        return@Factory dataSpec.withUri(streamUrl.toUri())
+                } catch (e: Exception) {
+                    Timber.e(e, "JioSaavn stream fetching error for $mediaId")
+                }
+
+                if (streamUrl != null) {
+                    songUrlCache[mediaId] = CachedSongUrl(
+                        url = streamUrl,
+                        expiresAt = System.currentTimeMillis() + 3600000L,
+                        contentLength = null,
+                    )
+                    scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+                    return@Factory dataSpec.withStreamUrl(streamUrl, null)
+                }
+
+                // Seamless Fallback: JioSaavn stream failed or null -> find matching YouTube song
+                Timber.w("JioSaavn stream unavailable for $mediaId, falling back to YouTube")
+                val mediaMetadata = kotlinx.coroutines.runBlocking(Dispatchers.Main) {
+                    player.mediaItems.find { it.mediaId == mediaId }?.metadata
+                }
+                if (mediaMetadata != null) {
+                    val artistName = mediaMetadata.artists.firstOrNull()?.name ?: ""
+                    val query = "${mediaMetadata.title} $artistName".trim()
+                    val ytSong = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                        runCatching {
+                            YouTube.search(query, com.darkxvenom.airbeats.innertube.YouTube.SearchFilter.FILTER_SONG)
+                                .getOrNull()?.items?.firstOrNull() as? com.darkxvenom.airbeats.innertube.models.SongItem
+                        }.getOrNull()
+                    }
+                    if (ytSong != null) {
+                        actualMediaId = ytSong.id
                     } else {
                         throw androidx.media3.common.PlaybackException(
-                            "JioSaavn Stream URL not found",
+                            "JioSaavn stream unavailable and no YouTube fallback match found",
                             null,
                             androidx.media3.common.PlaybackException.ERROR_CODE_REMOTE_ERROR
                         )
                     }
-                } catch (e: Exception) {
+                } else {
                     throw androidx.media3.common.PlaybackException(
-                        "JioSaavn API error: ${e.message}",
-                        e,
+                        "JioSaavn stream unavailable",
+                        null,
                         androidx.media3.common.PlaybackException.ERROR_CODE_REMOTE_ERROR
                     )
                 }
             }
-
-            var actualMediaId = mediaId
             if (mediaId.startsWith("sp:")) {
                 val matchedId = spotifyMatchCache[mediaId]
                 if (matchedId != null) {
@@ -2140,7 +2163,41 @@ class MusicService :
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Timber.tag(ytLogTag).e(e, "YouTube playback error, trying JossRed as fallback")
+                Timber.tag(ytLogTag).e(e, "YouTube playback error, trying JioSaavn fallback")
+
+                val enableJioSaavn = runBlocking {
+                    dataStore.data.map { preferences ->
+                        preferences[EnableJioSaavnKey] ?: true
+                    }.first()
+                }
+
+                if (enableJioSaavn && !mediaId.startsWith("JS:")) {
+                    try {
+                        val mediaMetadata = kotlinx.coroutines.runBlocking(Dispatchers.Main) {
+                            player.mediaItems.find { it.mediaId == mediaId }?.metadata
+                        }
+                        if (mediaMetadata != null) {
+                            val artistName = mediaMetadata.artists.firstOrNull()?.name ?: ""
+                            val jsStreamUrl = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                                com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.findMatchAndStreamUrl(
+                                    mediaMetadata.title,
+                                    artistName
+                                )
+                            }
+                            if (jsStreamUrl != null) {
+                                songUrlCache[mediaId] = CachedSongUrl(
+                                    url = jsStreamUrl,
+                                    expiresAt = System.currentTimeMillis() + 3600000L,
+                                    contentLength = null,
+                                )
+                                scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+                                return@Factory dataSpec.withStreamUrl(jsStreamUrl, null)
+                            }
+                        }
+                    } catch (jsEx: Exception) {
+                        Timber.tag("JioSaavnFallback").e(jsEx, "JioSaavn fallback failed")
+                    }
+                }
 
                 // Verificar si la fuente alternativa está habilitada
                 val useAlternativeSource = runBlocking {

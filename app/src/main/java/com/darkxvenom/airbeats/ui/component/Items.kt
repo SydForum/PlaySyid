@@ -1776,6 +1776,26 @@ fun YouTubeListItem(
     albumIndex: Int? = null,
     isSelected: Boolean = false,
     badges: @Composable RowScope.() -> Unit = {
+        if (item.id.startsWith("JS:")) {
+            Box(
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = "JioSaavn 320k",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         val database = LocalDatabase.current
         val song by database.song(item.id).collectAsState(initial = null)
         val album by database.album(item.id).collectAsState(initial = null)

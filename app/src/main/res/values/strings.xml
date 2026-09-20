@@ -1018,5 +1018,7 @@
     <string name="generator">Generator</string>
     <string name="generator_subtitle">Shape a playlist with smart discovery engines</string>
     <string name="generate_playlist">Generate Playlist</string>
+    <string name="enable_jiosaavn">JioSaavn Integration</string>
+    <string name="enable_jiosaavn_desc">Prioritize JioSaavn 320kbps high-fidelity streams with seamless YouTube fallback</string>
 </resources>
 
