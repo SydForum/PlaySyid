@@ -37,7 +37,6 @@ import androidx.media3.common.Player.REPEAT_MODE_OFF
 import androidx.media3.common.Player.REPEAT_MODE_ONE
 import androidx.media3.common.Player.STATE_IDLE
 import androidx.media3.common.Timeline
-import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
@@ -52,7 +51,6 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.analytics.PlaybackStats
 import androidx.media3.exoplayer.analytics.PlaybackStatsListener
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import androidx.media3.extractor.ExtractorsFactory
@@ -231,18 +229,38 @@ class MusicService :
                         host.endsWith("youtube-nocookie.com") ||
                         host.endsWith("ytimg.com")
 
-                if (!isYouTubeMediaHost) return@addInterceptor chain.proceed(request)
+                val finalRequest = if (isYouTubeMediaHost) {
+                    val clientParam = request.url.queryParameter("c")?.trim().orEmpty()
+                    val userAgent = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveUserAgent(clientParam)
+                    val originReferer = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveOriginReferer(clientParam)
 
-                val clientParam = request.url.queryParameter("c")?.trim().orEmpty()
+                    val builder = request.newBuilder().header("User-Agent", userAgent)
+                    originReferer.origin?.let { builder.header("Origin", it) }
+                    originReferer.referer?.let { builder.header("Referer", it) }
+                    builder.build()
+                } else {
+                    request
+                }
 
-                val userAgent = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveUserAgent(clientParam)
-                val originReferer = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveOriginReferer(clientParam)
+                val response = chain.proceed(finalRequest)
 
-                val builder = request.newBuilder().header("User-Agent", userAgent)
-                originReferer.origin?.let { builder.header("Origin", it) }
-                originReferer.referer?.let { builder.header("Referer", it) }
+                if (response.code == 416) {
+                    val rangeHeader = request.header("Range")
+                    if (rangeHeader != null) {
+                        Timber.tag("MusicService").w("Handling HTTP 416 for Range: $rangeHeader, returning empty EOF response")
+                        response.close()
+                        return@addInterceptor okhttp3.Response.Builder()
+                            .request(finalRequest)
+                            .protocol(response.protocol)
+                            .code(206)
+                            .message("Partial Content")
+                            .header("Content-Length", "0")
+                            .body(okhttp3.ResponseBody.create(response.body.contentType(), ByteArray(0)))
+                            .build()
+                    }
+                }
 
-                chain.proceed(builder.build())
+                response
             }.build()
     }
 
@@ -279,6 +297,14 @@ class MusicService :
     private val crossfadeDurationMs = MutableStateFlow(0)
     private val audioNormalizationEnabled = MutableStateFlow(true)
     private var crossfadeAudio: CrossfadeAudio? = null
+
+    private data class CachedSongUrl(
+        val url: String,
+        val expiresAt: Long,
+        val contentLength: Long?,
+    )
+    private val songUrlCache = java.util.concurrent.ConcurrentHashMap<String, CachedSongUrl>()
+    private val spotifyMatchCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     lateinit var sleepTimer: SleepTimer
 
@@ -1928,6 +1954,8 @@ class MusicService :
 
         Log.e(TAG, "Player error: ${error.errorCodeName}, message: ${error.message}", error)
 
+        player.currentMediaItem?.mediaId?.let { songUrlCache.remove(it) }
+
         val isConnectionError = (error.cause?.cause is PlaybackException) &&
                 (error.cause?.cause as PlaybackException).errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
 
@@ -1963,21 +1991,14 @@ class MusicService :
             .setFlags(FLAG_IGNORE_CACHE_ON_ERROR)
 
     private fun createDataSourceFactory(): DataSource.Factory {
-        data class CachedSongUrl(
-            val url: String,
-            val expiresAt: Long,
-            val contentLength: Long?,
-        )
-
         fun DataSpec.withStreamUrl(url: String, contentLength: Long?): DataSpec {
             val resolved = withUri(url.toUri())
             if (resolved.length != C.LENGTH_UNSET.toLong()) return resolved
 
             val remainingLength =
-                contentLength
-                    ?.takeIf { it > resolved.position }
-                    ?.let { it - resolved.position }
-                    ?: C.LENGTH_UNSET.toLong()
+                contentLength?.let { len ->
+                    (len - resolved.position).coerceAtLeast(0L)
+                } ?: C.LENGTH_UNSET.toLong()
 
             return if (remainingLength != C.LENGTH_UNSET.toLong()) {
                 resolved.buildUpon()
@@ -1988,9 +2009,6 @@ class MusicService :
             }
         }
 
-        val songUrlCache = HashMap<String, CachedSongUrl>()
-        val spotifyMatchCache = HashMap<String, String>()
-        
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
             if (dataSpec.uri.scheme == "content" || dataSpec.uri.scheme == "file") {
                 return@Factory dataSpec
@@ -1998,12 +2016,9 @@ class MusicService :
             
             val mediaId = dataSpec.key ?: error("No media id")
 
-            if (downloadCache.isCached(
-                    mediaId,
-                    dataSpec.position,
-                    if (dataSpec.length >= 0) dataSpec.length else 1
-                ) ||
-                playerCache.isCached(mediaId, dataSpec.position, CHUNK_LENGTH)
+            val checkLength = if (dataSpec.length > 0) dataSpec.length else 1L
+            if (downloadCache.isCached(mediaId, dataSpec.position, checkLength) ||
+                playerCache.isCached(mediaId, dataSpec.position, checkLength)
             ) {
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
                 return@Factory dataSpec
@@ -2384,9 +2399,7 @@ class MusicService :
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                 .setAudioProcessorChain(
                     DefaultAudioSink.DefaultAudioProcessorChain(
-                        audioProcessors,
-                        SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
-                        SonicAudioProcessor(),
+                        *audioProcessors,
                     ),
                 ).build()
         }
