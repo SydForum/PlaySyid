@@ -9,6 +9,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +46,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -193,11 +195,10 @@ fun AppleHeader(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (onDeveloperNewsClick != null) {
-                    IconButton(
-                        onClick = onDeveloperNewsClick,
+                    Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
@@ -205,6 +206,12 @@ fun AppleHeader(
                                 if (isDark) Color.White.copy(alpha = 0.12f)
                                 else Color.Black.copy(alpha = 0.06f)
                             )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = true),
+                                onClick = onDeveloperNewsClick
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.newspaper),
@@ -216,8 +223,7 @@ fun AppleHeader(
                 }
 
                 if (onNewReleaseClick != null) {
-                    IconButton(
-                        onClick = onNewReleaseClick,
+                    Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
@@ -225,6 +231,12 @@ fun AppleHeader(
                                 if (isDark) Color.White.copy(alpha = 0.12f)
                                 else Color.Black.copy(alpha = 0.06f)
                             )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = true),
+                                onClick = onNewReleaseClick
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.notification_on),
@@ -235,12 +247,17 @@ fun AppleHeader(
                     }
                 }
 
-                IconButton(
-                    onClick = onProfileClick,
+                Box(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = true),
+                            onClick = onProfileClick
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
                     when (val selection = currentSelection) {
                         is AvatarSelection.Custom -> {
