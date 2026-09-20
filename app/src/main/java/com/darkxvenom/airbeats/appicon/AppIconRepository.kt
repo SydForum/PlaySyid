@@ -43,72 +43,7 @@ object AppIconRepository {
     )
 
     val BUILT_IN_ICONS: List<AppIcon> = listOf(
-        DEFAULT_ICON,
-        AppIcon(
-            id = "dark",
-            title = "AMOLED Dark",
-            subtitle = "Pitch black with crisp titanium emblem",
-            author = "AirBeats Team",
-            aliasName = "$PACKAGE_NAME.launcher.AmoledDark",
-            bgColors = listOf(Color(0xFF000000), Color(0xFF0D0D0E)),
-            fgTint = Color(0xFFF2F2F5)
-        ),
-        AppIcon(
-            id = "neon",
-            title = "Neon Cyber",
-            subtitle = "Synthwave twilight with electric cyan",
-            author = "AirBeats Team",
-            aliasName = "$PACKAGE_NAME.launcher.NeonCyber",
-            bgColors = listOf(Color(0xFF090514), Color(0xFF150A2B)),
-            fgTint = Color(0xFF00F0FF)
-        ),
-        AppIcon(
-            id = "crimson",
-            title = "Crimson Blood",
-            subtitle = "Deep velvet shadow with ruby red",
-            author = "AirBeats Team",
-            aliasName = "$PACKAGE_NAME.launcher.CrimsonRed",
-            bgColors = listOf(Color(0xFF180205), Color(0xFF2E050B)),
-            fgTint = Color(0xFFFF1744)
-        ),
-        AppIcon(
-            id = "gold",
-            title = "Luxury Gold",
-            subtitle = "Matte obsidian with polished champagne gold",
-            author = "AirBeats Team",
-            aliasName = "$PACKAGE_NAME.launcher.LuxuryGold",
-            bgColors = listOf(Color(0xFF0E0E10), Color(0xFF1C1A14)),
-            fgTint = Color(0xFFFFD700)
-        ),
-        AppIcon(
-            id = "forest",
-            title = "Forest Mint",
-            subtitle = "Deep emerald night with luminous mint",
-            author = "AirBeats Team",
-            aliasName = "$PACKAGE_NAME.launcher.ForestMint",
-            bgColors = listOf(Color(0xFF04140D), Color(0xFF0A281A)),
-            fgTint = Color(0xFF00E676)
-        ),
-        AppIcon(
-            id = "mono",
-            title = "Minimalist Mono",
-            subtitle = "Industrial slate with pure porcelain white",
-            author = "AirBeats Team",
-            aliasName = "$PACKAGE_NAME.launcher.MinimalistMono",
-            bgColors = listOf(Color(0xFF1A1A1E), Color(0xFF24242B)),
-            fgTint = Color(0xFFFFFFFF)
-        ),
-        AppIcon(
-            id = "airbeats_winters",
-            title = "Airbeats Winters",
-            subtitle = "Winter season frosted cabin & glowing headphones",
-            author = "@Dark",
-            aliasName = "$PACKAGE_NAME.launcher.AirbeatsWinters",
-            bgColors = listOf(Color(0xFF061838), Color(0xFF0F386E)),
-            fgTint = null,
-            isCommunity = true,
-            svgUrl = "https://raw.githubusercontent.com/d0x-dev/Storage/2521b636c97df62751066a548d2819f4fa2cca38/Airbeats/icons/ChatGPT%20Image%20Sep%2020%2C%202026%2C%2011_02_07%20PM.svg"
-        )
+        DEFAULT_ICON
     )
 
     /**
@@ -219,22 +154,27 @@ object AppIconRepository {
 
             if (!icon.svgUrl.isNullOrBlank()) {
                 val loader = context.imageLoader
-                val req = ImageRequest.Builder(context)
+                val reqBuilder = ImageRequest.Builder(context)
                     .data(icon.svgUrl)
-                    .decoderFactory(SvgDecoder.Factory())
                     .size(512, 512)
                     .allowHardware(false)
-                    .build()
+
+                if (icon.svgUrl.endsWith(".svg", ignoreCase = true)) {
+                    reqBuilder.decoderFactory(SvgDecoder.Factory())
+                }
+
+                val req = reqBuilder.build()
                 val result = loader.execute(req)
                 val bitmap = result.drawable?.toBitmap(512, 512, Bitmap.Config.ARGB_8888)
 
                 if (bitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     val shortcutManager = context.getSystemService(ShortcutManager::class.java)
                     if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
-                        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                            ?: Intent(context, Class.forName("$PACKAGE_NAME.MainActivity")).apply {
+                        val launchIntent = (context.packageManager.getLaunchIntentForPackage(context.packageName)
+                            ?: Intent(context, Class.forName("$PACKAGE_NAME.MainActivity"))).apply {
                                 action = Intent.ACTION_MAIN
                                 addCategory(Intent.CATEGORY_LAUNCHER)
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
                             }
 
                         val pinShortcutInfo = ShortcutInfo.Builder(context, "airbeats_icon_${icon.id}")
@@ -286,9 +226,12 @@ object AppIconRepository {
                 val title = obj.optString("title", obj.optString("name", "Community Icon"))
                 val author = obj.optString("author", "Community Designer")
                 val subtitle = obj.optString("subtitle", "Designed by $author")
-                var svgUrl = obj.optString("svgUrl", "")
+                var svgUrl = obj.optString("svgUrl", obj.optString("imageUrl", obj.optString("url", "")))
                 if (svgUrl.startsWith("http://")) {
                     svgUrl = "https://" + svgUrl.substring(7)
+                }
+                if (svgUrl.isBlank() && id == "airbeats_winters") {
+                    svgUrl = "file:///android_asset/icons/Airbeats_Winters.png"
                 }
                 if (svgUrl.isNotBlank()) {
                     destination.add(
@@ -298,7 +241,7 @@ object AppIconRepository {
                             subtitle = subtitle,
                             author = author,
                             aliasName = DEFAULT_ICON.aliasName,
-                            bgColors = listOf(Color(0xFF1E1E24), Color(0xFF282830)),
+                            bgColors = listOf(Color(0xFF061838), Color(0xFF0F386E)),
                             fgTint = null,
                             isCommunity = true,
                             svgUrl = svgUrl
@@ -327,7 +270,24 @@ object AppIconRepository {
             }
         }
 
-        // 2. Fetch latest remote icons from GitHub
+        // 2. Fallback guarantee for bundled Airbeats Winters if not yet parsed
+        if (list.none { it.id == "airbeats_winters" }) {
+            list.add(
+                AppIcon(
+                    id = "airbeats_winters",
+                    title = "Airbeats Winters",
+                    subtitle = "Winter season frosted cabin & glowing headphones",
+                    author = "@Dark",
+                    aliasName = DEFAULT_ICON.aliasName,
+                    bgColors = listOf(Color(0xFF061838), Color(0xFF0F386E)),
+                    fgTint = null,
+                    isCommunity = true,
+                    svgUrl = "file:///android_asset/icons/Airbeats_Winters.png"
+                )
+            )
+        }
+
+        // 3. Fetch latest remote icons from GitHub
         try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
@@ -343,7 +303,7 @@ object AppIconRepository {
                 .build()
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = response.body.string()
                 if (!body.isNullOrBlank()) {
                     val remoteList = mutableListOf<AppIcon>()
                     parseCommunityJson(body, remoteList)

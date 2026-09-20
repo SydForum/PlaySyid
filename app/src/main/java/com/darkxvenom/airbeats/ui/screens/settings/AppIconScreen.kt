@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
@@ -149,119 +150,142 @@ fun AppIconScreen(
         ) {
             // 1. Hero Preview Card
             item {
-                HomeScreenMockupCard(icon = selectedIcon)
+                HomeScreenMockupCard(
+                    icon = selectedIcon,
+                    onPinToHomeScreen = { iconToPin ->
+                        coroutineScope.launch {
+                            val success = AppIconRepository.applyCommunityIcon(context, iconToPin)
+                            if (success) {
+                                Toast.makeText(
+                                    context,
+                                    "Adding \"${iconToPin.title}\" to Home screen...",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Could not add shortcut on this launcher",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                )
             }
 
-            // 2. Icon Selection Section Header
+            // 2. Default App Icon Section Header
+            item {
+                Text(
+                    text = "Default App Icon",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                )
+            }
+
+            // 3. Default Icon Card (only default brand icon)
+            item {
+                val defaultIcon = AppIconRepository.DEFAULT_ICON
+                val isSelected = activeIconId == defaultIcon.id
+                DefaultAppIconCard(
+                    icon = defaultIcon,
+                    isSelected = isSelected,
+                    onClick = {
+                        if (!isSelected) {
+                            val success = AppIconRepository.setActiveIcon(context, defaultIcon.id)
+                            if (success) {
+                                activeIconId = defaultIcon.id
+                                Toast.makeText(
+                                    context,
+                                    "Default app icon restored",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                )
+            }
+
+            // 4. Community Icons Section Header
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Themes & Styles",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                    Text(
-                        text = "${allIcons.size} styles",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // 3. Grid of Icons (rendered as rows of 2 for optimal touch & display)
-            items(allIcons.chunked(2).size) { rowIndex ->
-                val rowIcons = allIcons.chunked(2)[rowIndex]
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    for (icon in rowIcons) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            AppIconItemCard(
-                                icon = icon,
-                                isSelected = icon.id == activeIconId,
-                                onClick = {
-                                    if (icon.id != activeIconId) {
-                                        val success = AppIconRepository.setActiveIcon(context, icon.id)
-                                        if (success) {
-                                            activeIconId = icon.id
-                                            Toast.makeText(
-                                                context,
-                                                "App icon updated to ${icon.title}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        } else {
-                                            Toast.makeText(
-                                                context,
-                                                "Could not update app icon on this launcher",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    if (rowIcons.size == 1) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-
-            // 4. Community Creations Section (if available)
-            if (communityIcons.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    Column {
                         Text(
-                            text = "Community Creations",
+                            text = "Community Icons",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.secondary
                             )
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Download from GitHub & Pin to Home Screen",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (communityIcons.isNotEmpty()) {
                             Text(
-                                text = "${communityIcons.size} from GitHub",
+                                text = "${communityIcons.size} available",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(Modifier.width(4.dp))
-                            IconButton(
-                                onClick = {
-                                    Toast.makeText(context, "Checking GitHub for new icons...", Toast.LENGTH_SHORT).show()
-                                    refreshCommunityIcons()
-                                },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                if (isRefreshingCommunity) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                } else {
-                                    Icon(
-                                        painter = painterResource(R.drawable.sync),
-                                        contentDescription = "Refresh from GitHub",
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
+                        }
+                        IconButton(
+                            onClick = {
+                                Toast.makeText(context, "Checking GitHub for new icons...", Toast.LENGTH_SHORT).show()
+                                refreshCommunityIcons()
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            if (isRefreshingCommunity) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.sync),
+                                    contentDescription = "Refresh from GitHub",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
                 }
+            }
 
+            // 5. Community Icons Grid
+            if (communityIcons.isEmpty()) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isRefreshingCommunity) "Checking GitHub for icons..." else "No community icons available yet",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else {
                 items(communityIcons.chunked(2).size) { rowIndex ->
                     val rowIcons = communityIcons.chunked(2)[rowIndex]
                     Row(
@@ -270,24 +294,29 @@ fun AppIconScreen(
                     ) {
                         for (icon in rowIcons) {
                             Box(modifier = Modifier.weight(1f)) {
-                                AppIconItemCard(
+                                CommunityIconCard(
                                     icon = icon,
                                     isSelected = icon.id == activeIconId,
                                     onClick = {
                                         activeIconId = icon.id
-                                        val success = AppIconRepository.setActiveIcon(context, icon.id)
-                                        if (success) {
-                                            Toast.makeText(
-                                                context,
-                                                "App icon updated to ${icon.title}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        } else {
-                                            Toast.makeText(
-                                                context,
-                                                "Could not update app icon on this launcher",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                    },
+                                    onPin = {
+                                        activeIconId = icon.id
+                                        coroutineScope.launch {
+                                            val success = AppIconRepository.applyCommunityIcon(context, icon)
+                                            if (success) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Adding \"${icon.title}\" to Home screen...",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Could not add shortcut on this launcher",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                         }
                                     }
                                 )
@@ -325,7 +354,10 @@ fun AppIconScreen(
  * Realistic Home Screen Mockup previewing the selected icon.
  */
 @Composable
-private fun HomeScreenMockupCard(icon: AppIcon) {
+private fun HomeScreenMockupCard(
+    icon: AppIcon,
+    onPinToHomeScreen: ((AppIcon) -> Unit)? = null
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -403,11 +435,16 @@ private fun HomeScreenMockupCard(icon: AppIcon) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(icon.svgUrl)
-                                .decoderFactory(SvgDecoder.Factory())
+                                .apply {
+                                    if (icon.svgUrl.endsWith(".svg", ignoreCase = true)) {
+                                        decoderFactory(SvgDecoder.Factory())
+                                    }
+                                }
                                 .crossfade(true)
                                 .build(),
                             contentDescription = icon.title,
-                            modifier = Modifier.fillMaxSize(0.72f)
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
                     } else if (icon.fgTint != null) {
                         Image(
@@ -440,22 +477,44 @@ private fun HomeScreenMockupCard(icon: AppIcon) {
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+
+                if (icon.isCommunity && onPinToHomeScreen != null) {
+                    Button(
+                        onClick = { onPinToHomeScreen(icon) },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Add to Home Screen",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * Individual selectable App Icon card in the grid.
+ * Dedicated Default App Icon Card.
  */
 @Composable
-private fun AppIconItemCard(
+private fun DefaultAppIconCard(
     icon: AppIcon,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.02f else 1.0f,
+        targetValue = if (isSelected) 1.01f else 1.0f,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "scale"
     )
@@ -480,10 +539,110 @@ private fun AppIconItemCard(
             }
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .shadow(8.dp, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Brush.linearGradient(icon.bgColors))
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(R.mipmap.ic_launcher_foreground),
+                    contentDescription = icon.title,
+                    modifier = Modifier.fillMaxSize(0.72f)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = icon.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = icon.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Active Default",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onClick,
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(text = "Set Default", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Community Icon Card loaded dynamically from GitHub.
+ */
+@Composable
+private fun CommunityIconCard(
+    icon: AppIcon,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onPin: () -> Unit
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.02f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "scale"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(20.dp)
+            ),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -493,35 +652,27 @@ private fun AppIconItemCard(
                 // Adaptive Squircle Badge
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
-                        .shadow(8.dp, RoundedCornerShape(16.dp))
-                        .clip(RoundedCornerShape(16.dp))
+                        .size(68.dp)
+                        .shadow(10.dp, RoundedCornerShape(18.dp))
+                        .clip(RoundedCornerShape(18.dp))
                         .background(Brush.linearGradient(icon.bgColors))
-                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (icon.isCommunity && !icon.svgUrl.isNullOrBlank()) {
+                    if (!icon.svgUrl.isNullOrBlank()) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(icon.svgUrl)
-                                .decoderFactory(SvgDecoder.Factory())
+                                .apply {
+                                    if (icon.svgUrl.endsWith(".svg", ignoreCase = true)) {
+                                        decoderFactory(SvgDecoder.Factory())
+                                    }
+                                }
                                 .crossfade(true)
                                 .build(),
                             contentDescription = icon.title,
-                            modifier = Modifier.fillMaxSize(0.72f)
-                        )
-                    } else if (icon.fgTint != null) {
-                        Image(
-                            painter = painterResource(R.mipmap.ic_launcher_foreground),
-                            contentDescription = icon.title,
-                            colorFilter = ColorFilter.tint(icon.fgTint),
-                            modifier = Modifier.fillMaxSize(0.72f)
-                        )
-                    } else {
-                        Image(
-                            painter = painterResource(R.mipmap.ic_launcher_foreground),
-                            contentDescription = icon.title,
-                            modifier = Modifier.fillMaxSize(0.72f)
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
@@ -531,16 +682,16 @@ private fun AppIconItemCard(
                     Box(
                         modifier = Modifier
                             .offset(x = 6.dp, y = (-6).dp)
-                            .size(24.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
+                            .background(MaterialTheme.colorScheme.secondary),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Selected",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(16.dp)
+                            tint = MaterialTheme.colorScheme.onSecondary,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
@@ -555,12 +706,33 @@ private fun AppIconItemCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = icon.subtitle,
+                    text = "by ${icon.author}",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Button(
+                onClick = onPin,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                ),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Add to Home",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
         }
@@ -632,7 +804,7 @@ private fun CommunitySubmissionBanner(
             }
 
             Text(
-                text = "Anyone in the community can contribute. Share your vector design with a raw GitHub SVG URL and it will be reviewed and compiled into the app for everyone to enjoy.",
+                text = "Anyone in the community can contribute. Share your vector design with a raw GitHub SVG URL and it will be added to the live catalog for everyone to pin to their home screen.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -682,7 +854,7 @@ private fun SystemNoticeCard() {
                 modifier = Modifier.size(20.dp)
             )
             Text(
-                text = "Launcher icons change instantaneously on most devices. On some third-party launchers (such as Nova or Samsung One UI), the home screen may take a few seconds to refresh the cached thumbnail.",
+                text = "The Default Icon changes the primary app launcher icon. Community icons from GitHub are pinned directly to your Home screen with their unique vector artwork via the system Add to Home screen feature.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 18.sp
