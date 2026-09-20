@@ -6,7 +6,7 @@
 
 <div align="center">
 
-<img src="[https://raw.githubusercontent.com/d0x-dev/Storage/refs/heads/main/Airbeats/Airbeats-preview-readme.png](https://github-production-user-asset-6210df.s3.amazonaws.com/218248866/655326644-737fdc7b-bf01-4771-8ff3-1593d2ca03ca.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20260920%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260920T072632Z&X-Amz-Expires=300&X-Amz-Signature=8cc7f497601f337427797af3c35113740332ee7ab0e4723c718b08274987c3ef&X-Amz-SignedHeaders=host&response-content-type=image%2Fpng)" alt="AirBeats Preview" width="100%">
+<img src="https://raw.githubusercontent.com/d0x-dev/Storage/refs/heads/main/Airbeats/ChatGPT%20Image%20Sep%2020%2C%202026%2C%2012_59_52%20PM.png" alt="AirBeats Preview" width="100%">
 
 ### 🚀 Advanced YouTube Music Client with Material Design 3
 
