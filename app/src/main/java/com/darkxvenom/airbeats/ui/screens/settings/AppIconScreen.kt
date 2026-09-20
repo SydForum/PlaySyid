@@ -63,11 +63,25 @@ fun AppIconScreen(
     scrollBehavior: TopAppBarScrollBehavior
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var activeIconId by remember { mutableStateOf(AppIconRepository.getActiveIconId(context)) }
     val allIcons = remember { AppIconRepository.getAvailableIcons() }
-    val communityIcons by produceState<List<AppIcon>>(initialValue = emptyList()) {
-        value = AppIconRepository.fetchCommunityIcons(context)
+
+    var isRefreshingCommunity by remember { mutableStateOf(false) }
+    var communityIcons by remember { mutableStateOf<List<AppIcon>>(emptyList()) }
+
+    fun refreshCommunityIcons() {
+        coroutineScope.launch {
+            isRefreshingCommunity = true
+            communityIcons = AppIconRepository.fetchCommunityIcons(context)
+            isRefreshingCommunity = false
+        }
     }
+
+    LaunchedEffect(Unit) {
+        refreshCommunityIcons()
+    }
+
     val selectedIcon = remember(activeIconId, communityIcons) {
         (allIcons + communityIcons).find { it.id == activeIconId } ?: AppIconRepository.DEFAULT_ICON
     }
@@ -214,11 +228,36 @@ fun AppIconScreen(
                                 color = MaterialTheme.colorScheme.secondary
                             )
                         )
-                        Text(
-                            text = "${communityIcons.size} from GitHub",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${communityIcons.size} from GitHub",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            IconButton(
+                                onClick = {
+                                    Toast.makeText(context, "Checking GitHub for new icons...", Toast.LENGTH_SHORT).show()
+                                    refreshCommunityIcons()
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                if (isRefreshingCommunity) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = painterResource(R.drawable.sync),
+                                        contentDescription = "Refresh from GitHub",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -235,11 +274,21 @@ fun AppIconScreen(
                                     isSelected = icon.id == activeIconId,
                                     onClick = {
                                         activeIconId = icon.id
-                                        Toast.makeText(
-                                            context,
-                                            "Previewing: ${icon.title} by ${icon.author}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        coroutineScope.launch {
+                                            Toast.makeText(
+                                                context,
+                                                "Applying ${icon.title} to Home Screen...",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            val success = AppIconRepository.applyCommunityIcon(context, icon)
+                                            if (success) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "${icon.title} applied! Pin shortcut prompt created.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        }
                                     }
                                 )
                             }

@@ -7,6 +7,14 @@ import android.os.Build
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.content.Intent
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.Bitmap
+import androidx.core.graphics.drawable.toBitmap
+import coil.decode.SvgDecoder
+import coil.imageLoader
+import coil.request.ImageRequest
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -188,6 +196,56 @@ object AppIconRepository {
     }
 
     /**
+     * Applies a community SVG icon dynamically to the Android launcher by pinning/updating a high-res home screen shortcut.
+     */
+    suspend fun applyCommunityIcon(context: Context, icon: AppIcon): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // Save preference so app remembers selection
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_SELECTED_ICON, icon.id)
+                .apply()
+
+            if (!icon.svgUrl.isNullOrBlank()) {
+                val loader = context.imageLoader
+                val req = ImageRequest.Builder(context)
+                    .data(icon.svgUrl)
+                    .decoderFactory(SvgDecoder.Factory())
+                    .size(256, 256)
+                    .allowHardware(false)
+                    .build()
+                val result = loader.execute(req)
+                val bitmap = result.drawable?.toBitmap(256, 256, Bitmap.Config.ARGB_8888)
+
+                if (bitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val shortcutManager = context.getSystemService(ShortcutManager::class.java)
+                    if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
+                        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                            ?: Intent(context, Class.forName("$PACKAGE_NAME.MainActivity")).apply {
+                                action = Intent.ACTION_MAIN
+                                addCategory(Intent.CATEGORY_LAUNCHER)
+                            }
+
+                        val pinShortcutInfo = ShortcutInfo.Builder(context, "airbeats_icon_${icon.id}")
+                            .setIcon(android.graphics.drawable.Icon.createWithBitmap(bitmap))
+                            .setShortLabel(context.getString(com.darkxvenom.airbeats.R.string.app_name))
+                            .setLongLabel("${context.getString(com.darkxvenom.airbeats.R.string.app_name)} - ${icon.title}")
+                            .setIntent(launchIntent)
+                            .build()
+
+                        shortcutManager.requestPinShortcut(pinShortcutInfo, null)
+                        return@withContext true
+                    }
+                }
+            }
+            return@withContext true
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to apply community icon: ${icon.id}")
+            return@withContext false
+        }
+    }
+
+    /**
      * Generates a GitHub Issue template URL for users to submit custom SVG icons.
      */
     fun buildCommunitySubmissionUrl(iconTitle: String, authorName: String, svgUrl: String): String {
@@ -266,8 +324,11 @@ object AppIconRepository {
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .build()
+            val cacheBusterUrl = "$GITHUB_COMMUNITY_ICONS_URL?_t=${System.currentTimeMillis()}"
             val request = Request.Builder()
-                .url(GITHUB_COMMUNITY_ICONS_URL)
+                .url(cacheBusterUrl)
+                .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                .header("Pragma", "no-cache")
                 .build()
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
