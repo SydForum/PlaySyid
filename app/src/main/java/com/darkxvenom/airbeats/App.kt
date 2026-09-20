@@ -143,6 +143,14 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
 
         try {
             Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+                // Ignore benign Navigation Compose back-stack transition race condition
+                val isNavRace = throwable is java.lang.IllegalStateException &&
+                    throwable.message?.contains("Cannot transition entry that is not in the back stack") == true
+                if (isNavRace) {
+                    Timber.w(throwable, "Ignored NavHost back-stack transition race condition")
+                    return@setDefaultUncaughtExceptionHandler
+                }
+
                 try {
                     // Record uncaught crash immediately to Firebase Crashlytics
                     try {

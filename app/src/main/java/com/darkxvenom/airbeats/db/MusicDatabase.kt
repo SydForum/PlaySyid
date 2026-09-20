@@ -62,6 +62,18 @@ class MusicDatabase(
             }
         }
 
+    override fun checkpoint() {
+        try {
+            openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)".toSQLiteQuery()).use { cursor ->
+                cursor.moveToFirst()
+            }
+        } catch (_: Exception) {
+            try {
+                delegate.dao.raw("PRAGMA wal_checkpoint(TRUNCATE)".toSQLiteQuery())
+            } catch (_: Exception) {}
+        }
+    }
+
     fun close() = delegate.close()
 }
 

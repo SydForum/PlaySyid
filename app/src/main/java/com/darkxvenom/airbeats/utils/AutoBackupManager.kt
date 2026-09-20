@@ -259,13 +259,28 @@ object AutoBackupManager {
                     inputStream.copyTo(outputStream)
                 }
             }
+            val walFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-wal")
+            if (walFile.exists() && walFile.length() > 0) {
+                FileInputStream(walFile).use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry("${InternalDatabase.DB_NAME}-wal"))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+            val shmFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-shm")
+            if (shmFile.exists() && shmFile.length() > 0) {
+                FileInputStream(shmFile).use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry("${InternalDatabase.DB_NAME}-shm"))
+                    inputStream.copyTo(outputStream)
+                }
+            }
         }
     }
 
     fun hasBackableData(context: Context, database: MusicDatabase?): Boolean {
         // Room Database check
         val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
-        if (dbFile.exists() && dbFile.length() > 32 * 1024) return true
+        val walFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-wal")
+        if ((dbFile.exists() && dbFile.length() > 0) || (walFile.exists() && walFile.length() > 0)) return true
 
         // Datastore check (settings, profile)
         val datastoreDir = context.filesDir / "datastore"
@@ -435,7 +450,11 @@ object AutoBackupManager {
                 CoroutineScope(Dispatchers.IO).launch {
                     uploadToCloud(context, targetFile)
                 }
-                restoreFromInputStream(context, FileInputStream(targetFile), shouldRestart = shouldRestart)
+                runCatching {
+                    FileInputStream(targetFile).use { stream ->
+                        restoreFromInputStream(context, stream, shouldRestart = shouldRestart)
+                    }
+                }.getOrDefault(false)
             } else {
                 false
             }
@@ -546,9 +565,23 @@ object AutoBackupManager {
                         entry.name == InternalDatabase.DB_NAME -> {
                             val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
                             dbFile.parentFile?.mkdirs()
-                            context.getDatabasePath("${InternalDatabase.DB_NAME}-wal").delete()
-                            context.getDatabasePath("${InternalDatabase.DB_NAME}-shm").delete()
                             FileOutputStream(dbFile).use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+
+                        entry.name == "${InternalDatabase.DB_NAME}-wal" -> {
+                            val walFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-wal")
+                            walFile.parentFile?.mkdirs()
+                            FileOutputStream(walFile).use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+
+                        entry.name == "${InternalDatabase.DB_NAME}-shm" -> {
+                            val shmFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-shm")
+                            shmFile.parentFile?.mkdirs()
+                            FileOutputStream(shmFile).use { outputStream ->
                                 inputStream.copyTo(outputStream)
                             }
                         }
@@ -604,12 +637,19 @@ object AutoBackupManager {
         }
         val targetFile = getAutoBackupFile(context)
         if (file.absolutePath != targetFile.absolutePath) {
+            targetFile.parentFile?.mkdirs()
             runCatching { file.copyTo(targetFile, overwrite = true) }
         }
-        Timber.i("AutoBackupManager: Restoring auto backup from ${file.absolutePath} (${file.length()} bytes)")
-        return FileInputStream(targetFile).use { stream ->
-            restoreFromInputStream(context, stream, shouldRestart)
+        val streamFile = if (targetFile.exists() && targetFile.length() > 0L) targetFile else file
+        if (!streamFile.exists() || streamFile.length() == 0L) {
+            return false
         }
+        Timber.i("AutoBackupManager: Restoring auto backup from ${streamFile.absolutePath} (${streamFile.length()} bytes)")
+        return runCatching {
+            FileInputStream(streamFile).use { stream ->
+                restoreFromInputStream(context, stream, shouldRestart)
+            }
+        }.getOrDefault(false)
     }
 
     fun checkAndRestoreOnOpen(context: Context) {
@@ -618,6 +658,7 @@ object AutoBackupManager {
             if (!backupFile.exists() || backupFile.length() == 0L) {
                 val candidate = findAvailableAutoBackup(context)
                 if (candidate != null && candidate.exists() && candidate.length() > 0L) {
+                    backupFile.parentFile?.mkdirs()
                     candidate.copyTo(backupFile, overwrite = true)
                     Timber.i("AutoBackupManager: Discovered persistent backup at ${candidate.absolutePath} and primed local backup file")
                 }
@@ -644,9 +685,11 @@ object AutoBackupManager {
             }
 
             Timber.i("AutoBackupManager: Discovered un-restored backup file (${backupFile.length()} bytes). Restoring on app open...")
-            val success = FileInputStream(backupFile).use { stream ->
-                restoreFromInputStream(context, stream, shouldRestart = false)
-            }
+            val success = runCatching {
+                FileInputStream(backupFile).use { stream ->
+                    restoreFromInputStream(context, stream, shouldRestart = false)
+                }
+            }.getOrDefault(false)
 
             if (success) {
                 prefs.edit()
@@ -791,9 +834,11 @@ object AutoBackupManager {
         }
 
         Timber.i("AutoBackupManager: Cloud backup downloaded for device. Restoring local state...")
-        val success = FileInputStream(targetFile).use { stream ->
-            restoreFromInputStream(context, stream, shouldRestart = false)
-        }
+        val success = runCatching {
+            FileInputStream(targetFile).use { stream ->
+                restoreFromInputStream(context, stream, shouldRestart = false)
+            }
+        }.getOrDefault(false)
 
         if (success) {
             prefs.edit()

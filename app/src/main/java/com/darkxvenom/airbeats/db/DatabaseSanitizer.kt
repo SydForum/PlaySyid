@@ -13,8 +13,39 @@ object DatabaseSanitizer {
             try {
                 val db = openHelper.writableDatabase
 
-                // Clean up any zero or negative playTime events
-                db.execSQL("DELETE FROM event WHERE playTime <= 0")
+                // Clean up any zero or negative playTime events or null/blank songIds
+                db.execSQL("DELETE FROM event WHERE playTime <= 0 OR songId IS NULL OR songId = ''")
+
+                // Ensure non-null integrity for essential string fields across tables
+                db.execSQL("UPDATE song SET title = 'Unknown Track' WHERE title IS NULL OR title = ''")
+                db.execSQL("UPDATE artist SET name = 'Unknown Artist' WHERE name IS NULL OR name = ''")
+                db.execSQL("UPDATE album SET title = 'Unknown Album' WHERE title IS NULL OR title = ''")
+                db.execSQL("UPDATE playlist SET name = 'Unknown Playlist' WHERE name IS NULL OR name = ''")
+
+                // Clean up invalid foreign key mappings with null or empty keys
+                db.execSQL("DELETE FROM song_artist_map WHERE songId IS NULL OR songId = '' OR artistId IS NULL OR artistId = ''")
+                db.execSQL("DELETE FROM song_album_map WHERE songId IS NULL OR songId = '' OR albumId IS NULL OR albumId = ''")
+                db.execSQL("DELETE FROM playlist_song_map WHERE playlistId IS NULL OR playlistId = '' OR songId IS NULL OR songId = ''")
+
+                // Ensure orphan artists referenced in song_artist_map exist in artist table
+                db.execSQL(
+                    """
+                    INSERT OR IGNORE INTO artist (id, name, songCount, lastUpdateTime)
+                    SELECT DISTINCT artistId, 'Unknown Artist', 0, datetime('now')
+                    FROM song_artist_map
+                    WHERE artistId NOT IN (SELECT id FROM artist)
+                    """.trimIndent()
+                )
+
+                // Ensure orphan songs referenced in event exist in song table
+                db.execSQL(
+                    """
+                    INSERT OR IGNORE INTO song (id, title, duration)
+                    SELECT DISTINCT songId, 'Unknown Track', 180
+                    FROM event
+                    WHERE songId NOT IN (SELECT id FROM song)
+                    """.trimIndent()
+                )
 
                 // Find songs where event count is suspicious and average event playTime is < 25 seconds,
                 // or where eventCount is drastically higher than actual play count (totalPlayTime / duration)
@@ -38,9 +69,11 @@ object DatabaseSanitizer {
                     val timeIdx = c.getColumnIndex("totalTime")
                     val durIdx = c.getColumnIndex("duration")
                     while (c.moveToNext()) {
-                        val songId = c.getString(idIdx)
-                        val eventCount = c.getInt(countIdx)
-                        val totalTime = c.getLong(timeIdx)
+                        if (idIdx == -1 || c.isNull(idIdx)) continue
+                        val songId = c.getString(idIdx) ?: continue
+                        if (songId.isBlank()) continue
+                        val eventCount = if (countIdx != -1 && !c.isNull(countIdx)) c.getInt(countIdx) else 0
+                        val totalTime = if (timeIdx != -1 && !c.isNull(timeIdx)) c.getLong(timeIdx) else 0L
                         val duration = if (durIdx != -1 && !c.isNull(durIdx)) c.getInt(durIdx) else -1
                         songsToHeal.add(HealCandidate(songId, eventCount, totalTime, duration))
                     }
@@ -93,7 +126,8 @@ object DatabaseSanitizer {
         val rawEvents = mutableListOf<RawEvent>()
         eventCursor.use { c ->
             while (c.moveToNext()) {
-                rawEvents.add(RawEvent(c.getLong(0), c.getString(1), c.getLong(2)))
+                val ts = if (c.isNull(1)) "" else (c.getString(1) ?: "")
+                rawEvents.add(RawEvent(c.getLong(0), ts, c.getLong(2)))
             }
         }
 

@@ -186,6 +186,20 @@ class BackupRestoreViewModel @Inject constructor(
                     inputStream.copyTo(outputStream)
                 }
             }
+            val walFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-wal")
+            if (walFile.exists() && walFile.length() > 0) {
+                FileInputStream(walFile).use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry("${InternalDatabase.DB_NAME}-wal"))
+                    inputStream.copyTo(outputStream)
+                }
+            }
+            val shmFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-shm")
+            if (shmFile.exists() && shmFile.length() > 0) {
+                FileInputStream(shmFile).use { inputStream ->
+                    outputStream.putNextEntry(ZipEntry("${InternalDatabase.DB_NAME}-shm"))
+                    inputStream.copyTo(outputStream)
+                }
+            }
         }
     }
 
@@ -309,7 +323,11 @@ class BackupRestoreViewModel @Inject constructor(
                     launch(Dispatchers.IO) {
                         AutoBackupManager.uploadToCloud(context, targetFile)
                     }
-                    AutoBackupManager.restoreFromInputStream(context, FileInputStream(targetFile), shouldRestart = true)
+                    runCatching {
+                        FileInputStream(targetFile).use { stream ->
+                            AutoBackupManager.restoreFromInputStream(context, stream, shouldRestart = true)
+                        }
+                    }
                 }
             }.onFailure {
                 Timber.e(it, "Local restore failed")
@@ -429,9 +447,23 @@ class BackupRestoreViewModel @Inject constructor(
                         database.close()
                         val dbFile = context.getDatabasePath(InternalDatabase.DB_NAME)
                         dbFile.parentFile?.mkdirs()
-                        context.getDatabasePath("${InternalDatabase.DB_NAME}-wal").delete()
-                        context.getDatabasePath("${InternalDatabase.DB_NAME}-shm").delete()
                         FileOutputStream(dbFile).use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+
+                    "${InternalDatabase.DB_NAME}-wal" -> {
+                        val walFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-wal")
+                        walFile.parentFile?.mkdirs()
+                        FileOutputStream(walFile).use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+
+                    "${InternalDatabase.DB_NAME}-shm" -> {
+                        val shmFile = context.getDatabasePath("${InternalDatabase.DB_NAME}-shm")
+                        shmFile.parentFile?.mkdirs()
+                        FileOutputStream(shmFile).use { outputStream ->
                             inputStream.copyTo(outputStream)
                         }
                     }

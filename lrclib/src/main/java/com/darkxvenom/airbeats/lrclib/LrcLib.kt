@@ -21,6 +21,7 @@ object LrcLib {
                     Json {
                         isLenient = true
                         ignoreUnknownKeys = true
+                        coerceInputValues = true
                     },
                 )
             }
@@ -73,16 +74,16 @@ object LrcLib {
         var plain = 0
         tracks.forEach {
             if (count <= 4) {
-                if (it.syncedLyrics != null && duration == -1)
-                    {
-                        count++
-                        it.syncedLyrics.let(callback)
-                    } else {
-                    if (it.syncedLyrics != null && abs(it.duration - duration) <= 2) {
+                val dur = it.duration?.toInt() ?: -1
+                if (it.syncedLyrics != null && duration == -1) {
+                    count++
+                    it.syncedLyrics.let(callback)
+                } else {
+                    if (it.syncedLyrics != null && dur != -1 && abs(dur - duration) <= 2) {
                         count++
                         it.syncedLyrics.let(callback)
                     }
-                    if (it.plainLyrics != null && abs(it.duration - duration) <= 2 && plain == 0) {
+                    if (it.plainLyrics != null && dur != -1 && abs(dur - duration) <= 2 && plain == 0) {
                         count++
                         plain++
                         it.plainLyrics.let(callback)
