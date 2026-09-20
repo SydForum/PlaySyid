@@ -703,7 +703,7 @@ private fun V8DeviceSelector(
 }
 
 @Composable
-private fun DeviceSelectionBottomSheet(
+internal fun DeviceSelectionBottomSheet(
     onDismiss: () -> Unit,
     availableDevices: List<AudioDeviceInfo>,
     activeDevice: AudioDeviceInfo?,
@@ -1010,7 +1010,7 @@ private fun thickSliderColors(activeColor: Color) = SliderDefaults.colors(
     inactiveTrackColor = activeColor.copy(alpha = 0.24f),
 )
 
-private fun getAvailableDevices(context: Context): List<AudioDeviceInfo> {
+internal fun getAvailableDevices(context: Context): List<AudioDeviceInfo> {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         .filter { device ->
@@ -1032,7 +1032,7 @@ private fun getAvailableDevices(context: Context): List<AudioDeviceInfo> {
         }
 }
 
-private fun getActiveDevice(devices: List<AudioDeviceInfo>): AudioDeviceInfo? {
+internal fun getActiveDevice(devices: List<AudioDeviceInfo>): AudioDeviceInfo? {
     return devices.firstOrNull { it.isBluetoothOutput() }
         ?: devices.firstOrNull {
             it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
@@ -1047,12 +1047,12 @@ private fun AudioDeviceInfo.isBluetoothOutput(): Boolean {
         isBleHeadset(this)
 }
 
-private fun isBleHeadset(device: AudioDeviceInfo): Boolean {
+internal fun isBleHeadset(device: AudioDeviceInfo): Boolean {
     return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
         device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
 }
 
-private fun AudioDeviceInfo.outputName(): String {
+internal fun AudioDeviceInfo.outputName(): String {
     productName?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
     return when (type) {
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Speaker"

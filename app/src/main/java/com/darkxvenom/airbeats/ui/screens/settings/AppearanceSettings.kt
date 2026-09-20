@@ -846,6 +846,7 @@ fun AppearanceSettings(
                                     PlayerScreenStyle.APPLE -> "Apple"
                                     PlayerScreenStyle.GALAXY -> "Galaxy"
                                     PlayerScreenStyle.IOS_STYLED -> "IOS Styled"
+                                    PlayerScreenStyle.MATERIAL -> "Material"
                                 }
                             },
                         )},

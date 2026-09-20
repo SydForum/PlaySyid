@@ -2559,6 +2559,60 @@ fun BottomSheetPlayer(
                 playerVolume = playerVolume.value,
                 onVolumeChange = { playerConnection.service.playerVolume.value = it },
             )
+        } else if (playerScreenStyle == PlayerScreenStyle.MATERIAL) {
+            MaterialPlayer(
+                state = state,
+                mediaMetadata = mediaMetadata,
+                position = sliderPosition ?: position,
+                duration = duration,
+                isPlaying = isPlaying,
+                isLoading = playbackState != STATE_READY && playbackState != STATE_ENDED,
+                canSkipPrevious = canSkipPrevious,
+                canSkipNext = canSkipNext,
+                onSeek = { sliderPosition = it },
+                onSeekFinished = {
+                    sliderPosition?.let { playerConnection.player.seekTo(it) }
+                    sliderPosition = null
+                },
+                onPlayPause = { playerConnection.player.togglePlayPause() },
+                onPrevious = { playerConnection.player.seekToPrevious() },
+                onNext = { playerConnection.player.seekToNext() },
+                onCollapse = state::collapseSoft,
+                onMenuClick = {
+                    menuState.show {
+                        PlayerMenu(
+                            mediaMetadata = mediaMetadata ?: return@show,
+                            navController = navController,
+                            playerBottomSheetState = state,
+                            onShowDetailsDialog = { showDetailsDialog = true },
+                            onDismiss = menuState::dismiss,
+                        )
+                    }
+                },
+                isLiked = currentSong?.song?.liked == true,
+                onLikeClick = playerConnection::toggleLike,
+                onQueueClick = { queueSheetState.expandSoft() },
+                onShareClick = {
+                    mediaMetadata?.let { metadata ->
+                        val intent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            type = "text/plain"
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                com.darkxvenom.airbeats.utils.RemoteConfigManager.getSongShareUrl(metadata.id)
+                            )
+                        }
+                        context.startActivity(Intent.createChooser(intent, null))
+                    }
+                },
+                onOpenFullscreenLyrics = onOpenFullscreenLyrics,
+                playerConnection = playerConnection,
+                navController = navController,
+                menuState = menuState,
+                currentLyrics = currentLyrics,
+                playerVolume = playerVolume.value,
+                onVolumeChange = { playerConnection.service.playerVolume.value = it },
+            )
         } else if (playerScreenStyle == PlayerScreenStyle.GALAXY) {
             GalaxyPlayer(
                 state = state,
