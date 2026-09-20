@@ -2095,7 +2095,48 @@ class MusicService :
                 }
             }
 
-            // Intentar YouTube primero (fuente principal)
+            val enableJioSaavn = runBlocking {
+                dataStore.data.map { preferences ->
+                    preferences[EnableJioSaavnKey] ?: true
+                }.first()
+            }
+
+            // BitChord Architecture: When JioSaavn integration is enabled, prioritize JioSaavn 320kbps streams first
+            if (enableJioSaavn && !mediaId.startsWith("JS:") && !mediaId.startsWith("local:")) {
+                try {
+                    val mediaMetadata = kotlinx.coroutines.runBlocking(Dispatchers.Main) {
+                        player.mediaItems.find { it.mediaId == mediaId }?.metadata
+                    }
+                    if (mediaMetadata != null && mediaMetadata.title.isNotBlank()) {
+                        val artistName = mediaMetadata.artists.firstOrNull()?.name ?: ""
+                        val jsStreamUrl: String? = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                            runCatching {
+                                kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                                    com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.findMatchAndStreamUrl(
+                                        mediaMetadata.title,
+                                        artistName,
+                                        mediaMetadata.duration
+                                    )
+                                }
+                            }.getOrNull()
+                        }
+                        if (jsStreamUrl != null) {
+                            Timber.tag("MusicService").d("BitChord Priority: Serving JioSaavn 320k for '${mediaMetadata.title}'")
+                            songUrlCache[mediaId] = CachedSongUrl(
+                                url = jsStreamUrl,
+                                expiresAt = System.currentTimeMillis() + 3600000L,
+                                contentLength = null,
+                            )
+                            scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+                            return@Factory dataSpec.withStreamUrl(jsStreamUrl, null)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("MusicService").w(e, "JioSaavn priority resolution error, falling through to YouTube")
+                }
+            }
+
+            // YouTube backend (rock-solid primary / fallback)
             val ytLogTag = "YouTube"
             try {
                 val playbackData = kotlinx.coroutines.runBlocking(Dispatchers.IO) {

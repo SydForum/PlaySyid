@@ -35,6 +35,7 @@ import com.darkxvenom.airbeats.innertube.models.YTItem
 import com.darkxvenom.airbeats.innertube.pages.SearchSummary
 import com.darkxvenom.airbeats.constants.EnableJioSaavnKey
 import com.darkxvenom.airbeats.jiosaavn.JioSaavnApi
+import com.darkxvenom.airbeats.jiosaavn.TrackMatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 
@@ -52,42 +53,61 @@ constructor(
 
     init {
         viewModelScope.launch {
-            val enableJioSaavn = context.dataStore.get(EnableJioSaavnKey, true)
             filter.collect { filter ->
+                val enableJioSaavn = context.dataStore.get(EnableJioSaavnKey, true)
+                val hideExplicit = context.dataStore.get(HideExplicitKey, false)
+                val hideVideo = context.dataStore.get(HideVideoKey, false)
+
                 if (filter == null) {
                     if (summaryPage == null) {
                         if (enableJioSaavn) {
                             val jioDeferred = async(Dispatchers.IO) {
-                                JioSaavnApi.searchSongs(query).getOrNull().orEmpty()
+                                val raw = JioSaavnApi.searchSongs(query).getOrNull().orEmpty()
+                                raw.filter { TrackMatcher.matchesQuery(it, query) }
                             }
                             val ytDeferred = async(Dispatchers.IO) {
                                 YouTube.searchSummary(query).getOrNull()
                             }
-                            val jioSongs = jioDeferred.await()
-                            val ytSummary = ytDeferred.await()
+                            val accurateJioSongs = jioDeferred.await()
+                            var ytSummary = ytDeferred.await()
+
+                            // Fallback if YouTube searchSummary fails: try YouTube FILTER_SONG
+                            if (ytSummary == null) {
+                                val ytSongs = async(Dispatchers.IO) {
+                                    YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                                }.await()
+                                if (ytSongs != null && ytSongs.items.isNotEmpty()) {
+                                    ytSummary = SearchSummaryPage(
+                                        summaries = listOf(
+                                            SearchSummary(title = "Songs", items = ytSongs.items)
+                                        )
+                                    )
+                                }
+                            }
 
                             if (ytSummary != null) {
                                 val filteredSummary = ytSummary
-                                    .filterExplicit(context.dataStore.get(HideExplicitKey, false))
-                                    .filterVideo(context.dataStore.get(HideVideoKey, false))
-                                if (jioSongs.isNotEmpty()) {
+                                    .filterExplicit(hideExplicit)
+                                    .filterVideo(hideVideo)
+                                if (accurateJioSongs.isNotEmpty()) {
                                     val summaries = filteredSummary.summaries.toMutableList()
                                     val songsIndex = summaries.indexOfFirst { it.title.equals("Songs", ignoreCase = true) }
+                                    val topJio = accurateJioSongs.take(3)
                                     if (songsIndex != -1) {
                                         val orig = summaries[songsIndex]
                                         summaries[songsIndex] = orig.copy(
-                                            items = (jioSongs + orig.items).distinctBy { it.id }
+                                            items = (topJio + orig.items).distinctBy { it.id }
                                         )
                                     } else {
-                                        summaries.add(0, SearchSummary(title = "Songs", items = jioSongs))
+                                        summaries.add(0, SearchSummary(title = "Songs", items = topJio))
                                     }
                                     summaryPage = SearchSummaryPage(summaries = summaries)
                                 } else {
                                     summaryPage = filteredSummary
                                 }
-                            } else if (jioSongs.isNotEmpty()) {
+                            } else if (accurateJioSongs.isNotEmpty()) {
                                 summaryPage = SearchSummaryPage(
-                                    summaries = listOf(SearchSummary(title = "Songs", items = jioSongs))
+                                    summaries = listOf(SearchSummary(title = "Songs", items = accurateJioSongs.take(10)))
                                 )
                             } else {
                                 reportException(Exception("Search failed for query: $query"))
@@ -96,7 +116,7 @@ constructor(
                             YouTube
                                 .searchSummary(query)
                                 .onSuccess {
-                                    summaryPage = it.filterExplicit(context.dataStore.get(HideExplicitKey, false)).filterVideo(context.dataStore.get(HideVideoKey, false))
+                                    summaryPage = it.filterExplicit(hideExplicit).filterVideo(hideVideo)
                                 }.onFailure {
                                     reportException(it)
                                 }
@@ -106,28 +126,29 @@ constructor(
                     if (viewStateMap[filter.value] == null) {
                         if (enableJioSaavn && filter == YouTube.SearchFilter.FILTER_SONG) {
                             val jioDeferred = async(Dispatchers.IO) {
-                                JioSaavnApi.searchSongs(query).getOrNull().orEmpty()
+                                val raw = JioSaavnApi.searchSongs(query).getOrNull().orEmpty()
+                                raw.filter { TrackMatcher.matchesQuery(it, query) }
                             }
                             val ytDeferred = async(Dispatchers.IO) {
                                 YouTube.search(query, filter).getOrNull()
                             }
-                            val jioSongs = jioDeferred.await()
+                            val accurateJioSongs = jioDeferred.await()
                             val ytResult = ytDeferred.await()
 
                             val combined = mutableListOf<YTItem>()
-                            combined.addAll(jioSongs)
+                            combined.addAll(accurateJioSongs.take(3))
                             if (ytResult != null) {
                                 val ytItems = ytResult.items
                                     .distinctBy { it.id }
-                                    .filterExplicit(context.dataStore.get(HideExplicitKey, false))
-                                    .filterVideo(context.dataStore.get(HideVideoKey, false))
+                                    .filterExplicit(hideExplicit)
+                                    .filterVideo(hideVideo)
                                 combined.addAll(ytItems)
                                 viewStateMap[filter.value] = ItemsPage(
                                     combined.distinctBy { it.id },
                                     ytResult.continuation
                                 )
-                            } else if (jioSongs.isNotEmpty()) {
-                                viewStateMap[filter.value] = ItemsPage(jioSongs, null)
+                            } else if (accurateJioSongs.isNotEmpty()) {
+                                viewStateMap[filter.value] = ItemsPage(accurateJioSongs, null)
                             } else {
                                 reportException(Exception("Search songs failed for query: $query"))
                             }
@@ -139,12 +160,8 @@ constructor(
                                         ItemsPage(
                                             result.items
                                                 .distinctBy { it.id }
-                                                .filterExplicit(
-                                                    context.dataStore.get(
-                                                        HideExplicitKey,
-                                                        false
-                                                    )
-                                                ).filterVideo(context.dataStore.get(HideVideoKey, false)),
+                                                .filterExplicit(hideExplicit)
+                                                .filterVideo(hideVideo),
                                             result.continuation,
                                         )
                                 }.onFailure {

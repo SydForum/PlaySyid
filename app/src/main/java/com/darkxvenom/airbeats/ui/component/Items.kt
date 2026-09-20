@@ -1779,12 +1779,12 @@ fun YouTubeListItem(
         if (item.id.startsWith("JS:")) {
             Box(
                 modifier = Modifier
-                    .padding(end = 4.dp)
+                    .padding(end = 5.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(4.dp)
                     )
-                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = "JioSaavn 320k",
@@ -1792,7 +1792,26 @@ fun YouTubeListItem(
                         fontWeight = FontWeight.Bold,
                         fontSize = 9.sp,
                     ),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        } else if (item is SongItem) {
+            Box(
+                modifier = Modifier
+                    .padding(end = 5.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = "YouTube",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 9.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

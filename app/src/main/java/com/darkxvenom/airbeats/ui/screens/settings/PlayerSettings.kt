@@ -181,6 +181,10 @@ fun PlayerSettings(
         BitPerfectEnabledKey,
         defaultValue = false
     )
+    val (enableJioSaavn, onEnableJioSaavnChange) = rememberPreference(
+        com.darkxvenom.airbeats.constants.EnableJioSaavnKey,
+        defaultValue = true
+    )
     var showQualityDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
 
@@ -207,6 +211,16 @@ fun PlayerSettings(
                         description = streamingQualitySubtitle,
                         icon = { Icon(Icons.Filled.HighQuality, null) },
                         onClick = { showQualityDialog = true }
+                    )
+                },
+
+                {
+                    SwitchPreference(
+                        title = { Text(stringResource(R.string.enable_jiosaavn)) },
+                        description = stringResource(R.string.enable_jiosaavn_desc),
+                        icon = { Icon(painterResource(R.drawable.music_note), null) },
+                        checked = enableJioSaavn,
+                        onCheckedChange = onEnableJioSaavnChange,
                     )
                 },
 

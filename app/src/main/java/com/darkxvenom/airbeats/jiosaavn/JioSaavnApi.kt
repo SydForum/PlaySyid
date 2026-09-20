@@ -111,7 +111,9 @@ object JioSaavnApi {
             if (songObj != null) {
                 val encryptedUrl = songObj.optString("encrypted_media_url")
                 if (encryptedUrl.isNotBlank()) {
-                    val streamUrl = decryptMediaUrl(encryptedUrl)
+                    val supports320 = songObj.optString("320kbps").equals("true", ignoreCase = true) ||
+                        songObj.optBoolean("320kbps", false)
+                    val streamUrl = decryptMediaUrl(encryptedUrl, supports320)
                     if (streamUrl != null) {
                         streamUrlCache[mappedId] = streamUrl
                         return@withContext streamUrl
@@ -124,21 +126,27 @@ object JioSaavnApi {
         null
     }
 
-    suspend fun findMatch(title: String, artist: String? = null): SongItem? = withContext(Dispatchers.IO) {
-        val query = if (!artist.isNullOrBlank()) "$title $artist" else title
-        val songs = searchSongs(query).getOrNull() ?: return@withContext null
-        songs.firstOrNull()
+    suspend fun findMatch(title: String, artist: String? = null, durationSec: Int? = null): SongItem? = withContext(Dispatchers.IO) {
+        val queries = TrackMatcher.queries(title, artist.orEmpty())
+        for (q in queries) {
+            val candidates = searchSongs(q).getOrNull() ?: continue
+            val bestMatch = TrackMatcher.best(candidates, title, artist.orEmpty(), durationSec)
+            if (bestMatch != null) return@withContext bestMatch
+        }
+        val rawCandidates = searchSongs("$title ${artist.orEmpty()}".trim()).getOrNull() ?: return@withContext null
+        TrackMatcher.best(rawCandidates, title, artist.orEmpty(), durationSec)
     }
 
-    suspend fun findMatchAndStreamUrl(title: String, artist: String? = null): String? = withContext(Dispatchers.IO) {
-        val match = findMatch(title, artist) ?: return@withContext null
+    suspend fun findMatchAndStreamUrl(title: String, artist: String? = null, durationSec: Int? = null): String? = withContext(Dispatchers.IO) {
+        val match = findMatch(title, artist, durationSec) ?: return@withContext null
         getStreamUrl(match.id)
     }
 
     /**
-     * Decrypts JioSaavn's DES-ECB encrypted media URL and converts it to high-fidelity 320kbps MP4 audio.
+     * Decrypts JioSaavn's DES-ECB encrypted media URL and converts it to high-fidelity 320kbps MP4 audio
+     * when supported by the catalogue, mirroring BitChord's JioSaavnService bestStream implementation.
      */
-    private fun decryptMediaUrl(encryptedUrl: String): String? {
+    private fun decryptMediaUrl(encryptedUrl: String, supports320: Boolean = true): String? {
         if (encryptedUrl.isBlank()) return null
         return try {
             val keySpec = SecretKeySpec(DES_KEY.toByteArray(Charsets.UTF_8), "DES")
@@ -147,7 +155,21 @@ object JioSaavnApi {
             val decoded = android.util.Base64.decode(encryptedUrl.trim(), android.util.Base64.DEFAULT)
             val decrypted = cipher.doFinal(decoded)
             val rawUrl = String(decrypted, Charsets.UTF_8).trim()
-            rawUrl.replace("_96.mp4", "_320.mp4").replace("_160.mp4", "_320.mp4")
+            val suffix = Regex("_(48|96|160|320)\\.(mp4|aac|mp3)$").find(rawUrl)
+            if (suffix != null) {
+                val ext = suffix.groupValues[2]
+                if (supports320) {
+                    rawUrl.replaceRange(suffix.range, "_320.$ext")
+                } else {
+                    rawUrl
+                }
+            } else {
+                if (supports320) {
+                    rawUrl.replace("_96.mp4", "_320.mp4").replace("_160.mp4", "_320.mp4")
+                } else {
+                    rawUrl
+                }
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             null
