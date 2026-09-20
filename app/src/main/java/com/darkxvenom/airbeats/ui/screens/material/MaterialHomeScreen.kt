@@ -1,6 +1,8 @@
 package com.darkxvenom.airbeats.ui.screens.material
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -68,7 +70,9 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -80,7 +84,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -109,11 +115,14 @@ import com.darkxvenom.airbeats.innertube.models.YTItem
 import com.darkxvenom.airbeats.models.toMediaMetadata
 import com.darkxvenom.airbeats.playback.queues.YouTubeQueue
 import com.darkxvenom.airbeats.ui.component.NamePreferenceManager
+import com.darkxvenom.airbeats.ui.component.TopFadeBlur
 import com.darkxvenom.airbeats.ui.screens.Screens
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
 import com.darkxvenom.airbeats.utils.rememberPreference
 import com.darkxvenom.airbeats.utils.reportException
 import com.darkxvenom.airbeats.viewmodels.HomeViewModel
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -163,6 +172,22 @@ fun MaterialHomeScreen(
 
     val pullRefreshState = rememberPullToRefreshState()
     val listState = rememberLazyListState()
+
+    val hazeState = remember { HazeState() }
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    val blurAlpha by animateFloatAsState(
+        targetValue = if (isAtTop) 0f else 1f,
+        animationSpec = tween(300),
+        label = "MaterialHomeBlurAlpha"
+    )
+    var headerHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val headerHeightDp = if (headerHeightPx > 0) with(density) { headerHeightPx.toDp() } else statusBarTop + 72.dp
 
     val hiddenSections by rememberPreference(HiddenHomeSectionsKey, defaultValue = emptySet())
     fun isSectionVisible(section: MaterialHomeSection): Boolean = section.id !in hiddenSections
@@ -270,7 +295,9 @@ fun MaterialHomeScreen(
                     bottom = LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding() + 16.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(22.dp),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .haze(state = hazeState),
             ) {
                 // 1. HERO SECTION
                 if (isSectionVisible(MaterialHomeSection.HERO)) {
@@ -779,12 +806,26 @@ fun MaterialHomeScreen(
             )
         }
 
+        // TopFadeBlur progressive blur effect just below edge line of top header
+        TopFadeBlur(
+            hazeState = hazeState,
+            pageColor = Color.Transparent,
+            scrimColor = Color.Transparent,
+            height = 68.dp,
+            alpha = blurAlpha,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = (headerHeightDp - 20.dp).coerceAtLeast(0.dp)),
+        )
+
         // Top Header Bar
         MaterialTopHeader(
             onNewReleasesClick = { navController.navigate("new_release") },
             onDevNewsClick = { navController.navigate("settings/developer_news") },
             onSettingsClick = { navController.navigate("settings") },
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .onSizeChanged { headerHeightPx = it.height }
         )
     }
 }
