@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -104,6 +106,7 @@ import com.darkxvenom.airbeats.playback.queues.YouTubeQueue
 import com.darkxvenom.airbeats.ui.component.HideOnScrollFAB
 import com.darkxvenom.airbeats.ui.component.LocalMenuState
 import com.darkxvenom.airbeats.ui.component.NavigationTitle
+import com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground
 import com.darkxvenom.airbeats.ui.component.YouTubeListItem
 import com.darkxvenom.airbeats.ui.menu.SelectionMediaMetadataMenu
 import com.darkxvenom.airbeats.ui.menu.SongMenu
@@ -135,159 +138,7 @@ private fun formatEventTimeString(timestamp: LocalDateTime): String {
     }
 }
 
-/**
- * Ambient, flowing warm wave curves background with gentle undulating animation.
- */
-@Composable
-fun FluidWavesBackground(
-    modifier: Modifier = Modifier,
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "fluid_waves_bg")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 16000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "phase"
-    )
 
-    Canvas(modifier = modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-
-        // Deep warm obsidian base
-        drawRect(color = Color(0xFF0D0B0A))
-
-        val rad1 = Math.toRadians(phase.toDouble()).toFloat()
-        val rad2 = Math.toRadians((phase + 120f).toDouble()).toFloat()
-        val rad3 = Math.toRadians((phase + 240f).toDouble()).toFloat()
-
-        val shift1X = sin(rad1) * 25f
-        val shift1Y = cos(rad1) * 20f
-        val shift2X = cos(rad2) * 22f
-        val shift2Y = sin(rad2) * 22f
-        val shift3X = sin(rad3) * 18f
-        val shift3Y = cos(rad3) * 16f
-
-        // Warm radial glows in upper right and mid-left
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    Color(0xFFEA580C).copy(alpha = 0.28f),
-                    Color(0xFF9A3412).copy(alpha = 0.12f),
-                    Color(0xFF78350F).copy(alpha = 0.04f),
-                    Color.Transparent,
-                ),
-                center = Offset(w * 0.88f + shift1X, h * 0.10f + shift1Y),
-                radius = w * 0.85f,
-            )
-        )
-
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    Color(0xFFC2410C).copy(alpha = 0.15f),
-                    Color(0xFF78350F).copy(alpha = 0.05f),
-                    Color.Transparent,
-                ),
-                center = Offset(w * 0.15f + shift2X, h * 0.26f + shift2Y),
-                radius = w * 0.55f,
-            )
-        )
-
-        // Wave Ribbon 1 (Upper main sweeping ribbon)
-        val path1 = Path().apply {
-            moveTo(w * 1.25f, -h * 0.05f)
-            cubicTo(
-                w * 0.90f + shift1X, h * 0.08f + shift1Y,
-                w * 0.65f + shift2X, h * 0.20f + shift2Y,
-                -w * 0.15f, h * 0.32f + shift3Y
-            )
-            lineTo(-w * 0.15f, -h * 0.05f)
-            close()
-        }
-        drawPath(
-            path = path1,
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFFEA580C).copy(alpha = 0.08f),
-                    Color(0xFF78350F).copy(alpha = 0.02f),
-                    Color.Transparent,
-                )
-            )
-        )
-
-        val strokePath1 = Path().apply {
-            moveTo(w * 1.25f, -h * 0.05f)
-            cubicTo(
-                w * 0.90f + shift1X, h * 0.08f + shift1Y,
-                w * 0.65f + shift2X, h * 0.20f + shift2Y,
-                -w * 0.15f, h * 0.32f + shift3Y
-            )
-        }
-        drawPath(
-            path = strokePath1,
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFFF97316).copy(alpha = 0.50f),
-                    Color(0xFFEA580C).copy(alpha = 0.35f),
-                    Color(0xFFB45309).copy(alpha = 0.18f),
-                    Color.Transparent,
-                ),
-                start = Offset(w, 0f),
-                end = Offset(0f, h * 0.35f),
-            ),
-            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-        )
-
-        // Wave Ribbon 2 (Middle sweeping ribbon)
-        val strokePath2 = Path().apply {
-            moveTo(w * 1.15f, h * 0.06f)
-            cubicTo(
-                w * 0.82f + shift2X, h * 0.18f + shift1Y,
-                w * 0.45f + shift3X, h * 0.26f + shift2Y,
-                -w * 0.10f, h * 0.24f + shift1Y
-            )
-        }
-        drawPath(
-            path = strokePath2,
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFFFB923C).copy(alpha = 0.38f),
-                    Color(0xFFD97706).copy(alpha = 0.22f),
-                    Color(0xFF78350F).copy(alpha = 0.08f),
-                    Color.Transparent,
-                ),
-                start = Offset(w, h * 0.05f),
-                end = Offset(0f, h * 0.30f),
-            ),
-            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
-        )
-
-        // Wave Ribbon 3 (Lower delicate ribbon)
-        val strokePath3 = Path().apply {
-            moveTo(w * 1.10f, h * 0.15f)
-            cubicTo(
-                w * 0.75f + shift3X, h * 0.26f + shift3Y,
-                w * 0.35f + shift1X, h * 0.32f + shift1Y,
-                -w * 0.05f, h * 0.38f + shift2Y
-            )
-        }
-        drawPath(
-            path = strokePath3,
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFFEA580C).copy(alpha = 0.28f),
-                    Color(0xFF9A3412).copy(alpha = 0.12f),
-                    Color.Transparent,
-                )
-            ),
-            style = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round)
-        )
-    }
-}
 
 /**
  * "Keep vibing!" card with matching flowing waves canvas effect and quick stats jump.
@@ -955,134 +806,159 @@ fun HistoryScreen(
         )
     }
 
+    val topPaddingInsets = if (selection || isSearching) {
+        LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Top)
+    } else {
+        WindowInsets(0, 0, 0, 0)
+    }
+
     Box(Modifier.fillMaxSize()) {
-        // Fluid Waves Background
-        FluidWavesBackground()
+        // Classic Home Screen adaptive background: blurred song thumbnail when playing, Library mesh when no song playing
+        val artworkUrl = mediaMetadata?.thumbnailUrl
+        ScreenAdaptiveBackground(
+            artworkUrl = artworkUrl
+        )
 
         LazyColumn(
             state = lazyListState,
             contentPadding = LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
                 .asPaddingValues(),
-            modifier = Modifier.windowInsetsPadding(
-                LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Top)
-            )
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(topPaddingInsets)
         ) {
             // Header Section
-            item(key = "header_section") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            if (!selection && !isSearching) {
+                item(key = "header_section") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "YOUR MUSIC JOURNEY",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    letterSpacing = 2.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = Color(0xFFE56A32),
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.history),
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            )
-                        }
-
-                        // Search & Menu action buttons
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color.White.copy(alpha = 0.08f),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .clickable { isSearching = true }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = { navController.navigateUp() },
+                                modifier = Modifier.size(38.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.search),
-                                        contentDescription = "Search",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
+                                Icon(
+                                    painter = painterResource(R.drawable.arrow_back),
+                                    contentDescription = stringResource(R.string.back),
+                                    tint = Color.White
+                                )
                             }
 
-                            Box {
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "YOUR MUSIC JOURNEY",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        letterSpacing = 2.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color(0xFFE56A32),
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.history),
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                )
+                            }
+
+                            // Search & Menu action buttons
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Surface(
                                     shape = CircleShape,
-                                    color = Color.White.copy(alpha = 0.08f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                                    color = Color.White.copy(alpha = 0.12f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
                                     modifier = Modifier
                                         .size(40.dp)
                                         .clip(CircleShape)
-                                        .clickable { showTopMenu = true }
+                                        .clickable { isSearching = true }
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            painter = painterResource(R.drawable.more_vert),
-                                            contentDescription = "Menu",
+                                            painter = painterResource(R.drawable.search),
+                                            contentDescription = "Search",
                                             tint = Color.White,
                                             modifier = Modifier.size(19.dp)
                                         )
                                     }
                                 }
 
-                                DropdownMenu(
-                                    expanded = showTopMenu,
-                                    onDismissRequest = { showTopMenu = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("View Stats") },
-                                        onClick = {
-                                            showTopMenu = false
-                                            navController.navigate("stats")
+                                Box {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color.White.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .clickable { showTopMenu = true }
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.more_vert),
+                                                contentDescription = "Menu",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(19.dp)
+                                            )
                                         }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Clear All History", color = Color(0xFFEF4444)) },
-                                        onClick = {
-                                            showTopMenu = false
-                                            showClearAllDialog = true
-                                        }
-                                    )
-                                    if (isLoggedIn) {
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showTopMenu,
+                                        onDismissRequest = { showTopMenu = false }
+                                    ) {
                                         DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    if (historySource == HistorySource.LOCAL) "Switch to Remote History"
-                                                    else "Switch to Local History"
-                                                )
-                                            },
+                                            text = { Text("View Stats") },
                                             onClick = {
                                                 showTopMenu = false
-                                                val next = if (historySource == HistorySource.LOCAL) HistorySource.REMOTE else HistorySource.LOCAL
-                                                viewModel.historySource.value = next
-                                                if (next == HistorySource.REMOTE) viewModel.fetchRemoteHistory()
+                                                navController.navigate("stats")
                                             }
                                         )
+                                        DropdownMenuItem(
+                                            text = { Text("Clear All History", color = Color(0xFFEF4444)) },
+                                            onClick = {
+                                                showTopMenu = false
+                                                showClearAllDialog = true
+                                            }
+                                        )
+                                        if (isLoggedIn) {
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        if (historySource == HistorySource.LOCAL) "Switch to Remote History"
+                                                        else "Switch to Local History"
+                                                    )
+                                                },
+                                                onClick = {
+                                                    showTopMenu = false
+                                                    val next = if (historySource == HistorySource.LOCAL) HistorySource.REMOTE else HistorySource.LOCAL
+                                                    viewModel.historySource.value = next
+                                                    if (next == HistorySource.REMOTE) viewModel.fetchRemoteHistory()
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "All the music you've listened to, in one place.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.65f)
-                    )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "All the music you've listened to, in one place.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.70f),
+                            modifier = Modifier.padding(start = 44.dp)
+                        )
+                    }
                 }
             }
 
@@ -1107,7 +983,7 @@ fun HistoryScreen(
                             title = section.title,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF0D0B0A).copy(alpha = 0.95f))
+                                .background(Color.Black.copy(alpha = 0.70f))
                         )
                     }
 
@@ -1170,7 +1046,7 @@ fun HistoryScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF0D0B0A).copy(alpha = 0.92f))
+                                .background(Color.Black.copy(alpha = 0.70f))
                                 .padding(horizontal = 20.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -1322,7 +1198,7 @@ fun HistoryScreen(
     if (selection || isSearching) {
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color(0xFF0D0B0A).copy(alpha = 0.95f)
+                containerColor = Color.Black.copy(alpha = 0.85f)
             ),
             title = {
                 if (selection) {
