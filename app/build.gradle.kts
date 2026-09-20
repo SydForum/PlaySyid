@@ -151,6 +151,11 @@ android {
             excludes += "META-INF/LICENSE.md"
             excludes += "META-INF/NOTICE.md"
             excludes += "META-INF/*.md"
+            excludes += "org/bouncycastle/**/*.properties"
+            excludes += "**/*.bin.properties"
+            excludes += "com/google/api/client/**/*.p12"
+            excludes += "com/google/api/client/**/*.jks"
+            excludes += "**/*.proto"
         }
     }
 }
@@ -220,8 +225,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)
-
-    implementation(libs.apache.lang3)
 
     implementation(libs.hilt)
     implementation("org.jsoup:jsoup:1.18.1")
