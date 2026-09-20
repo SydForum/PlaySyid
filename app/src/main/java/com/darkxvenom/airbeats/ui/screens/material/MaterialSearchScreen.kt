@@ -136,7 +136,7 @@ fun MaterialSearchScreen(
                         com.darkxvenom.airbeats.ui.component.SearchPillSwitcher(
                             selectedTab = selectedTab,
                             onTabSelected = { selectedTab = it },
-                            modifier = Modifier.padding(horizontal = 0.dp)
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                         )
                     }
 

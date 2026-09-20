@@ -815,7 +815,7 @@ fun AppleSearchScreen(
                     selectedColor = AppleRed,
                     selectedTextColor = Color.White,
                     unselectedTextColor = appleTextColor.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                 )
             }
         }

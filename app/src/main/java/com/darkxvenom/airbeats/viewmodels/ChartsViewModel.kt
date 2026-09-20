@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -22,16 +23,27 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
     val error = _error.asStateFlow()
 
     fun loadCharts() {
-        if (_chartsPage.value != null && !_chartsPage.value?.sections.isNullOrEmpty()) return
+        val current = _chartsPage.value
+        if (current != null && current.sections.isNotEmpty()) {
+            Timber.tag("AirBeatsCharts").d("loadCharts(): Cache hit with %d sections", current.sections.size)
+            return
+        }
         viewModelScope.launch {
+            Timber.tag("AirBeatsCharts").i("loadCharts(): Fetching charts data from YouTube...")
             _isLoading.value = true
             _error.value = null
 
             YouTube.getChartsPage()
                 .onSuccess { page ->
+                    Timber.tag("AirBeatsCharts").i(
+                        "loadCharts() SUCCESS: %d sections loaded -> %s",
+                        page.sections.size,
+                        page.sections.map { "${it.title} (${it.items.size} items)" }
+                    )
                     _chartsPage.value = page
                 }
                 .onFailure { e ->
+                    Timber.tag("AirBeatsCharts").e(e, "loadCharts() FAILED: %s", e.message)
                     _error.value = e.message ?: "Failed to load charts"
                 }
 
@@ -40,6 +52,7 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
     }
 
     fun retry() {
+        Timber.tag("AirBeatsCharts").d("retry() called: Clearing cache and reloading charts")
         _chartsPage.value = null
         loadCharts()
     }
@@ -47,15 +60,18 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
     fun loadMore() {
         viewModelScope.launch {
             _chartsPage.value?.continuation?.let { continuation ->
+                Timber.tag("AirBeatsCharts").d("loadMore(): Requesting continuation %s", continuation)
                 _isLoading.value = true
                 YouTube.getChartsPage(continuation)
                     .onSuccess { newPage ->
+                        Timber.tag("AirBeatsCharts").i("loadMore() SUCCESS: %d new sections loaded", newPage.sections.size)
                         _chartsPage.value = _chartsPage.value?.copy(
                             sections = _chartsPage.value?.sections.orEmpty() + newPage.sections,
                             continuation = newPage.continuation
                         )
                     }
                     .onFailure { e ->
+                        Timber.tag("AirBeatsCharts").e(e, "loadMore() FAILED: %s", e.message)
                         _error.value = e.message ?: "Failed to load more charts"
                     }
                 _isLoading.value = false
