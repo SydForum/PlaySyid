@@ -9,6 +9,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.darkxvenom.airbeats.ui.screens.search.airbeatsChartsItems
+import com.darkxvenom.airbeats.ui.screens.search.recentSearchesItems
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -754,6 +756,10 @@ fun AppleSearchScreen(
     val viewState by viewModel.viewState.collectAsState()
     val database = LocalDatabase.current
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var selectedTab by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL) }
+    val chartsViewModel: com.darkxvenom.airbeats.viewmodels.ChartsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val appleTextColor = AppleText
+    val appleBgColor = AppleBg
 
     AppleScaffold(
         title = "Search",
@@ -766,14 +772,14 @@ fun AppleSearchScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp),
-                placeholder = { Text(stringResource(R.string.search_everything_placeholder), color = AppleText.copy(alpha = 0.5f)) },
-                leadingIcon = { Icon(painterResource(R.drawable.search), contentDescription = null, tint = AppleText.copy(alpha=0.5f)) },
+                placeholder = { Text(stringResource(R.string.search_everything_placeholder), color = appleTextColor.copy(alpha = 0.5f)) },
+                leadingIcon = { Icon(painterResource(R.drawable.search), contentDescription = null, tint = appleTextColor.copy(alpha=0.5f)) },
                 trailingIcon = {
                     IconButton(onClick = { navController.navigate(com.darkxvenom.airbeats.ui.screens.musicrecognition.MusicRecognitionRoute) }) {
                         Icon(
                             painter = painterResource(R.drawable.mic),
                             contentDescription = "Music Recognition",
-                            tint = AppleText.copy(alpha = 0.5f)
+                            tint = appleTextColor.copy(alpha = 0.5f)
                         )
                     }
                 },
@@ -782,10 +788,10 @@ fun AppleSearchScreen(
                 colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color.Transparent,
                     unfocusedBorderColor = Color.Transparent,
-                    focusedContainerColor = AppleBg.copy(alpha = 0.3f),
-                    unfocusedContainerColor = AppleBg.copy(alpha = 0.3f),
-                    focusedTextColor = AppleText,
-                    unfocusedTextColor = AppleText
+                    focusedContainerColor = appleBgColor.copy(alpha = 0.3f),
+                    unfocusedContainerColor = appleBgColor.copy(alpha = 0.3f),
+                    focusedTextColor = appleTextColor,
+                    unfocusedTextColor = appleTextColor
                 ),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(
                     onSearch = {
@@ -798,6 +804,20 @@ fun AppleSearchScreen(
                     imeAction = androidx.compose.ui.text.input.ImeAction.Search
                 )
             )
+        }
+
+        if (query.isBlank()) {
+            item {
+                com.darkxvenom.airbeats.ui.component.SearchPillSwitcher(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it },
+                    containerColor = appleBgColor.copy(alpha = 0.35f),
+                    selectedColor = AppleRed,
+                    selectedTextColor = Color.White,
+                    unselectedTextColor = appleTextColor.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
         }
         
         if (query.isNotBlank() && (viewState.history.isNotEmpty() || viewState.suggestions.isNotEmpty())) {
@@ -837,54 +857,75 @@ fun AppleSearchScreen(
                 )
             }
         } else {
-            item {
-                AppleSectionTitle("Browse Categories")
-                Spacer(modifier = Modifier.height(10.dp))
-                val genres = listOf(
-                    "Pop" to Color(0xFFFF4632),
-                    "Hip-Hop" to Color(0xFFBC5900),
-                    "Rock" to Color(0xFFE1118C),
-                    "Latin" to Color(0xFFE1118C),
-                    "Educational" to Color(0xFF477D95),
-                    "Documentary" to Color(0xFF509BF5),
-                    "Comedy" to Color(0xFFE13300),
-                    "Charts" to Color(0xFF8D67AB),
-                    "Dance" to Color(0xFFD84000),
-                    "Mood" to Color(0xFFE1118C),
-                    "Indie" to Color(0xFFE91429),
-                    "Workout" to Color(0xFF777777),
-                    "K-pop" to Color(0xFF148A08),
-                    "Chill" to Color(0xFFD84000),
-                    "Sleep" to Color(0xFF1E3264),
-                    "Party" to Color(0xFF537AA1),
-                    "Decades" to Color(0xFFBA5D07)
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 24.dp)) {
-                    genres.chunked(2).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            row.forEach { (chip, color) ->
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(100.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(color)
-                                        .clickable {
-                                            navController.navigate("search/${URLEncoder.encode(chip, "UTF-8")}")
+            when (selectedTab) {
+                com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL -> {
+                    item {
+                        AppleSectionTitle("Browse Categories")
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val genres = listOf(
+                            "Pop" to Color(0xFFFF4632),
+                            "Hip-Hop" to Color(0xFFBC5900),
+                            "Rock" to Color(0xFFE1118C),
+                            "Latin" to Color(0xFFE1118C),
+                            "Educational" to Color(0xFF477D95),
+                            "Documentary" to Color(0xFF509BF5),
+                            "Comedy" to Color(0xFFE13300),
+                            "Charts" to Color(0xFF8D67AB),
+                            "Dance" to Color(0xFFD84000),
+                            "Mood" to Color(0xFFE1118C),
+                            "Indie" to Color(0xFFE91429),
+                            "Workout" to Color(0xFF777777),
+                            "K-pop" to Color(0xFF148A08),
+                            "Chill" to Color(0xFFD84000),
+                            "Sleep" to Color(0xFF1E3264),
+                            "Party" to Color(0xFF537AA1),
+                            "Decades" to Color(0xFFBA5D07)
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 24.dp)) {
+                            genres.chunked(2).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    row.forEach { (chip, color) ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(100.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(color)
+                                                .clickable {
+                                                    navController.navigate("search/${URLEncoder.encode(chip, "UTF-8")}")
+                                                }
+                                                .padding(12.dp)
+                                        ) {
+                                            Text(
+                                                text = chip,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 18.sp
+                                            )
                                         }
-                                        .padding(12.dp)
-                                ) {
-                                    Text(
-                                        text = chip,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
-                                    )
+                                    }
+                                    if (row.size == 1) Spacer(Modifier.weight(1f))
                                 }
                             }
-                            if (row.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
+                }
+                com.darkxvenom.airbeats.ui.component.SearchTab.AIRBEATS_CHARTS -> {
+                    airbeatsChartsItems(
+                        navController = navController,
+                        viewModel = chartsViewModel
+                    )
+                }
+                com.darkxvenom.airbeats.ui.component.SearchTab.RECENT_SEARCHES -> {
+                    recentSearchesItems(
+                        onSearch = { queryText: String ->
+                            val encoded = URLEncoder.encode(queryText, "UTF-8")
+                            navController.navigate("search/$encoded")
+                            keyboardController?.hide()
+                        },
+                        onFillQuery = { queryText: String -> viewModel.query.value = queryText },
+                        itemTextColor = appleTextColor
+                    )
                 }
             }
         }

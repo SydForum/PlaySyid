@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.wrapContentHeight
+import com.darkxvenom.airbeats.ui.screens.search.airbeatsChartsItems
+import com.darkxvenom.airbeats.ui.screens.search.recentSearchesItems
 import androidx.compose.animation.togetherWith
 import kotlinx.coroutines.launch
 import com.valentinilk.shimmer.shimmer
@@ -352,6 +354,8 @@ fun SpotifySearchScreen(
     val viewState by viewModel.viewState.collectAsState()
     val database = com.darkxvenom.airbeats.LocalDatabase.current
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var selectedTab by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL) }
+    val chartsViewModel: com.darkxvenom.airbeats.viewmodels.ChartsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 
     SpotifyScaffold(
         title = stringResource(R.string.search),
@@ -372,6 +376,15 @@ fun SpotifySearchScreen(
                     navController.navigate(com.darkxvenom.airbeats.ui.screens.musicrecognition.MusicRecognitionRoute)
                 }
             )
+        }
+
+        if (query.isBlank()) {
+            item {
+                com.darkxvenom.airbeats.ui.component.SearchPillSwitcher(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
+                )
+            }
         }
         
         if (query.isNotBlank() && (viewState.history.isNotEmpty() || viewState.suggestions.isNotEmpty())) {
@@ -411,55 +424,76 @@ fun SpotifySearchScreen(
                 )
             }
         } else {
-            item {
-                SpotifySectionTitle("Browse all")
-                Spacer(modifier = Modifier.height(10.dp))
-                val genres = listOf(
-                    "Pop" to Color(0xFFFF4632),
-                    "Hip-Hop" to Color(0xFFBC5900),
-                    "Rock" to Color(0xFFE1118C),
-                    "Latin" to Color(0xFFE1118C),
-                    "Educational" to Color(0xFF477D95),
-                    "Documentary" to Color(0xFF509BF5),
-                    "Comedy" to Color(0xFFE13300),
-                    "Charts" to Color(0xFF8D67AB),
-                    "Dance/Electronic" to Color(0xFFD84000),
-                    "Mood" to Color(0xFFE1118C),
-                    "Indie" to Color(0xFFE91429),
-                    "Workout" to Color(0xFF777777),
-                    "K-pop" to Color(0xFF148A08),
-                    "Chill" to Color(0xFFD84000),
-                    "Sleep" to Color(0xFF1E3264),
-                    "Party" to Color(0xFF537AA1),
-                    "At Home" to Color(0xFF5179A1),
-                    "Decades" to Color(0xFFBA5D07)
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
-                    genres.chunked(2).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            row.forEach { (chip, color) ->
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(100.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(color)
-                                        .clickable {
-                                            navController.navigate("search/${URLEncoder.encode(chip, "UTF-8")}")
+            when (selectedTab) {
+                com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL -> {
+                    item {
+                        SpotifySectionTitle("Browse all")
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val genres = listOf(
+                            "Pop" to Color(0xFFFF4632),
+                            "Hip-Hop" to Color(0xFFBC5900),
+                            "Rock" to Color(0xFFE1118C),
+                            "Latin" to Color(0xFFE1118C),
+                            "Educational" to Color(0xFF477D95),
+                            "Documentary" to Color(0xFF509BF5),
+                            "Comedy" to Color(0xFFE13300),
+                            "Charts" to Color(0xFF8D67AB),
+                            "Dance/Electronic" to Color(0xFFD84000),
+                            "Mood" to Color(0xFFE1118C),
+                            "Indie" to Color(0xFFE91429),
+                            "Workout" to Color(0xFF777777),
+                            "K-pop" to Color(0xFF148A08),
+                            "Chill" to Color(0xFFD84000),
+                            "Sleep" to Color(0xFF1E3264),
+                            "Party" to Color(0xFF537AA1),
+                            "At Home" to Color(0xFF5179A1),
+                            "Decades" to Color(0xFFBA5D07)
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
+                            genres.chunked(2).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    row.forEach { (chip, color) ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(100.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(color)
+                                                .clickable {
+                                                    navController.navigate("search/${URLEncoder.encode(chip, "UTF-8")}")
+                                                }
+                                                .padding(12.dp)
+                                        ) {
+                                            Text(
+                                                text = chip,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 18.sp
+                                            )
                                         }
-                                        .padding(12.dp)
-                                ) {
-                                    Text(
-                                        text = chip,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
-                                    )
+                                    }
+                                    if (row.size == 1) Spacer(Modifier.weight(1f))
                                 }
                             }
-                            if (row.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
+                }
+                com.darkxvenom.airbeats.ui.component.SearchTab.AIRBEATS_CHARTS -> {
+                    airbeatsChartsItems(
+                        navController = navController,
+                        viewModel = chartsViewModel
+                    )
+                }
+                com.darkxvenom.airbeats.ui.component.SearchTab.RECENT_SEARCHES -> {
+                    recentSearchesItems(
+                        onSearch = { queryText: String ->
+                            val encoded = URLEncoder.encode(queryText, "UTF-8")
+                            navController.navigate("search/$encoded")
+                            keyboardController?.hide()
+                        },
+                        onFillQuery = { queryText: String -> viewModel.query.value = queryText },
+                        itemTextColor = Color.White
+                    )
                 }
             }
         }
@@ -857,7 +891,11 @@ private fun SpotifySearchInput(
             Text(
                 text = "What do you want to listen to?", 
                 color = Color.Black.copy(alpha = 0.6f),
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             ) 
         },
         leadingIcon = { Icon(painterResource(R.drawable.search), contentDescription = null, tint = Color.Black) },

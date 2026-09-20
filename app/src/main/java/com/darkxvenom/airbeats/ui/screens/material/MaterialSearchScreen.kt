@@ -50,6 +50,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.darkxvenom.airbeats.ui.screens.search.airbeatsChartsItems
+import com.darkxvenom.airbeats.ui.screens.search.recentSearchesItems
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,6 +110,8 @@ fun MaterialSearchScreen(
         defaultValue = false
     )
     val plainBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.background
+    var selectedTab by remember { mutableStateOf(com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL) }
+    val chartsViewModel: com.darkxvenom.airbeats.viewmodels.ChartsViewModel = hiltViewModel()
 
     Box(
         modifier = Modifier
@@ -124,40 +129,64 @@ fun MaterialSearchScreen(
             if (query.isBlank()) {
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     item {
-                        Text(
-                            text = "Explore Categories",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
+                        com.darkxvenom.airbeats.ui.component.SearchPillSwitcher(
+                            selectedTab = selectedTab,
+                            onTabSelected = { selectedTab = it },
+                            modifier = Modifier.padding(horizontal = 0.dp)
                         )
-                        Spacer(Modifier.height(10.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            SEARCH_GENRES.forEach { genre ->
-                                FilterChip(
-                                    selected = false,
-                                    onClick = { onPerformSearch(genre) },
-                                    label = {
-                                        Text(
-                                            text = genre,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 13.sp
-                                        )
-                                    },
-                                    shape = CircleShape,
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        labelColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
+                    }
+
+                    when (selectedTab) {
+                        com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL -> {
+                            item {
+                                Text(
+                                    text = "Explore Categories",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
+                                Spacer(Modifier.height(10.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    SEARCH_GENRES.forEach { genre ->
+                                        FilterChip(
+                                            selected = false,
+                                            onClick = { onPerformSearch(genre) },
+                                            label = {
+                                                Text(
+                                                    text = genre,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontSize = 13.sp
+                                                )
+                                            },
+                                            shape = CircleShape,
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                            ),
+                                        )
+                                    }
+                                }
                             }
+                        }
+                        com.darkxvenom.airbeats.ui.component.SearchTab.AIRBEATS_CHARTS -> {
+                            airbeatsChartsItems(
+                                navController = navController,
+                                viewModel = chartsViewModel
+                            )
+                        }
+                        com.darkxvenom.airbeats.ui.component.SearchTab.RECENT_SEARCHES -> {
+                            recentSearchesItems(
+                                onSearch = onPerformSearch,
+                                onFillQuery = { queryText: String -> viewModel.query.value = queryText }
+                            )
                         }
                     }
                 }
