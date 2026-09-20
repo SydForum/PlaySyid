@@ -339,6 +339,9 @@ private fun SearchBar(
                         Text(
                             text = "Search songs, artists, albums…",
                             style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                         )
                     }
