@@ -18,8 +18,11 @@ object DatabaseSanitizer {
 
                 // Ensure non-null integrity for essential string fields across tables
                 db.execSQL("UPDATE song SET title = 'Unknown Track' WHERE title IS NULL OR title = ''")
+                db.execSQL("UPDATE song SET thumbnailUrl = '' WHERE thumbnailUrl IS NULL")
                 db.execSQL("UPDATE artist SET name = 'Unknown Artist' WHERE name IS NULL OR name = ''")
+                db.execSQL("UPDATE artist SET thumbnailUrl = '' WHERE thumbnailUrl IS NULL")
                 db.execSQL("UPDATE album SET title = 'Unknown Album' WHERE title IS NULL OR title = ''")
+                db.execSQL("UPDATE album SET thumbnailUrl = '' WHERE thumbnailUrl IS NULL")
                 db.execSQL("UPDATE playlist SET name = 'Unknown Playlist' WHERE name IS NULL OR name = ''")
 
                 // Clean up invalid foreign key mappings with null or empty keys
@@ -122,11 +125,17 @@ object DatabaseSanitizer {
             arrayOf(candidate.songId)
         )
 
-        data class RawEvent(val rowId: Long, val timestamp: String, val playTime: Long)
+        data class RawEvent(val rowId: Long, val timestamp: Long, val playTime: Long)
         val rawEvents = mutableListOf<RawEvent>()
         eventCursor.use { c ->
             while (c.moveToNext()) {
-                val ts = if (c.isNull(1)) "" else (c.getString(1) ?: "")
+                val ts = if (c.isNull(1)) {
+                    System.currentTimeMillis()
+                } else {
+                    runCatching { c.getLong(1) }.getOrElse {
+                        runCatching { c.getString(1)?.toLongOrNull() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
+                    }
+                }
                 rawEvents.add(RawEvent(c.getLong(0), ts, c.getLong(2)))
             }
         }
@@ -134,7 +143,7 @@ object DatabaseSanitizer {
         if (rawEvents.isEmpty()) return
 
         // Consolidate adjacent fragmented events into real play sessions bounded by song duration
-        val consolidatedEvents = mutableListOf<Pair<String, Long>>()
+        val consolidatedEvents = mutableListOf<Pair<Long, Long>>()
         var currentSessionTimestamp = rawEvents.first().timestamp
         var currentSessionTimeMs = 0L
 

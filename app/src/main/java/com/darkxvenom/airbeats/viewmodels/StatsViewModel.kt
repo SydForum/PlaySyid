@@ -130,7 +130,7 @@ constructor(
                                 statToPeriod(selection, t - 1)
                             },
                     ).map { artists ->
-                        artists.filter { it.artist.isYouTubeArtist }
+                        artists.filter { it.artist.isYouTubeArtist || it.artist.isLocalArtist || it.artist.isScrobbleArtist }
                     }
             }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -166,10 +166,10 @@ constructor(
                 artists
                     .map { it.artist }
                     .filter {
-                        it.thumbnailUrl == null || Duration.between(
+                        it.isYouTubeArtist && (it.thumbnailUrl == null || Duration.between(
                             it.lastUpdateTime,
                             LocalDateTime.now()
-                        ) > Duration.ofDays(10)
+                        ) > Duration.ofDays(10))
                     }.forEach { artist ->
                         YouTube.artist(artist.id).onSuccess { artistPage ->
                             database.query {
@@ -183,7 +183,7 @@ constructor(
             mostPlayedAlbums.collect { albums ->
                 albums
                     .filter {
-                        it.album.songCount == 0
+                        (it.album.id.startsWith("MPREb_") || it.album.id.startsWith("OLAK5uy_")) && it.album.songCount == 0
                     }.forEach { album ->
                         YouTube
                             .album(album.id)

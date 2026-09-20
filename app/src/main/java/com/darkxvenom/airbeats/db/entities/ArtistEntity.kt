@@ -34,6 +34,9 @@ data class ArtistEntity(
     val isLocalArtist: Boolean
         get() = id.startsWith("LA")
 
+    val isScrobbleArtist: Boolean
+        get() = id.startsWith("artist_")
+
     fun localToggleLike() = copy(
         bookmarkedAt = if (bookmarkedAt != null) null else LocalDateTime.now(),
     )

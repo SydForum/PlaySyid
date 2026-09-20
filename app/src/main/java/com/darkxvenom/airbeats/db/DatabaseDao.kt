@@ -266,7 +266,7 @@ interface DatabaseDao {
     @Transaction
     @Query(
         """
-             SELECT song.id, song.title, song.thumbnailUrl,
+             SELECT song.id, song.title, COALESCE(song.thumbnailUrl, '') AS thumbnailUrl,
                CASE 
                  WHEN song.duration > 0 AND (SELECT SUM(event.playTime) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) > 0
                  THEN MAX(1, CAST(ROUND((SELECT SUM(event.playTime) FROM event WHERE songId = song.id AND timestamp > :fromTimeStamp AND timestamp <= :toTimeStamp) * 1.0 / (song.duration * 1000)) AS INTEGER))

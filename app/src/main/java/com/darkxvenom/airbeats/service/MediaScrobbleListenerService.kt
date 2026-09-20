@@ -6,6 +6,8 @@ import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -38,6 +40,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
     @Inject lateinit var scrobbleRepository: ScrobbleRepository
     @Inject lateinit var debugLog: ScrobbleDebugLog
 
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var sessionsListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
     private var pollJob: Job? = null
@@ -101,7 +104,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                     .onFailure { Log.w(TAG, "bindControllers (session change) failed", it) }
             }
             sessionsListener = listener
-            manager.addOnActiveSessionsChangedListener(listener, component)
+            manager.addOnActiveSessionsChangedListener(listener, component, mainHandler)
             bindControllers(manager.getActiveSessions(component))
         }.onFailure {
             debugLog.log("onListenerConnected FAILED: ${it.message}")
@@ -145,6 +148,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val pkg = sbn.packageName ?: return
+        if (pkg == packageName) return
         val isMediaNotification = sbn.notification?.extras?.containsKey(android.app.Notification.EXTRA_MEDIA_SESSION) == true
         if (pkg in selectedPackages || isMediaNotification) {
             runCatching { refreshActiveSessions() }.onFailure { Log.w(TAG, "onNotificationPosted refresh failed", it) }
@@ -166,6 +170,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
 
         controllers.forEach { controller ->
             runCatching {
+                if (controller.packageName == packageName) return@forEach
                 val token = controller.sessionToken
                 val existing = watched[token]
                 if (existing != null) {
@@ -187,7 +192,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                     }
                 }
                 session.callback = callback
-                controller.registerCallback(callback)
+                controller.registerCallback(callback, mainHandler)
                 watched[token] = session
                 onTrackChanged(session, controller.metadata)
                 onStateChanged(session, controller.playbackState)
@@ -393,7 +398,16 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                     if (session.scrobbledForKey != key) {
                         session.scrobbledForKey = key
                         debugLog.log("Threshold reached for \"$title\" — submitting scrobble...")
-                        runCatching { scrobbleRepository.scrobble(artist, title, album, session.startedAtEpochSec) }
+                        runCatching {
+                            scrobbleRepository.scrobble(
+                                artist = artist,
+                                track = title,
+                                album = album,
+                                timestampSec = session.startedAtEpochSec,
+                                durationMs = durationMs,
+                                playTimeMs = playedMs,
+                            )
+                        }
                             .onSuccess { result ->
                                 debugLog.log(
                                     when (result) {
