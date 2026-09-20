@@ -187,7 +187,7 @@ fun SpotifyHomeScreen(
                 .background(SpotifyBg)
                 .haze(state = hazeState)
         ) {
-            SimpMusicMeshBackground()
+            AirBeatsMeshBackground()
 
             BoxWithConstraints(
                 modifier = Modifier
@@ -543,7 +543,7 @@ fun SpotifyLibraryScreen(navController: NavController) {
                 .background(SpotifyBg)
                 .haze(state = androidx.compose.runtime.remember { dev.chrisbanes.haze.HazeState() }),
         ) {
-            SimpMusicMeshBackground()
+            AirBeatsMeshBackground()
             androidx.compose.runtime.CompositionLocalProvider(
                 LocalPlayerAwareWindowInsets provides contentInsets,
             ) {
@@ -638,7 +638,7 @@ private fun SpotifyScaffold(
                 .background(SpotifyBg)
                 .haze(state = hazeState)
         ) {
-            SimpMusicMeshBackground()
+            AirBeatsMeshBackground()
             LazyColumn(
             state = lazyListState,
             contentPadding = PaddingValues(
@@ -672,7 +672,7 @@ private fun SpotifyScaffold(
 }
 
 @Composable
-private fun SimpMusicMeshBackground() {
+private fun AirBeatsMeshBackground() {
     val playerConnection = LocalPlayerConnection.current
     val mediaMetadata by playerConnection?.mediaMetadata?.collectAsState() ?: remember { mutableStateOf(null) }
 

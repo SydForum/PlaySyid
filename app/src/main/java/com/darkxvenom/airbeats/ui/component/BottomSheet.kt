@@ -51,7 +51,6 @@ import kotlin.math.pow
 
 /**
  * Bottom Sheet
- * Modified from [ViMusic](https://github.com/vfsfitvnm/ViMusic)
  */
 @Composable
 fun BottomSheet(

@@ -1361,7 +1361,6 @@ fun StatsHighlightCard(
 private fun cleanPackageName(pkg: String?): String = when {
     pkg == null -> "External App"
     pkg.contains("spotify", ignoreCase = true) -> "Spotify"
-    pkg.contains("bitchord", ignoreCase = true) -> "Bitchord"
     pkg.contains("youtube", ignoreCase = true) -> "YT Music"
     pkg.contains("apple", ignoreCase = true) -> "Apple Music"
     pkg.contains("amazon", ignoreCase = true) -> "Amazon Music"

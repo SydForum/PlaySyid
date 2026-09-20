@@ -376,7 +376,7 @@ Special thanks to the following contributors and supporters:
 
 - **drkvenom786** - UI/UX Specialist and developer
 - **[shnwazdeveloper](https://github.com/shnwazdeveloper)** - Contributor & Developer
-- **mostafaalagamy** - MetroList implementation
+- **mostafaalagamy** - Contributor
 - **Fabito02** - Unconditional support from the beginning
 - **Community translators** - Making AirBeats accessible worldwide
 - **Beta testers** - Helping improve stability and usability

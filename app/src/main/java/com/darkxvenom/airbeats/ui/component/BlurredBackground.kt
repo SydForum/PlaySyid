@@ -48,7 +48,7 @@ fun BlurredBackground(
 }
 
 /**
- * Renders the exact background from the Library screen (SimpMusicMeshBackground)
+ * Renders the exact background from the Library screen
  * used when no song is playing.
  */
 @Composable
