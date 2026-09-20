@@ -801,7 +801,20 @@ fun BottomSheetPlayer(
                             .sizeIn(minWidth = 280.dp, maxWidth = 560.dp)
                             .verticalScroll(rememberScrollState()),
                 ) {
+                    val isJioSaavn = mediaMetadata?.id?.startsWith("JS:") == true ||
+                        currentFormat?.playbackUrl?.contains("saavn", ignoreCase = true) == true ||
+                        currentFormat?.playbackUrl?.contains("jio", ignoreCase = true) == true
+                    val isLocal = mediaMetadata?.id?.startsWith("local:") == true ||
+                        currentFormat?.playbackUrl?.startsWith("content://") == true ||
+                        currentFormat?.playbackUrl?.startsWith("file://") == true
+                    val playbackSource = when {
+                        isLocal -> "Local File"
+                        isJioSaavn -> "JioSaavn (320kbps)"
+                        else -> "YouTube Music"
+                    }
+
                     listOf(
+                        "Source" to playbackSource,
                         stringResource(R.string.song_title) to mediaMetadata?.title,
                         stringResource(R.string.song_artists) to mediaMetadata?.artists?.joinToString { it.name },
                         stringResource(R.string.media_id) to mediaMetadata?.id,

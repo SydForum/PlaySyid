@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.darkxvenom.airbeats.R
@@ -57,28 +58,59 @@ fun AudioQualityTag(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val isJioSaavn = mediaMetadata?.id?.startsWith("JS:") == true ||
+    val isLocal = mediaMetadata?.id?.startsWith("local:") == true ||
+        currentFormat?.playbackUrl?.startsWith("content://") == true ||
+        currentFormat?.playbackUrl?.startsWith("file://") == true
+
+    val isJioSaavn = !isLocal && (
+        mediaMetadata?.id?.startsWith("JS:") == true ||
         currentFormat?.playbackUrl?.contains("saavn", ignoreCase = true) == true ||
         currentFormat?.playbackUrl?.contains("jio", ignoreCase = true) == true
+    )
 
     val isDolbyAtmos = currentFormat?.mimeType?.let {
         it.contains("eac3", ignoreCase = true) || it.contains("dolby", ignoreCase = true)
     } == true
 
-    val rawCodec = currentFormat?.mimeType
-        ?.substringAfter("/", missingDelimiterValue = "")
-        ?.substringBefore(";")
-        ?.uppercase() ?: ""
+    val rawMime = currentFormat?.mimeType.orEmpty().uppercase()
+    val rawCodec = (currentFormat?.codecs?.takeIf { it.isNotBlank() } ?: rawMime.substringAfter("/").substringBefore(";")).uppercase()
+
+    val codec = when {
+        isDolbyAtmos -> "Dolby Atmos"
+        rawCodec.contains("OPUS") || rawMime.contains("WEBM") -> "OPUS"
+        rawCodec.contains("MP4A") || rawCodec.contains("AAC") || rawMime.contains("MP4") -> "AAC"
+        rawCodec.contains("FLAC") || rawMime.contains("FLAC") -> "FLAC"
+        rawMime.contains("MPEG") || rawMime.contains("MP3") -> "MP3"
+        rawCodec.isNotBlank() -> rawCodec
+        else -> ""
+    }
+
+    val bitrateKbps = when {
+        isJioSaavn -> 320
+        currentFormat?.bitrate != null && currentFormat.bitrate > 0 -> currentFormat.bitrate / 1000
+        else -> null
+    }
 
     val label = when {
-        isJioSaavn -> "High Quality"
-        isDolbyAtmos -> "Dolby Atmos"
-        rawCodec.contains("FLAC") || rawCodec.contains("ALAC") -> "Lossless"
-        rawCodec.contains("OPUS") -> "OPUS"
-        rawCodec.contains("AAC") || rawCodec.contains("MP4A") -> "AAC"
-        rawCodec.contains("WEBM") -> "WEBM"
-        rawCodec.isNotBlank() -> rawCodec
-        else -> if (mediaMetadata != null) "High Quality" else "AAC"
+        isLocal -> {
+            if (bitrateKbps != null) "Local • ${bitrateKbps}k" else "Local"
+        }
+        isJioSaavn -> {
+            if (currentFormat != null || mediaMetadata?.id?.startsWith("JS:") == true) {
+                "JioSaavn • 320k"
+            } else {
+                "JioSaavn • Loading"
+            }
+        }
+        isDolbyAtmos -> "YouTube • Atmos"
+        currentFormat == null -> {
+            if (mediaMetadata != null) "YouTube • Loading" else "YouTube"
+        }
+        bitrateKbps != null -> {
+            if (codec.isNotBlank()) "YouTube • ${bitrateKbps}k $codec" else "YouTube • ${bitrateKbps}k"
+        }
+        codec.isNotBlank() -> "YouTube • $codec"
+        else -> "YouTube"
     }
 
     Surface(
@@ -106,6 +138,8 @@ fun AudioQualityTag(
                     fontSize = 11.sp,
                 ),
                 color = tint.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -125,29 +159,44 @@ fun AudioPipelineDialog(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val isJioSaavn = mediaMetadata?.id?.startsWith("JS:") == true ||
+    val isLocal = mediaMetadata?.id?.startsWith("local:") == true ||
+        currentFormat?.playbackUrl?.startsWith("content://") == true ||
+        currentFormat?.playbackUrl?.startsWith("file://") == true
+
+    val isJioSaavn = !isLocal && (
+        mediaMetadata?.id?.startsWith("JS:") == true ||
         currentFormat?.playbackUrl?.contains("saavn", ignoreCase = true) == true ||
         currentFormat?.playbackUrl?.contains("jio", ignoreCase = true) == true
+    )
 
     val rawMime = currentFormat?.mimeType.orEmpty()
     val isDolbyAtmos = rawMime.contains("eac3", ignoreCase = true) || rawMime.contains("dolby", ignoreCase = true)
-    val codecUpper = rawMime.substringAfter("/").substringBefore(";").uppercase()
+    val rawCodec = (currentFormat?.codecs?.takeIf { it.isNotBlank() } ?: rawMime.substringAfter("/").substringBefore(";")).uppercase()
 
-    val sourceName = if (isJioSaavn) "JioSaavn" else "YouTube"
-    val formatName = when {
-        isJioSaavn -> "AAC"
-        isDolbyAtmos -> "E-AC-3 (Dolby Atmos)"
-        codecUpper.contains("OPUS") -> "Opus"
-        codecUpper.contains("WEBM") -> "WebM (Opus)"
-        codecUpper.contains("AAC") || codecUpper.contains("MP4A") -> "AAC"
-        codecUpper.contains("FLAC") -> "FLAC"
-        codecUpper.isNotBlank() -> codecUpper
-        else -> "AAC"
+    val sourceName = when {
+        isLocal -> "Local File"
+        isJioSaavn -> "JioSaavn"
+        else -> "YouTube"
     }
 
-    val sampleRate = currentFormat?.sampleRate ?: 44100
-    val bitrateKbps = if (isJioSaavn) 320 else currentFormat?.bitrate?.let { it / 1000 } ?: 340
-    val bitDepth = if (codecUpper.contains("FLAC") || codecUpper.contains("ALAC")) "24-bit" else "—"
+    val formatName = when {
+        isJioSaavn -> "AAC (MP4)"
+        isDolbyAtmos -> "E-AC-3 (Dolby Atmos)"
+        rawCodec.contains("OPUS") || rawMime.contains("webm", ignoreCase = true) -> "Opus (WebM)"
+        rawCodec.contains("MP4A") || rawCodec.contains("AAC") || rawMime.contains("mp4", ignoreCase = true) -> "AAC (M4A)"
+        rawCodec.contains("FLAC") -> "FLAC"
+        rawCodec.isNotBlank() -> rawCodec
+        else -> if (currentFormat != null) "AAC" else "Loading..."
+    }
+
+    val sampleRate = currentFormat?.sampleRate?.takeIf { it > 0 } ?: 44100
+    val bitrateKbps = when {
+        isJioSaavn -> 320
+        currentFormat?.bitrate != null && currentFormat.bitrate > 0 -> currentFormat.bitrate / 1000
+        else -> null
+    }
+    val bitrateText = if (bitrateKbps != null) "$bitrateKbps kbps" else "Loading..."
+    val bitDepth = if (rawCodec.contains("FLAC") || rawCodec.contains("ALAC")) "24-bit" else "16-bit"
 
     val decoderName = when {
         formatName.contains("Opus", ignoreCase = true) -> "c2.android.opus.decoder"
@@ -202,7 +251,7 @@ fun AudioPipelineDialog(
                     "Format" to formatName,
                     "Bit Depth" to bitDepth,
                     "Sample Rate" to "$sampleRate Hz",
-                    "Bitrate" to "$bitrateKbps kbps",
+                    "Bitrate" to bitrateText,
                     "Channels" to "Stereo"
                 )
             )
