@@ -829,12 +829,33 @@ fun AppearanceSettings(
                             icon = { Icon(painterResource(R.drawable.palette), null) },
                             selectedValue = playerScreenStyle,
                             onValueSelected = onPlayerScreenStyleChange,
+                            values = listOf(
+                                PlayerScreenStyle.MATERIAL,
+                                PlayerScreenStyle.IOS_STYLED,
+                                PlayerScreenStyle.MODERN,
+                                PlayerScreenStyle.SPOTIFY,
+                                PlayerScreenStyle.CLASSIC,
+                                PlayerScreenStyle.APPLE,
+                                PlayerScreenStyle.PAPER,
+                                PlayerScreenStyle.LIQUID,
+                                PlayerScreenStyle.CLOUDGLOW,
+                                PlayerScreenStyle.FROST,
+                                PlayerScreenStyle.FOLD,
+                                PlayerScreenStyle.GROOVE,
+                                PlayerScreenStyle.POPSY,
+                                PlayerScreenStyle.MINIMAL,
+                                PlayerScreenStyle.COLOURFULL,
+                                PlayerScreenStyle.GALAXY,
+                            ),
                             valueText = {
                                 when (it) {
-                                    PlayerScreenStyle.PAPER -> stringResource(R.string.paper_player)
-                                    PlayerScreenStyle.CLASSIC -> stringResource(R.string.classic_player)
+                                    PlayerScreenStyle.MATERIAL -> "Material"
+                                    PlayerScreenStyle.IOS_STYLED -> "iOS Styled"
                                     PlayerScreenStyle.MODERN -> stringResource(R.string.modern_player)
                                     PlayerScreenStyle.SPOTIFY -> stringResource(R.string.spotify_player)
+                                    PlayerScreenStyle.CLASSIC -> stringResource(R.string.classic_player)
+                                    PlayerScreenStyle.APPLE -> "Apple"
+                                    PlayerScreenStyle.PAPER -> stringResource(R.string.paper_player)
                                     PlayerScreenStyle.LIQUID -> stringResource(R.string.liquid_player)
                                     PlayerScreenStyle.CLOUDGLOW -> "CloudGlow"
                                     PlayerScreenStyle.FROST -> "Frost"
@@ -843,10 +864,7 @@ fun AppearanceSettings(
                                     PlayerScreenStyle.POPSY -> "Popsy"
                                     PlayerScreenStyle.MINIMAL -> "Minimal"
                                     PlayerScreenStyle.COLOURFULL -> "Colourfull"
-                                    PlayerScreenStyle.APPLE -> "Apple"
                                     PlayerScreenStyle.GALAXY -> "Galaxy"
-                                    PlayerScreenStyle.IOS_STYLED -> "IOS Styled"
-                                    PlayerScreenStyle.MATERIAL -> "Material"
                                 }
                             },
                         )},

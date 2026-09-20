@@ -103,10 +103,13 @@ enum class LyricsScreenStyle {
 }
 
 enum class PlayerScreenStyle {
-    PAPER,
-    CLASSIC,
+    MATERIAL,
+    IOS_STYLED,
     MODERN,
     SPOTIFY,
+    CLASSIC,
+    APPLE,
+    PAPER,
     LIQUID,
     CLOUDGLOW,
     FROST,
@@ -115,10 +118,7 @@ enum class PlayerScreenStyle {
     POPSY,
     MINIMAL,
     COLOURFULL,
-    APPLE,
-    GALAXY,
-    IOS_STYLED,
-    MATERIAL
+    GALAXY
 }
 
 const val SYSTEM_DEFAULT = "SYSTEM_DEFAULT"

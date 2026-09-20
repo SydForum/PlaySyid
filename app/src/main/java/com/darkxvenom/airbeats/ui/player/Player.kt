@@ -2791,6 +2791,26 @@ fun BottomSheetPlayer(
                 navController = navController,
             )
         }
+
+        // Show clear error popup dialog across all player screen styles whenever playback fails
+        val playbackError by playerConnection.error.collectAsState()
+        var dismissedErrorKey by rememberSaveable { mutableStateOf<String?>(null) }
+        val currentErrorKey = playbackError?.let { "${it.errorCode}_${it.message}_${mediaMetadata?.id}" }
+
+        if (playbackError != null && currentErrorKey != dismissedErrorKey) {
+            PlaybackErrorDialog(
+                error = playbackError!!,
+                mediaMetadata = mediaMetadata,
+                onDismiss = {
+                    dismissedErrorKey = currentErrorKey
+                },
+                onRetry = {
+                    dismissedErrorKey = null
+                    playerConnection.player.prepare()
+                    playerConnection.player.play()
+                },
+            )
+        }
     }
 }
 
