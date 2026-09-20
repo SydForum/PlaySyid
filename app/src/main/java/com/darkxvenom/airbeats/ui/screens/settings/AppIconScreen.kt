@@ -274,38 +274,26 @@ fun AppIconScreen(
                                     icon = icon,
                                     isSelected = icon.id == activeIconId,
                                     onClick = {
-                                        if (AppIconRepository.BUILT_IN_ICONS.any { it.id == icon.id }) {
-                                            val success = AppIconRepository.setActiveIcon(context, icon.id)
+                                        activeIconId = icon.id
+                                        coroutineScope.launch {
+                                            Toast.makeText(
+                                                context,
+                                                "Downloading & adding ${icon.title} to Home Screen...",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            val success = AppIconRepository.applyCommunityIcon(context, icon)
                                             if (success) {
-                                                activeIconId = icon.id
                                                 Toast.makeText(
                                                     context,
-                                                    "App icon updated to ${icon.title}",
-                                                    Toast.LENGTH_SHORT
+                                                    "Confirm 'Add to Home screen' to place the custom icon!",
+                                                    Toast.LENGTH_LONG
                                                 ).show()
                                             } else {
                                                 Toast.makeText(
                                                     context,
-                                                    "Could not update app icon on this launcher",
+                                                    "Could not download or apply icon from GitHub",
                                                     Toast.LENGTH_SHORT
                                                 ).show()
-                                            }
-                                        } else {
-                                            activeIconId = icon.id
-                                            coroutineScope.launch {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Applying ${icon.title} to Home Screen...",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                                val success = AppIconRepository.applyCommunityIcon(context, icon)
-                                                if (success) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "${icon.title} applied! Pin shortcut prompt created.",
-                                                        Toast.LENGTH_LONG
-                                                    ).show()
-                                                }
                                             }
                                         }
                                     }

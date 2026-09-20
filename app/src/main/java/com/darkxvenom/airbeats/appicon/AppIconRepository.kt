@@ -97,24 +97,13 @@ object AppIconRepository {
             aliasName = "$PACKAGE_NAME.launcher.MinimalistMono",
             bgColors = listOf(Color(0xFF1A1A1E), Color(0xFF24242B)),
             fgTint = Color(0xFFFFFFFF)
-        ),
-        AppIcon(
-            id = "airbeats_winters",
-            title = "Airbeats Winters",
-            subtitle = "Winter season frosted titanium & glacial blue",
-            author = "@Dark",
-            aliasName = "$PACKAGE_NAME.launcher.AirbeatsWinters",
-            bgColors = listOf(Color(0xFF041026), Color(0xFF0F386E)),
-            fgTint = Color(0xFF80D8FF),
-            isCommunity = true,
-            svgUrl = "https://raw.githubusercontent.com/d0x-dev/Storage/2521b636c97df62751066a548d2819f4fa2cca38/Airbeats/icons/ChatGPT%20Image%20Sep%2020%2C%202026%2C%2011_02_07%20PM.svg"
         )
     )
 
     /**
      * Returns all available built-in styles for the app.
      */
-    fun getAvailableIcons(): List<AppIcon> = BUILT_IN_ICONS.filter { !it.isCommunity }
+    fun getAvailableIcons(): List<AppIcon> = BUILT_IN_ICONS
 
     /**
      * Determines which icon is currently active on the device.
@@ -222,11 +211,11 @@ object AppIconRepository {
                 val req = ImageRequest.Builder(context)
                     .data(icon.svgUrl)
                     .decoderFactory(SvgDecoder.Factory())
-                    .size(256, 256)
+                    .size(512, 512)
                     .allowHardware(false)
                     .build()
                 val result = loader.execute(req)
-                val bitmap = result.drawable?.toBitmap(256, 256, Bitmap.Config.ARGB_8888)
+                val bitmap = result.drawable?.toBitmap(512, 512, Bitmap.Config.ARGB_8888)
 
                 if (bitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     val shortcutManager = context.getSystemService(ShortcutManager::class.java)
