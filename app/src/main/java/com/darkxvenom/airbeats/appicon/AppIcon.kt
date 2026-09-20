@@ -15,5 +15,6 @@ data class AppIcon(
     val fgTint: Color?,
     val isDefault: Boolean = false,
     val isCommunity: Boolean = false,
+    val inApp: Boolean = true,
     val svgUrl: String? = null
 )

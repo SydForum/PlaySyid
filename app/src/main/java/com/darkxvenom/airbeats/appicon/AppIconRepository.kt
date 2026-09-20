@@ -39,11 +39,27 @@ object AppIconRepository {
         aliasName = "$PACKAGE_NAME.launcher.DefaultIcon",
         bgColors = listOf(Color(0xFFFFFFFF), Color(0xFFF2F4F7)),
         fgTint = null, // null means use original multi-color gradient
-        isDefault = true
+        isDefault = true,
+        inApp = true
+    )
+
+    val WINTER_ICON = AppIcon(
+        id = "airbeats_winters",
+        title = "Airbeats Winters",
+        subtitle = "Winter season frosted cabin & glowing headphones",
+        author = "@Dark",
+        aliasName = "$PACKAGE_NAME.launcher.AirbeatsWinters",
+        bgColors = listOf(Color(0xFF061838), Color(0xFF0F386E)),
+        fgTint = null,
+        isDefault = false,
+        isCommunity = false,
+        inApp = true,
+        svgUrl = "file:///android_asset/icons/Airbeats_Winters.png"
     )
 
     val BUILT_IN_ICONS: List<AppIcon> = listOf(
-        DEFAULT_ICON
+        DEFAULT_ICON,
+        WINTER_ICON
     )
 
     /**
@@ -226,6 +242,7 @@ object AppIconRepository {
                 val title = obj.optString("title", obj.optString("name", "Community Icon"))
                 val author = obj.optString("author", "Community Designer")
                 val subtitle = obj.optString("subtitle", "Designed by $author")
+                val inApp = obj.optBoolean("inApp", id == "airbeats_winters")
                 var svgUrl = obj.optString("svgUrl", obj.optString("imageUrl", obj.optString("url", "")))
                 if (svgUrl.startsWith("http://")) {
                     svgUrl = "https://" + svgUrl.substring(7)
@@ -233,6 +250,14 @@ object AppIconRepository {
                 if (svgUrl.isBlank() && id == "airbeats_winters") {
                     svgUrl = "file:///android_asset/icons/Airbeats_Winters.png"
                 }
+
+                val matchingBuiltIn = BUILT_IN_ICONS.find { it.id == id }
+                val aliasName = matchingBuiltIn?.aliasName ?: if (id == "airbeats_winters") {
+                    WINTER_ICON.aliasName
+                } else {
+                    DEFAULT_ICON.aliasName
+                }
+
                 if (svgUrl.isNotBlank()) {
                     destination.add(
                         AppIcon(
@@ -240,10 +265,11 @@ object AppIconRepository {
                             title = title,
                             subtitle = subtitle,
                             author = author,
-                            aliasName = DEFAULT_ICON.aliasName,
+                            aliasName = aliasName,
                             bgColors = listOf(Color(0xFF061838), Color(0xFF0F386E)),
                             fgTint = null,
-                            isCommunity = true,
+                            isCommunity = !inApp,
+                            inApp = inApp,
                             svgUrl = svgUrl
                         )
                     )
@@ -272,19 +298,7 @@ object AppIconRepository {
 
         // 2. Fallback guarantee for bundled Airbeats Winters if not yet parsed
         if (list.none { it.id == "airbeats_winters" }) {
-            list.add(
-                AppIcon(
-                    id = "airbeats_winters",
-                    title = "Airbeats Winters",
-                    subtitle = "Winter season frosted cabin & glowing headphones",
-                    author = "@Dark",
-                    aliasName = DEFAULT_ICON.aliasName,
-                    bgColors = listOf(Color(0xFF061838), Color(0xFF0F386E)),
-                    fgTint = null,
-                    isCommunity = true,
-                    svgUrl = "file:///android_asset/icons/Airbeats_Winters.png"
-                )
-            )
+            list.add(WINTER_ICON)
         }
 
         // 3. Fetch latest remote icons from GitHub

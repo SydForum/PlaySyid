@@ -799,18 +799,16 @@ class MainActivity : ComponentActivity() {
                             val playerBottomSheetState =
                                 rememberBottomSheetState(
                                     dismissedBound = 0.dp,
-                                    collapsedBound = bottomInset + (if (shouldShowNavigationBar) NavigationBarHeight - 16.dp else 0.dp) + MiniPlayerHeight,
+                                    collapsedBound = (if (shouldShowNavigationBar) NavigationBarHeight - 16.dp else 0.dp) + MiniPlayerHeight,
                                     expandedBound = maxHeight,
                                 )
 
                             val playerAwareWindowInsets =
                                 remember(
-                                    bottomInset,
                                     shouldShowNavigationBar,
                                     playerBottomSheetState.isDismissed
                                 ) {
-                                    var bottom = bottomInset
-                                    if (shouldShowNavigationBar) bottom += NavigationBarHeight - 16.dp
+                                    var bottom = if (shouldShowNavigationBar) NavigationBarHeight - 16.dp else 0.dp
                                     if (!playerBottomSheetState.isDismissed) bottom += MiniPlayerHeight
                                     windowsInsets
                                         .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)

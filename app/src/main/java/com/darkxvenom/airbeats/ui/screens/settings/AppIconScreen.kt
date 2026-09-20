@@ -51,11 +51,13 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
+import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.appicon.AppIcon
 import com.darkxvenom.airbeats.appicon.AppIconRepository
 import com.darkxvenom.airbeats.ui.component.DefaultDialog
 import com.darkxvenom.airbeats.ui.component.IconButton
+import com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,8 +68,11 @@ fun AppIconScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val playerConnection = LocalPlayerConnection.current
+    val mediaMetadata by playerConnection?.mediaMetadata?.collectAsState() ?: remember { mutableStateOf(null) }
+
     var activeIconId by remember { mutableStateOf(AppIconRepository.getActiveIconId(context)) }
-    val allIcons = remember { AppIconRepository.getAvailableIcons() }
+    val builtInIcons = remember { AppIconRepository.getAvailableIcons() }
 
     var isRefreshingCommunity by remember { mutableStateOf(false) }
     var communityIcons by remember { mutableStateOf<List<AppIcon>>(emptyList()) }
@@ -84,269 +89,302 @@ fun AppIconScreen(
         refreshCommunityIcons()
     }
 
-    val selectedIcon = remember(activeIconId, communityIcons) {
-        (allIcons + communityIcons).find { it.id == activeIconId } ?: AppIconRepository.DEFAULT_ICON
+    // Top section: inApp == true (Default Brand, Airbeats Winters, etc.)
+    val inAppIcons = remember(builtInIcons, communityIcons) {
+        val remoteInApp = communityIcons.filter { it.inApp }
+        (builtInIcons + remoteInApp).distinctBy { it.id }
+    }
+
+    // Bottom section: inApp == false (pure community shortcut icons)
+    val shortcutIcons = remember(communityIcons) {
+        communityIcons.filter { !it.inApp }
+    }
+
+    val selectedIcon = remember(activeIconId, inAppIcons, shortcutIcons) {
+        (inAppIcons + shortcutIcons).find { it.id == activeIconId } ?: AppIconRepository.DEFAULT_ICON
     }
 
     var showSubmitDialog by rememberSaveable { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "App Icon",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
+    Box(modifier = Modifier.fillMaxSize()) {
+        ScreenAdaptiveBackground(
+            artworkUrl = mediaMetadata?.thumbnailUrl
+        )
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "App Icon",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent
-                ),
-                scrollBehavior = scrollBehavior,
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.navigateUp() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    scrollBehavior = scrollBehavior,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                                )
+                            )
+                        )
+                        .border(
+                            width = 0.6.dp,
+                            brush = Brush.horizontalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.25f),
+                                    Color.White.copy(alpha = 0.05f),
+                                    Color.White.copy(alpha = 0.25f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+                        )
+                )
+            }
+        ) { innerPadding ->
+            LazyColumn(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
-                            )
+                    .fillMaxSize()
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .windowInsetsPadding(
+                        LocalPlayerAwareWindowInsets.current.only(
+                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
                         )
-                    )
-                    .border(
-                        width = 0.6.dp,
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.25f),
-                                Color.White.copy(alpha = 0.05f),
-                                Color.White.copy(alpha = 0.25f)
-                            )
-                        ),
-                        shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
-                    )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .windowInsetsPadding(
-                    LocalPlayerAwareWindowInsets.current.only(
-                        WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
-                    )
-                ),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            // 1. Hero Preview Card
-            item {
-                HomeScreenMockupCard(
-                    icon = selectedIcon,
-                    onPinToHomeScreen = { iconToPin ->
-                        coroutineScope.launch {
-                            val success = AppIconRepository.applyCommunityIcon(context, iconToPin)
-                            if (success) {
-                                Toast.makeText(
-                                    context,
-                                    "Adding \"${iconToPin.title}\" to Home screen...",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "Could not add shortcut on this launcher",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                    ),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // 1. Hero Preview Card
+                item {
+                    HomeScreenMockupCard(
+                        icon = selectedIcon,
+                        onPinToHomeScreen = { iconToPin ->
+                            coroutineScope.launch {
+                                val success = AppIconRepository.applyCommunityIcon(context, iconToPin)
+                                if (success) {
+                                    Toast.makeText(
+                                        context,
+                                        "Adding \"${iconToPin.title}\" to Home screen...",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Could not add shortcut on this launcher",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             }
                         }
-                    }
-                )
-            }
-
-            // 2. Default App Icon Section Header
-            item {
-                Text(
-                    text = "Default App Icon",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
                     )
-                )
-            }
+                }
 
-            // 3. Default Icon Card (only default brand icon)
-            item {
-                val defaultIcon = AppIconRepository.DEFAULT_ICON
-                val isSelected = activeIconId == defaultIcon.id
-                DefaultAppIconCard(
-                    icon = defaultIcon,
-                    isSelected = isSelected,
-                    onClick = {
-                        if (!isSelected) {
-                            val success = AppIconRepository.setActiveIcon(context, defaultIcon.id)
-                            if (success) {
-                                activeIconId = defaultIcon.id
-                                Toast.makeText(
-                                    context,
-                                    "Default app icon restored",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    }
-                )
-            }
-
-            // 4. Community Icons Section Header
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                // 2. In-App Launcher Icons Section Header
+                item {
                     Column {
                         Text(
-                            text = "Community Icons",
+                            text = "App Icons",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
+                                color = MaterialTheme.colorScheme.primary
                             )
                         )
                         Text(
-                            text = "Download from GitHub & Pin to Home Screen",
+                            text = "Official app launcher icons. Tap to switch directly.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (communityIcons.isNotEmpty()) {
-                            Text(
-                                text = "${communityIcons.size} available",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.width(4.dp))
-                        }
-                        IconButton(
-                            onClick = {
-                                Toast.makeText(context, "Checking GitHub for new icons...", Toast.LENGTH_SHORT).show()
-                                refreshCommunityIcons()
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            if (isRefreshingCommunity) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            } else {
-                                Icon(
-                                    painter = painterResource(R.drawable.sync),
-                                    contentDescription = "Refresh from GitHub",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                }
+
+                // 3. Official App Icons (Default Brand, Airbeats Winters, etc.)
+                items(inAppIcons.size) { index ->
+                    val icon = inAppIcons[index]
+                    val isSelected = activeIconId == icon.id
+                    InAppIconCard(
+                        icon = icon,
+                        isSelected = isSelected,
+                        onClick = {
+                            if (!isSelected) {
+                                val success = AppIconRepository.setActiveIcon(context, icon.id)
+                                if (success) {
+                                    activeIconId = icon.id
+                                    Toast.makeText(
+                                        context,
+                                        "App icon changed to \"${icon.title}\"",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Failed to change app icon",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             }
                         }
-                    }
+                    )
                 }
-            }
 
-            // 5. Community Icons Grid
-            if (communityIcons.isEmpty()) {
+                // 4. Community Icons Section Header
                 item {
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (isRefreshingCommunity) "Checking GitHub for icons..." else "No community icons available yet",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            } else {
-                items(communityIcons.chunked(2).size) { rowIndex ->
-                    val rowIcons = communityIcons.chunked(2)[rowIndex]
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        for (icon in rowIcons) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                CommunityIconCard(
-                                    icon = icon,
-                                    isSelected = icon.id == activeIconId,
-                                    onClick = {
-                                        activeIconId = icon.id
-                                    },
-                                    onPin = {
-                                        activeIconId = icon.id
-                                        coroutineScope.launch {
-                                            val success = AppIconRepository.applyCommunityIcon(context, icon)
-                                            if (success) {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Adding \"${icon.title}\" to Home screen...",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Could not add shortcut on this launcher",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
-                                    }
+                        Column {
+                            Text(
+                                text = "Community Icons",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.secondary
                                 )
-                            }
+                            )
+                            Text(
+                                text = "Submitted by community. Pin as shortcut until in-app update.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        if (rowIcons.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (shortcutIcons.isNotEmpty()) {
+                                Text(
+                                    text = "${shortcutIcons.size} available",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.width(4.dp))
+                            }
+                            IconButton(
+                                onClick = {
+                                    Toast.makeText(context, "Checking GitHub for new icons...", Toast.LENGTH_SHORT).show()
+                                    refreshCommunityIcons()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                if (isRefreshingCommunity) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = painterResource(R.drawable.sync),
+                                        contentDescription = "Refresh from GitHub",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
 
-            // 5. Community Submission Banner
-            item {
-                CommunitySubmissionBanner(
-                    onOpenSubmitDialog = { showSubmitDialog = true }
-                )
-            }
+                // 5. Community Icons Grid (where inApp == false)
+                if (shortcutIcons.isEmpty()) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isRefreshingCommunity) "Checking GitHub for icons..." else "No community shortcut icons right now. All verified icons are in App Icons above!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(shortcutIcons.chunked(2).size) { rowIndex ->
+                        val rowIcons = shortcutIcons.chunked(2)[rowIndex]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            for (icon in rowIcons) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    CommunityIconCard(
+                                        icon = icon,
+                                        isSelected = icon.id == activeIconId,
+                                        onClick = {
+                                            activeIconId = icon.id
+                                        },
+                                        onPin = {
+                                            activeIconId = icon.id
+                                            coroutineScope.launch {
+                                                val success = AppIconRepository.applyCommunityIcon(context, icon)
+                                                if (success) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Adding \"${icon.title}\" to Home screen...",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                } else {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Could not add shortcut on this launcher",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                            if (rowIcons.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
 
-            // 5. System Launcher Notice
-            item {
-                SystemNoticeCard()
+                // 6. Community Submission Banner
+                item {
+                    CommunitySubmissionBanner(
+                        onOpenSubmitDialog = { showSubmitDialog = true }
+                    )
+                }
+
+                // 7. System Launcher Notice
+                item {
+                    SystemNoticeCard()
+                }
             }
         }
-    }
 
-    if (showSubmitDialog) {
-        CommunityIconSubmitDialog(
-            onDismiss = { showSubmitDialog = false }
-        )
+        if (showSubmitDialog) {
+            CommunityIconSubmitDialog(
+                onDismiss = { showSubmitDialog = false }
+            )
+        }
     }
 }
 
@@ -431,7 +469,7 @@ private fun HomeScreenMockupCard(
                         .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(22.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (icon.isCommunity && !icon.svgUrl.isNullOrBlank()) {
+                    if (!icon.svgUrl.isNullOrBlank()) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(icon.svgUrl)
@@ -478,7 +516,7 @@ private fun HomeScreenMockupCard(
                     )
                 }
 
-                if (icon.isCommunity && onPinToHomeScreen != null) {
+                if (!icon.inApp && onPinToHomeScreen != null) {
                     Button(
                         onClick = { onPinToHomeScreen(icon) },
                         shape = RoundedCornerShape(14.dp),
@@ -505,10 +543,10 @@ private fun HomeScreenMockupCard(
 }
 
 /**
- * Dedicated Default App Icon Card.
+ * Dedicated In-App Official Launcher Icon Card.
  */
 @Composable
-private fun DefaultAppIconCard(
+private fun InAppIconCard(
     icon: AppIcon,
     isSelected: Boolean,
     onClick: () -> Unit
@@ -555,11 +593,35 @@ private fun DefaultAppIconCard(
                     .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(R.mipmap.ic_launcher_foreground),
-                    contentDescription = icon.title,
-                    modifier = Modifier.fillMaxSize(0.72f)
-                )
+                if (icon.id == "default") {
+                    Image(
+                        painter = painterResource(R.mipmap.ic_launcher_foreground),
+                        contentDescription = icon.title,
+                        modifier = Modifier.fillMaxSize(0.72f)
+                    )
+                } else if (!icon.svgUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(icon.svgUrl)
+                            .apply {
+                                if (icon.svgUrl.endsWith(".svg", ignoreCase = true)) {
+                                    decoderFactory(SvgDecoder.Factory())
+                                }
+                            }
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = icon.title,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = icon.title,
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
 
             Column(modifier = Modifier.weight(1f)) {
@@ -585,18 +647,21 @@ private fun DefaultAppIconCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Active Default",
+                        contentDescription = "Active Icon",
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
             } else {
-                OutlinedButton(
+                Button(
                     onClick = onClick,
                     shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                 ) {
-                    Text(text = "Set Default", style = MaterialTheme.typography.labelMedium)
+                    Text(text = "Apply", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
