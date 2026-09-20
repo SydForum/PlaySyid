@@ -368,7 +368,12 @@ fun OnlineSearchResult(
             }
         }
     } else {
-        content()
+        Box(modifier = Modifier.fillMaxSize()) {
+            com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground(
+                artworkUrl = mediaMetadata?.thumbnailUrl
+            )
+            content()
+        }
     }
 }
 

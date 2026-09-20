@@ -18,8 +18,10 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.darkxvenom.airbeats.constants.DynamicBackgroundKey
 import com.darkxvenom.airbeats.ui.player.FluidBackground
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
+import com.darkxvenom.airbeats.utils.rememberPreference
 
 @Composable
 fun BlurredBackground(
@@ -129,6 +131,17 @@ fun ScreenAdaptiveBackground(
     artworkUrl: String?,
     modifier: Modifier = Modifier,
 ) {
+    val (dynamicBackground, _) = rememberPreference(DynamicBackgroundKey, defaultValue = true)
+
+    if (!dynamicBackground) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        )
+        return
+    }
+
     Crossfade(
         targetState = artworkUrl?.takeIf { it.isNotBlank() },
         animationSpec = tween(500),

@@ -95,16 +95,18 @@ fun MaterialExploreScreen(
     moodViewModel: MoodAndGenresViewModel = hiltViewModel(),
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
     val explorePage by exploreViewModel.explorePage.collectAsState()
     val moodAndGenres by moodViewModel.moodAndGenres.collectAsState()
 
     var selectedGenre by remember { mutableStateOf<String?>(null) }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier = Modifier.fillMaxSize()
     ) {
+        com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground(
+            artworkUrl = mediaMetadata?.thumbnailUrl
+        )
         LazyColumn(
             contentPadding = PaddingValues(
                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 85.dp,

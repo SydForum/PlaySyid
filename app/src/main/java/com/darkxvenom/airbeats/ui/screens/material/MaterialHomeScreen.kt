@@ -159,6 +159,7 @@ fun MaterialHomeScreen(
     val similarRecommendations by viewModel.similarRecommendations.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     val pullRefreshState = rememberPullToRefreshState()
     val listState = rememberLazyListState()
@@ -248,10 +249,11 @@ fun MaterialHomeScreen(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier = Modifier.fillMaxSize()
     ) {
+        com.darkxvenom.airbeats.ui.component.ScreenAdaptiveBackground(
+            artworkUrl = mediaMetadata?.thumbnailUrl
+        )
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()

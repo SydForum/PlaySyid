@@ -74,6 +74,10 @@ fun AppearanceSettings(
         DynamicThemeKey,
         defaultValue = true
     )
+    val (dynamicBackground, onDynamicBackgroundChange) = rememberPreference(
+        DynamicBackgroundKey,
+        defaultValue = true
+    )
     val (themeAccentColor, onThemeAccentColorChange) = rememberPreference(
         ThemeAccentColorKey,
         defaultValue = 0xFF4285F4.toInt()
@@ -641,6 +645,15 @@ fun AppearanceSettings(
                                     }
                                 }
                             }
+                        },
+                        {
+                            SwitchPreference(
+                                title = { Text("Dynamic Background") },
+                                description = if (dynamicBackground) "Using adaptive song artwork and ambient mesh background" else "Using plain background based on color scheme",
+                                icon = { Icon(painterResource(R.drawable.image), null) },
+                                checked = dynamicBackground,
+                                onCheckedChange = onDynamicBackgroundChange,
+                            )
                         },
                         {EnumListPreference(
                             title = { Text(stringResource(R.string.dark_theme)) },

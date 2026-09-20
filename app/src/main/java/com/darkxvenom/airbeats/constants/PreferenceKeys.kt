@@ -10,6 +10,7 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 val DynamicThemeKey = booleanPreferencesKey("dynamicTheme")
+val DynamicBackgroundKey = booleanPreferencesKey("dynamicBackground")
 val ThemeAccentColorKey = intPreferencesKey("themeAccentColor")
 val ThemeColorEffectKey = stringPreferencesKey("themeColorEffect")
 
