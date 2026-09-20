@@ -73,7 +73,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.shape.GenericShape
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import com.darkxvenom.airbeats.data.repository.NowPlayingTrack
 import com.darkxvenom.airbeats.db.entities.Artist
+import com.darkxvenom.airbeats.db.entities.EventWithSong
 import com.darkxvenom.airbeats.db.entities.Song
 import com.darkxvenom.airbeats.db.entities.SongWithStats
 import coil.compose.AsyncImage
@@ -113,6 +121,7 @@ import com.darkxvenom.airbeats.viewmodels.StatsViewModel
 import com.darkxvenom.airbeats.ui.component.RankBadge
 import com.darkxvenom.airbeats.ui.component.AirBeatsRank
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -123,10 +132,10 @@ fun StatsScreen(
     navController: NavController,
     viewModel: StatsViewModel = hiltViewModel(),
 ) {
-    val menuState = LocalMenuState.current
-    val haptic = LocalHapticFeedback.current
     val isFrosted = isFrostedGlassUiEnabled()
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val menuState = LocalMenuState.current
+    val haptic = LocalHapticFeedback.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
@@ -144,6 +153,8 @@ fun StatsScreen(
     val lazyListState = rememberLazyListState()
     val selectedOption by viewModel.selectedOption.collectAsState()
     val globalStats by viewModel.globalStats.collectAsState()
+    val nowPlayingTrack by viewModel.nowPlayingTrack.collectAsState()
+    val recentEvents by viewModel.recentEvents.collectAsState()
 
     // BottomSheet para Insight
     var showInsightBottomSheet by remember { mutableStateOf(false) }
@@ -344,8 +355,17 @@ fun StatsScreen(
 
             item {
                 ScrobblerStatsHubCard(
+                    nowPlaying = nowPlayingTrack,
+                    recentEvents = recentEvents,
                     isFrosted = isFrosted,
                     navController = navController,
+                    onSongClick = { songId ->
+                        playerConnection.playQueue(
+                            YouTubeQueue(
+                                endpoint = WatchEndpoint(songId),
+                            ),
+                        )
+                    },
                 )
             }
 
@@ -1338,10 +1358,105 @@ fun StatsHighlightCard(
     }
 }
 
+private fun cleanPackageName(pkg: String?): String = when {
+    pkg == null -> "External App"
+    pkg.contains("spotify", ignoreCase = true) -> "Spotify"
+    pkg.contains("bitchord", ignoreCase = true) -> "Bitchord"
+    pkg.contains("youtube", ignoreCase = true) -> "YT Music"
+    pkg.contains("apple", ignoreCase = true) -> "Apple Music"
+    pkg.contains("amazon", ignoreCase = true) -> "Amazon Music"
+    pkg.contains("deezer", ignoreCase = true) -> "Deezer"
+    pkg.contains("tidal", ignoreCase = true) -> "Tidal"
+    pkg.contains("jiosaavn", ignoreCase = true) -> "JioSaavn"
+    pkg.contains("wynk", ignoreCase = true) -> "Wynk"
+    pkg.contains("gaana", ignoreCase = true) -> "Gaana"
+    pkg.contains("soundcloud", ignoreCase = true) -> "SoundCloud"
+    pkg.contains("bandcamp", ignoreCase = true) -> "Bandcamp"
+    else -> pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+}
+
+private fun formatRelativeTime(dateTime: LocalDateTime): String {
+    val duration = Duration.between(dateTime, LocalDateTime.now())
+    return when {
+        duration.toMinutes() < 1 -> "Just now"
+        duration.toMinutes() < 60 -> "${duration.toMinutes()}m ago"
+        duration.toHours() < 24 -> "${duration.toHours()}h ago"
+        duration.toDays() == 1L -> "Yesterday"
+        duration.toDays() < 7 -> "${duration.toDays()}d ago"
+        else -> dateTime.format(DateTimeFormatter.ofPattern("dd MMM"))
+    }
+}
+
+@Composable
+fun LiveEqualizerBars(
+    modifier: Modifier = Modifier,
+    barColor: Color = MaterialTheme.colorScheme.primary,
+) {
+    val transition = rememberInfiniteTransition(label = "live_eq_bars")
+    val bar1 by transition.animateFloat(
+        initialValue = 3f,
+        targetValue = 13f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 380, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "eq_bar1"
+    )
+    val bar2 by transition.animateFloat(
+        initialValue = 13f,
+        targetValue = 5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 310, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "eq_bar2"
+    )
+    val bar3 by transition.animateFloat(
+        initialValue = 5f,
+        targetValue = 15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 440, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "eq_bar3"
+    )
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(1.5.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(2.5.dp)
+                .height(bar1.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(barColor)
+        )
+        Box(
+            modifier = Modifier
+                .width(2.5.dp)
+                .height(bar2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(barColor)
+        )
+        Box(
+            modifier = Modifier
+                .width(2.5.dp)
+                .height(bar3.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(barColor)
+        )
+    }
+}
+
 @Composable
 fun ScrobblerStatsHubCard(
+    nowPlaying: NowPlayingTrack?,
+    recentEvents: List<EventWithSong>,
     isFrosted: Boolean,
     navController: NavController,
+    onSongClick: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scrobblerPrefs = remember { com.darkxvenom.airbeats.data.local.ScrobblerPreferences(context) }
@@ -1365,6 +1480,7 @@ fun ScrobblerStatsHubCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -1414,20 +1530,160 @@ fun ScrobblerStatsHubCard(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = if (isEnabled) {
-                            if (selectedCount > 0) "$selectedCount app(s) monitored (Spotify, YT Music, etc.)"
+                            if (nowPlaying != null) "Listening on ${cleanPackageName(nowPlaying.packageName)}"
+                            else if (selectedCount > 0) "$selectedCount app(s) monitored (Spotify, YT Music, etc.)"
                             else "No apps selected — tap Select Apps"
                         } else {
                             "Track plays from Spotify, YT Music & other apps"
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (nowPlaying != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
+            // LIVE NOW PLAYING CARD (styled matching Lastwave in Screenshot 1)
+            if (nowPlaying != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable {
+                            nowPlaying.songId?.let { onSongClick(it) }
+                        },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Album Art / Fallback with Equalizer animation overlay
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            if (!nowPlaying.thumbnailUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = nowPlaying.thumbnailUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.music_note),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+
+                            // Equalizer badge on bottom right of cover art
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(3.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.Black.copy(alpha = 0.7f))
+                                    .padding(horizontal = 3.dp, vertical = 2.dp)
+                            ) {
+                                LiveEqualizerBars(
+                                    modifier = Modifier.height(11.dp),
+                                    barColor = Color(0xFFFF4081)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = nowPlaying.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = nowPlaying.artist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (!nowPlaying.packageName.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "via ${cleanPackageName(nowPlaying.packageName)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Pulse Dot + Now Playing Badge (as in screenshot 1)
+                        val pulseTransition = rememberInfiniteTransition(label = "pulse_badge")
+                        val dotAlpha by pulseTransition.animateFloat(
+                            initialValue = 0.35f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(durationMillis = 650, easing = LinearEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "dot_pulse"
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFFE91E63).copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, Color(0xFFE91E63).copy(alpha = 0.35f))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFE91E63).copy(alpha = dotAlpha))
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Now Playing",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF4081)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Quick actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
                     onClick = { navController.navigate("settings/scrobbler/apps") },
@@ -1455,6 +1711,122 @@ fun ScrobblerStatsHubCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Settings")
+                }
+
+                androidx.compose.material3.IconButton(
+                    onClick = { navController.navigate("settings/scrobbler/debug") },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.bug_report),
+                        contentDescription = "Scrobbler Debug Log",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // RECENT SCROBBLES / PLAYS PREVIEW (Matching Screenshot 1)
+            val scrobbleHistory = remember(recentEvents) {
+                recentEvents.filter { it.song.song.id.startsWith("scrobble_") || it.event.playTime > 0 }.take(5)
+            }
+            if (scrobbleHistory.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Recent Plays",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "${recentEvents.size} total",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    scrobbleHistory.forEach { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onSongClick(item.song.id) }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                if (!item.song.thumbnailUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = item.song.thumbnailUrl,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.music_note),
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.song.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = item.song.artists.joinToString { it.name }.ifEmpty { "Unknown Artist" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                            ) {
+                                Text(
+                                    text = formatRelativeTime(item.event.timestamp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

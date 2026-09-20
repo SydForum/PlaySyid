@@ -204,10 +204,14 @@ class MediaScrobbleListenerService : NotificationListenerService() {
         val session = watched.remove(token) ?: return
         session.callback?.let { runCatching { session.controller.unregisterCallback(it) } }
         session.scrobbleJob?.cancel()
+        if (watched.values.none { it.playingSinceElapsed != null }) {
+            scrobbleRepository.clearNowPlaying()
+        }
     }
 
     private fun unbindAll() {
         watched.keys.toList().forEach { unbindToken(it) }
+        scrobbleRepository.clearNowPlaying()
     }
 
     private fun cleanArtist(raw: String): String {
@@ -257,7 +261,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
         session.scrobbleJob?.cancel()
 
         if (session.playingSinceElapsed != null && isSelectedForScrobbling(session)) {
-            announceNowPlaying(key, artist, title, album)
+            announceNowPlaying(key, artist, title, album, session.controller.packageName)
         }
         scheduleScrobbleCheck(session, key, artist, title, album, durationMs)
     }
@@ -287,7 +291,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                     val album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)
                     val durationMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
                     if (playing && isSelectedForScrobbling(session)) {
-                        announceNowPlaying(session.trackKey, artist, title, album, forceReannounce = true)
+                        announceNowPlaying(session.trackKey, artist, title, album, session.controller.packageName, forceReannounce = true)
                     }
                     scheduleScrobbleCheck(session, session.trackKey, artist, title, album, durationMs)
                 }
@@ -304,7 +308,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                         ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
                     val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
                     if (!rawArtist.isNullOrBlank() && !title.isNullOrBlank() && isSelectedForScrobbling(session)) {
-                        announceNowPlaying(session.trackKey, cleanArtist(rawArtist), title, metadata.getString(MediaMetadata.METADATA_KEY_ALBUM))
+                        announceNowPlaying(session.trackKey, cleanArtist(rawArtist), title, metadata.getString(MediaMetadata.METADATA_KEY_ALBUM), session.controller.packageName)
                     }
                 }
             }
@@ -313,6 +317,9 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                 session.accumulatedMs += SystemClock.elapsedRealtime() - since
             }
             session.playingSinceElapsed = null
+            if (watched.values.none { it.playingSinceElapsed != null }) {
+                scrobbleRepository.clearNowPlaying()
+            }
         }
     }
 
@@ -334,7 +341,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
         val playing = session.controller.playbackState?.state == PlaybackState.STATE_PLAYING
         session.playingSinceElapsed = if (playing) SystemClock.elapsedRealtime() else null
         session.scrobbleJob?.cancel()
-        if (playing) announceNowPlaying(key, artist, title, metadata.getString(MediaMetadata.METADATA_KEY_ALBUM))
+        if (playing) announceNowPlaying(key, artist, title, metadata.getString(MediaMetadata.METADATA_KEY_ALBUM), session.controller.packageName)
         scheduleScrobbleCheck(
             session,
             key,
@@ -345,12 +352,19 @@ class MediaScrobbleListenerService : NotificationListenerService() {
         )
     }
 
-    private fun announceNowPlaying(key: String, artist: String, title: String, album: String?, forceReannounce: Boolean = false) {
+    private fun announceNowPlaying(
+        key: String,
+        artist: String,
+        title: String,
+        album: String?,
+        packageName: String? = null,
+        forceReannounce: Boolean = false,
+    ) {
         if (!enabled || !submitNowPlaying) return
         if (key == lastAnnouncedKey && !forceReannounce) return
         lastAnnouncedKey = key
         serviceScope.launch {
-            val result = runCatching { scrobbleRepository.updateNowPlaying(artist, title, album) }
+            val result = runCatching { scrobbleRepository.updateNowPlaying(artist, title, album, packageName) }
                 .onFailure { Log.w(TAG, "updateNowPlaying failed", it) }
                 .getOrNull()
             if (result is ScrobbleRepository.Result.Failed && result.retryable && lastAnnouncedKey == key) {
@@ -358,7 +372,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                 if (enabled && submitNowPlaying && lastAnnouncedKey == key &&
                     sessionStillPlayingTrack(key)
                 ) {
-                    runCatching { scrobbleRepository.updateNowPlaying(artist, title, album) }
+                    runCatching { scrobbleRepository.updateNowPlaying(artist, title, album, packageName) }
                         .onFailure { Log.w(TAG, "updateNowPlaying retry failed", it) }
                 }
             }
@@ -419,7 +433,7 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                                 if (result == ScrobbleRepository.Result.Success && session.trackKey == key &&
                                     session.playingSinceElapsed != null && isSelectedForScrobbling(session)
                                 ) {
-                                    announceNowPlaying(key, artist, title, album, forceReannounce = true)
+                                    announceNowPlaying(key, artist, title, album, session.controller.packageName, forceReannounce = true)
                                 }
                             }
                             .onFailure {

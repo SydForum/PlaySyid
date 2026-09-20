@@ -35,10 +35,13 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.temporal.WeekFields
 import java.util.Locale
-import javax.inject.Inject
-
+import com.darkxvenom.airbeats.data.repository.NowPlayingTrack
+import com.darkxvenom.airbeats.data.repository.ScrobbleRepository
+import com.darkxvenom.airbeats.db.entities.EventWithSong
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import com.darkxvenom.airbeats.ui.component.AirBeatsRank
+import javax.inject.Inject
 
 data class GlobalStatsUiState(
     val isLoading: Boolean = true,
@@ -56,10 +59,17 @@ constructor(
     val database: MusicDatabase,
     @ApplicationContext private val context: Context,
     private val namePreferenceManager: NamePreferenceManager,
+    private val scrobbleRepository: ScrobbleRepository,
 ) : ViewModel() {
     val selectedOption = MutableStateFlow(OptionStats.CONTINUOUS)
     val indexChips = MutableStateFlow(0)
     val globalStats = MutableStateFlow(GlobalStatsUiState())
+
+    val nowPlayingTrack: StateFlow<NowPlayingTrack?> = scrobbleRepository.nowPlaying
+
+    val recentEvents: StateFlow<List<EventWithSong>> = database.events()
+        .map { it.take(25) }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val totalListenHours: Flow<Double> = database.mostPlayedSongsStats(0L, limit = -1, toTimeStamp = Long.MAX_VALUE)
         .map { songs ->

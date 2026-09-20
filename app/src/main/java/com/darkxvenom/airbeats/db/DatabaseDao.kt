@@ -1024,8 +1024,31 @@ interface DatabaseDao {
     fun clearPlaylist(playlistId: String)
 
     @Transaction
-    @Query("SELECT * FROM artist WHERE name = :name")
+    @Query("SELECT * FROM artist WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1")
     fun artistByName(name: String): ArtistEntity?
+
+    @Transaction
+    @Query("SELECT * FROM album WHERE LOWER(TRIM(title)) = LOWER(TRIM(:title)) LIMIT 1")
+    fun albumByName(title: String): AlbumEntity?
+
+    @Transaction
+    @Query("""
+        SELECT song.* FROM song
+        JOIN song_artist_map sam ON song.id = sam.songId
+        JOIN artist ON sam.artistId = artist.id
+        WHERE LOWER(TRIM(song.title)) = LOWER(TRIM(:title))
+          AND LOWER(TRIM(artist.name)) = LOWER(TRIM(:artistName))
+        LIMIT 1
+    """)
+    fun findSongByTitleAndArtist(title: String, artistName: String): Song?
+
+    @Transaction
+    @Query("""
+        SELECT song.* FROM song
+        WHERE LOWER(TRIM(song.title)) = LOWER(TRIM(:title))
+        LIMIT 1
+    """)
+    fun findSongByTitle(title: String): Song?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(song: SongEntity): Long
