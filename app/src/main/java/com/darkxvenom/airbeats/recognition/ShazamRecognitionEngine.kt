@@ -30,6 +30,8 @@ class ShazamRecognitionEngine(
         private const val TARGET_SAMPLE_RATE = 16000
     }
 
+    override val providerName: String = "Shazam"
+
     override suspend fun recognize(audioSource: AudioSource): RecognitionResult = withContext(Dispatchers.IO) {
         val file = audioSource.file
         if (!file.exists() || file.length() <= 44) {

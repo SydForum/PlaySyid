@@ -13,6 +13,8 @@ class CompositeRecognitionEngine(
         private const val TAG = "CompositeRecEngine"
     }
 
+    override val providerName: String = "Composite (Shazam/AudD)"
+
     override suspend fun recognize(audioSource: AudioSource): RecognitionResult {
         try {
             val result = shazamEngine.recognize(audioSource)
