@@ -107,6 +107,8 @@ fun SpotifyLyrics(
     val serviceLyricsEntity by playerConnection.currentLyrics.collectAsState(initial = null)
     var fetchedLyricsEntity by remember { mutableStateOf<LyricsEntity?>(null) }
     val currentLyricsEntity = fetchedLyricsEntity ?: serviceLyricsEntity
+    val currentFormat by playerConnection.currentFormat.collectAsState(initial = null)
+    var showAudioPipelineDialog by rememberSaveable { mutableStateOf(false) }
     val playbackState by playerConnection.playbackState.collectAsState()
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val canSkipPrevious by playerConnection.canSkipPrevious.collectAsState()
@@ -233,6 +235,14 @@ fun SpotifyLyrics(
         if (lines.isNotEmpty()) {
             listState.animateScrollToItem(activeLineIndex.coerceAtMost(lines.lastIndex))
         }
+    }
+
+    if (showAudioPipelineDialog) {
+        AudioPipelineDialog(
+            currentFormat = currentFormat,
+            mediaMetadata = mediaMetadata,
+            onDismiss = { showAudioPipelineDialog = false }
+        )
     }
 
     Box(
@@ -389,13 +399,20 @@ fun SpotifyLyrics(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 40.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = makeTimeString(shownPosition.coerceAtLeast(0L)),
                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = SpotifyLyricsFontFamily, fontSize = 13.sp),
                     color = Color.White.copy(alpha = 0.64f),
                 )
-                Spacer(Modifier.weight(1f))
+                AudioQualityTag(
+                    currentFormat = currentFormat,
+                    mediaMetadata = mediaMetadata,
+                    tint = Color.White,
+                    onClick = { showAudioPipelineDialog = true },
+                )
                 Text(
                     text = makeTimeString(safeDuration),
                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = SpotifyLyricsFontFamily, fontSize = 13.sp),

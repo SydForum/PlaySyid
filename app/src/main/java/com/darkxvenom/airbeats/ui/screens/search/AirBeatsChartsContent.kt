@@ -26,7 +26,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +84,7 @@ fun LazyListScope.airbeatsChartsItems(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AirBeatsChartsEmbedView(
     navController: NavController,
@@ -108,17 +110,14 @@ fun AirBeatsChartsEmbedView(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        if (isLoading && !isManualLoading && chartTracks == null && chartArtists == null && chartAlbums == null && chartVideos == null) {
+        if ((isLoading || isManualLoading) && chartTracks == null && chartArtists == null && chartAlbums == null && chartVideos == null) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(320.dp),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp)
-                )
+                LoadingIndicator()
             }
         }
 

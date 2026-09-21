@@ -43,6 +43,9 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.darkxvenom.airbeats.ui.component.AudioPipelineDialog
+import com.darkxvenom.airbeats.ui.component.AudioQualityTag
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,6 +122,8 @@ fun AirBeatsLyricsScreen(
     val playerVolume = playerConnection.service.playerVolume.collectAsState()
     
     val currentLyrics by playerConnection.currentLyrics.collectAsState(initial = null)
+    val currentFormat by playerConnection.currentFormat.collectAsState(initial = null)
+    var showAudioPipelineDialog by rememberSaveable { mutableStateOf(false) }
     val lyricsScreenStyle by rememberEnumPreference(
         com.darkxvenom.airbeats.constants.LyricsScreenStyleKey,
         com.darkxvenom.airbeats.constants.LyricsScreenStyle.LYRICS_2
@@ -176,6 +181,14 @@ fun AirBeatsLyricsScreen(
     }
 
     BackHandler(onBack = onBackClick)
+
+    if (showAudioPipelineDialog) {
+        AudioPipelineDialog(
+            currentFormat = currentFormat,
+            mediaMetadata = mediaMetadata,
+            onDismiss = { showAudioPipelineDialog = false }
+        )
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -349,12 +362,19 @@ fun AirBeatsLyricsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = makeTimeString(sliderPosition ?: position),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = textBackgroundColor.copy(alpha = 0.7f)
+                                )
+                                AudioQualityTag(
+                                    currentFormat = currentFormat,
+                                    mediaMetadata = mediaMetadata,
+                                    tint = textBackgroundColor,
+                                    onClick = { showAudioPipelineDialog = true }
                                 )
                                 Text(
                                     text = if (duration != C.TIME_UNSET) makeTimeString(duration) else "",
@@ -640,12 +660,19 @@ fun AirBeatsLyricsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = makeTimeString(sliderPosition ?: position),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = textBackgroundColor.copy(alpha = 0.7f)
+                            )
+                            AudioQualityTag(
+                                currentFormat = currentFormat,
+                                mediaMetadata = mediaMetadata,
+                                tint = textBackgroundColor,
+                                onClick = { showAudioPipelineDialog = true }
                             )
                             Text(
                                 text = if (duration != C.TIME_UNSET) makeTimeString(duration) else "",
