@@ -881,7 +881,7 @@ class MusicService :
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build()
             )
-            .setOnAudioFocusChangeListener(audioFocusChangeListener)
+            .setOnAudioFocusChangeListener(audioFocusChangeListener, android.os.Handler(android.os.Looper.getMainLooper()))
             .build()
     }
 
@@ -1670,6 +1670,7 @@ class MusicService :
         if (!isAudioEffectSessionOpened) return
         isAudioEffectSessionOpened = false
         releaseLoudnessEnhancer()
+        visualizerManager.isPlaying = false
         runCatching { visualizerManager.stop() }
         sendBroadcast(
             Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION).apply {
@@ -1785,9 +1786,8 @@ class MusicService :
 
     fun ensureVisualizer() {
         val sessionId = player.audioSessionId
-        if (sessionId > 0) {
-            visualizerManager.start(sessionId) { player.isPlaying }
-        }
+        visualizerManager.isPlaying = player.isPlaying
+        visualizerManager.start(sessionId)
     }
 
     override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
@@ -1867,6 +1867,7 @@ class MusicService :
         }
 
         if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
+            visualizerManager.isPlaying = false
             crossfadeAudio?.stop(resetMainFade = true)
         }
 
@@ -1917,6 +1918,13 @@ class MusicService :
                     currentMediaMetadata.value = null
                 }
             }
+        }
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+        visualizerManager.isPlaying = isPlaying
+        if (isPlaying) {
+            ensureVisualizer()
         }
     }
 

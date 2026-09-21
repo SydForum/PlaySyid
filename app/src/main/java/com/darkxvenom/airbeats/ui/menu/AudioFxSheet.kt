@@ -34,6 +34,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -76,6 +77,10 @@ fun InAppAudioFxSheet(onDismiss: () -> Unit) {
     val boostPercent by playerConnection.service.audioBoostPercent.collectAsState()
     val boostEnabled by playerConnection.service.audioBoostEnabled.collectAsState()
     val stats by playerConnection.service.visualizerManager.stats.collectAsState()
+
+    LaunchedEffect(Unit) {
+        playerConnection.service.ensureVisualizer()
+    }
 
     val (enableLiquidGlass) = rememberPreference(LiquidGlassKey, false)
     val isFrosted = isFrostedGlassUiEnabled()

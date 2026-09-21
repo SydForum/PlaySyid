@@ -35,16 +35,32 @@ class AudioVisualizerManager(
 
     private var visualizer: Visualizer? = null
     private var fallbackJob: Job? = null
-    private var isPlayingProvider: (() -> Boolean)? = null
+    private var currentSessionId: Int = 0
+
+    @Volatile
+    var isPlaying: Boolean = false
+        set(value) {
+            field = value
+            if (!value) {
+                decay()
+            }
+        }
 
     // Smoothing accumulators
     private var smoothBass = 0f
     private var smoothMid = 0f
     private var smoothTreble = 0f
 
-    fun start(audioSessionId: Int, isPlaying: () -> Boolean) {
+    fun start(audioSessionId: Int) {
+        if (visualizer != null && currentSessionId == audioSessionId && audioSessionId > 0) {
+            return
+        }
+        if (visualizer == null && audioSessionId <= 0 && fallbackJob?.isActive == true) {
+            return
+        }
+
         stop()
-        isPlayingProvider = isPlaying
+        currentSessionId = audioSessionId
 
         if (audioSessionId > 0) {
             try {
@@ -63,7 +79,7 @@ class AudioVisualizerManager(
                                 fft: ByteArray?,
                                 samplingRate: Int
                             ) {
-                                if (fft != null && isPlayingProvider?.invoke() == true) {
+                                if (fft != null && isPlaying) {
                                     processFft(fft)
                                 } else {
                                     decay()
@@ -163,11 +179,12 @@ class AudioVisualizerManager(
     }
 
     private fun startFallbackLoop() {
+        if (fallbackJob?.isActive == true) return
         fallbackJob?.cancel()
         fallbackJob = scope.launch(Dispatchers.Default) {
             var step = 0.0
             while (isActive) {
-                if (isPlayingProvider?.invoke() == true) {
+                if (isPlaying) {
                     step += 0.25
                     // Natural musical rhythm simulation
                     val rhythm = (sin(step * 1.8) * 0.5 + 0.5).toFloat()
@@ -201,6 +218,7 @@ class AudioVisualizerManager(
     fun stop() {
         fallbackJob?.cancel()
         fallbackJob = null
+        currentSessionId = 0
         try {
             visualizer?.enabled = false
             visualizer?.release()
