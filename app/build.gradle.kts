@@ -19,10 +19,19 @@ val localProperties = Properties().apply {
         localPropertiesFile.inputStream().use { load(it) }
     }
 }
+val ciKeystoreFile = rootProject.file("app/keystore.jks")
 val localSigningFile = localProperties.getProperty("signing.keystore.file")
+    ?: (findProperty("android.injected.signing.store.file") as? String)
+    ?: (if (ciKeystoreFile.exists()) ciKeystoreFile.absolutePath else null)
 val localSigningStorePassword = localProperties.getProperty("signing.keystore.password")
+    ?: (findProperty("android.injected.signing.store.password") as? String)
+    ?: System.getenv("KEYSTORE_PASSWORD")
 val localSigningKeyAlias = localProperties.getProperty("signing.key.alias")
+    ?: (findProperty("android.injected.signing.key.alias") as? String)
+    ?: System.getenv("KEY_ALIAS")
 val localSigningKeyPassword = localProperties.getProperty("signing.key.password")
+    ?: (findProperty("android.injected.signing.key.password") as? String)
+    ?: System.getenv("KEY_PASSWORD")
 
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
@@ -51,6 +60,8 @@ android {
                 storePassword = localSigningStorePassword
                 keyAlias = localSigningKeyAlias
                 keyPassword = localSigningKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
         getByName("debug") {
