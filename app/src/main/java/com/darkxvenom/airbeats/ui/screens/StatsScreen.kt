@@ -1711,21 +1711,6 @@ fun ScrobblerStatsHubCard(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Settings")
                 }
-
-                androidx.compose.material3.IconButton(
-                    onClick = { navController.navigate("settings/scrobbler/debug") },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.bug_report),
-                        contentDescription = "Scrobbler Debug Log",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
             }
 
             // RECENT SCROBBLES / PLAYS PREVIEW (Matching Screenshot 1)

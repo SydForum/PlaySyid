@@ -166,14 +166,6 @@ fun ScrobblerSettingsScreen(
                             steps = 12,
                         )
                     }
-                },
-                {
-                    PreferenceEntry(
-                        title = { Text("Scrobbler debug log") },
-                        description = "Live in-memory log of engine detections, resets, and scrobbles",
-                        icon = { Icon(painterResource(R.drawable.bug_report), null) },
-                        onClick = { navController.navigate("settings/scrobbler/debug") },
-                    )
                 }
             )
         )

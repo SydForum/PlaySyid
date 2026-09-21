@@ -7,7 +7,6 @@ import com.darkxvenom.airbeats.db.entities.Event
 import com.darkxvenom.airbeats.db.entities.SongAlbumMap
 import com.darkxvenom.airbeats.db.entities.SongArtistMap
 import com.darkxvenom.airbeats.db.entities.SongEntity
-import com.darkxvenom.airbeats.service.ScrobbleDebugLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +34,6 @@ data class NowPlayingTrack(
 @Singleton
 class ScrobbleRepository @Inject constructor(
     private val database: MusicDatabase,
-    private val debugLog: ScrobbleDebugLog,
 ) {
     @Volatile private var lastNowPlayingKey: String? = null
 
@@ -100,16 +98,11 @@ class ScrobbleRepository @Inject constructor(
 
         if (key != lastNowPlayingKey) {
             lastNowPlayingKey = key
-            val matchNote = if (matchedSong != null) " (matched: ${matchedSong.id})" else ""
-            debugLog.log("Now Playing: \"$displayTitle\" by $displayArtist$matchNote")
         }
         return Result.Success
     }
 
     fun clearNowPlaying() {
-        if (_nowPlaying.value != null) {
-            debugLog.log("Playback paused/stopped — cleared now playing")
-        }
         lastNowPlayingKey = null
         _nowPlaying.value = null
     }
@@ -136,7 +129,6 @@ class ScrobbleRepository @Inject constructor(
                 val finalSongId: String
                 if (matchedSong != null) {
                     finalSongId = matchedSong.id
-                    debugLog.log("Matched existing AirBeats track \"${matchedSong.title}\" ($finalSongId)")
                 } else {
                     // Not in database: generate deterministic IDs
                     finalSongId = "scrobble_" + java.lang.Integer.toHexString("$safeArtist|$safeTrack".hashCode())
@@ -217,11 +209,9 @@ class ScrobbleRepository @Inject constructor(
             }
 
             _scrobbleEvents.tryEmit(Unit)
-            debugLog.log("Scrobbled to history: \"$safeTrack\" by $safeArtist (${actualPlayTimeMs / 1000}s play time)")
             Result.Success
         }.getOrElse { error ->
             Timber.e(error, "Failed to scrobble track $track")
-            debugLog.log("Scrobble database insert failed: ${error.message}")
             Result.Failed(error.message ?: "Failed to save scrobble")
         }
     }

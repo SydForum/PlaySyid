@@ -426,9 +426,6 @@ fun NavGraphBuilder.navigationBuilder(
     composable("settings/scrobbler/apps") {
         com.darkxvenom.airbeats.ui.screens.settings.ScrobblerAppsScreen(navController)
     }
-    composable("settings/scrobbler/debug") {
-        com.darkxvenom.airbeats.ui.screens.settings.ScrobblerDebugLogScreen(navController)
-    }
     composable("settings/storage") {
         StorageSettings(navController, scrollBehavior)
     }

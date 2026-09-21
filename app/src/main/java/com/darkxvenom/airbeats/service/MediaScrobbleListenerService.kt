@@ -38,7 +38,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
 
     @Inject lateinit var scrobblerPreferences: ScrobblerPreferences
     @Inject lateinit var scrobbleRepository: ScrobbleRepository
-    @Inject lateinit var debugLog: ScrobbleDebugLog
 
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -78,9 +77,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                     scrobblePercent = s.scrobblePercent
                     val changedPackages = selectedPackages != s.selectedPackages
                     selectedPackages = s.selectedPackages
-                    if (wasEnabled != enabled || changedPackages) {
-                        debugLog.log("Settings: enabled=$enabled, nowPlaying=$submitNowPlaying, percent=$scrobblePercent%, scrobbling=${selectedPackages.size} app(s)")
-                    }
                     if (changedPackages) refreshActiveSessions()
                     if (enabled && (!wasEnabled || newlySelected.isNotEmpty())) {
                         val packages = if (!wasEnabled) selectedPackages else newlySelected
@@ -95,7 +91,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        debugLog.log("Notification listener connected")
         runCatching {
             val manager = getSystemService(MediaSessionManager::class.java) ?: return
             val component = ComponentName(this, MediaScrobbleListenerService::class.java)
@@ -107,7 +102,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
             manager.addOnActiveSessionsChangedListener(listener, component, mainHandler)
             bindControllers(manager.getActiveSessions(component))
         }.onFailure {
-            debugLog.log("onListenerConnected FAILED: ${it.message}")
             Log.w(TAG, "onListenerConnected failed — scrobbling unavailable this session", it)
         }
 
@@ -160,12 +154,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
     private fun bindControllers(controllers: List<MediaController>) {
         val liveTokens = controllers.mapNotNull { c -> runCatching { c.sessionToken }.getOrNull() }.toSet()
         val stale = watched.keys - liveTokens
-        if (stale.isNotEmpty()) {
-            stale.forEach { token ->
-                val pkg = runCatching { watched[token]?.controller?.packageName }.getOrNull() ?: "?"
-                debugLog.log("Session gone: $pkg (was tracking ${watched[token]?.trackKey.orEmpty()})")
-            }
-        }
         stale.forEach { unbindToken(it) }
 
         controllers.forEach { controller ->
@@ -178,7 +166,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                     onStateChanged(existing, controller.playbackState)
                     return@forEach
                 }
-                debugLog.log("New session bound: ${controller.packageName}")
                 val session = WatchedSession(controller)
                 val callback = object : MediaController.Callback() {
                     override fun onMetadataChanged(metadata: MediaMetadata?) {
@@ -241,15 +228,12 @@ class MediaScrobbleListenerService : NotificationListenerService() {
 
         if (key == session.trackKey) {
             if (!session.durationKnown && durationMs > 0L) {
-                debugLog.log("Duration updated for \"$title\" (${durationMs}ms); rescheduling scrobble check")
                 session.durationKnown = true
                 session.scrobbleJob?.cancel()
                 scheduleScrobbleCheck(session, key, artist, title, album, durationMs)
             }
             return
         }
-
-        debugLog.log("Track detected: \"$title\" — $artist (${session.controller.packageName}), duration=${if (durationMs > 0L) "${durationMs}ms" else "unknown"}")
 
         session.trackKey = key
         session.accumulatedMs = 0L
@@ -276,7 +260,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
             val nearStart = position < 5_000L
             val wasWellIntoIt = session.lastPositionMs > 20_000L
             if (jumpedBack && nearStart && wasWellIntoIt) {
-                debugLog.log("Repeat detected for \"${session.trackKey}\" (was at ${session.lastPositionMs / 1000}s, now ${position / 1000}s) — re-arming scrobble")
                 session.scrobbleJob?.cancel()
                 session.accumulatedMs = 0L
                 session.scrobbledForKey = ""
@@ -383,35 +366,24 @@ class MediaScrobbleListenerService : NotificationListenerService() {
         watched.values.any { it.trackKey == key && it.playingSinceElapsed != null }
 
     private fun scheduleScrobbleCheck(session: WatchedSession, key: String, artist: String, title: String, album: String?, durationMs: Long) {
-        if (!enabled || !isSelectedForScrobbling(session)) {
-            debugLog.log("Scrobbling not selected for ${session.controller.packageName} — skipping \"$title\"")
-            return
-        }
+        if (!enabled || !isSelectedForScrobbling(session)) return
 
         val hasKnownDuration = durationMs > 0L
-        if (hasKnownDuration && durationMs <= 30_000L) {
-            debugLog.log("\"$title\" is ${durationMs}ms (<=30s) — track too short to scrobble")
-            return
-        }
+        if (hasKnownDuration && durationMs <= 30_000L) return
         val thresholdMs = if (hasKnownDuration) {
             minOf((durationMs * scrobblePercent) / 100, 4 * 60_000L)
         } else {
             4 * 60_000L
         }
-        debugLog.log("Scrobble threshold for \"$title\": ${thresholdMs / 1000}s of playback" + if (!hasKnownDuration) " (unknown-duration fallback)" else "")
         session.scrobbleJob = serviceScope.launch {
             while (true) {
                 delay(3_000)
                 if (!enabled || !isSelectedForScrobbling(session)) return@launch
-                if (session.trackKey != key) {
-                    debugLog.log("\"$title\" stopped before reaching ${thresholdMs / 1000}s threshold")
-                    return@launch
-                }
+                if (session.trackKey != key) return@launch
                 val playedMs = session.accumulatedMs + (session.playingSinceElapsed?.let { SystemClock.elapsedRealtime() - it } ?: 0L)
                 if (playedMs >= thresholdMs) {
                     if (session.scrobbledForKey != key) {
                         session.scrobbledForKey = key
-                        debugLog.log("Threshold reached for \"$title\" — submitting scrobble...")
                         runCatching {
                             scrobbleRepository.scrobble(
                                 artist = artist,
@@ -423,13 +395,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                             )
                         }
                             .onSuccess { result ->
-                                debugLog.log(
-                                    when (result) {
-                                        ScrobbleRepository.Result.Success -> "Scrobble SUCCEEDED for \"$title\""
-                                        ScrobbleRepository.Result.NoSessionKey -> "Scrobble FAILED for \"$title\": no session key"
-                                        is ScrobbleRepository.Result.Failed -> "Scrobble FAILED for \"$title\": ${result.message}"
-                                    }
-                                )
                                 if (result == ScrobbleRepository.Result.Success && session.trackKey == key &&
                                     session.playingSinceElapsed != null && isSelectedForScrobbling(session)
                                 ) {
@@ -437,7 +402,6 @@ class MediaScrobbleListenerService : NotificationListenerService() {
                                 }
                             }
                             .onFailure {
-                                debugLog.log("Scrobble THREW for \"$title\": ${it.message}")
                                 Log.w(TAG, "scrobble failed", it)
                             }
                     }
