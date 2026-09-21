@@ -79,6 +79,8 @@ import com.darkxvenom.airbeats.constants.DiscordTokenKey
 import com.darkxvenom.airbeats.constants.DiscordUseDetailsKey
 import com.darkxvenom.airbeats.constants.DynamicIslandKey
 import com.darkxvenom.airbeats.constants.EnableDiscordRPCKey
+import com.darkxvenom.airbeats.constants.AudioBoostEnabledKey
+import com.darkxvenom.airbeats.constants.AudioBoostPercentKey
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
 import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
 import com.darkxvenom.airbeats.constants.EightDAudioEnabledKey
@@ -362,6 +364,9 @@ class MusicService :
     val spatialAudioEnabled = MutableStateFlow(false)
     val eightDAudioEnabled = MutableStateFlow(false)
     val eightDAudioLevel = MutableStateFlow(8)
+    val audioBoostEnabled = MutableStateFlow(false)
+    val audioBoostPercent = MutableStateFlow(100)
+    val visualizerManager by lazy { AudioVisualizerManager(scope) }
     val isTrackDolbyAtmos = MutableStateFlow(false)
     val automixEnabled = MutableStateFlow(false)
     val automixPerformanceMode = MutableStateFlow(AutomixPerformanceMode.BALANCED)
@@ -559,6 +564,22 @@ class MusicService :
             .collectLatest(scope) { level ->
                 eightDAudioLevel.value = level
                 eightDAudioProcessor.level = level
+            }
+
+        dataStore.data
+            .map { it[AudioBoostEnabledKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                audioBoostEnabled.value = enabled
+                setupLoudnessEnhancer()
+            }
+
+        dataStore.data
+            .map { it[AudioBoostPercentKey] ?: 100 }
+            .distinctUntilChanged()
+            .collectLatest(scope) { percent ->
+                audioBoostPercent.value = percent
+                setupLoudnessEnhancer()
             }
 
         dataStore.data
@@ -1456,34 +1477,35 @@ class MusicService :
                     dataStore.data.map { it[AudioNormalizationKey] ?: true }.first()
                 }
 
+                var normGain = 0
                 if (normalizeAudio && currentMediaId != null) {
                     val format = withContext(Dispatchers.IO) {
                         database.format(currentMediaId).first()
                     }
-
                     val loudnessDb = format?.loudnessDb
-
-                    withContext(Dispatchers.Main) {
-                        if (loudnessDb != null) {
-                            val targetGain = (-loudnessDb * 100).toInt()
-                            val clampedGain = targetGain.coerceIn(MIN_GAIN_MB, MAX_GAIN_MB)
-                            try {
-                                loudnessEnhancer?.setTargetGain(clampedGain)
-                                loudnessEnhancer?.enabled = true
-                                Log.d(TAG, "LoudnessEnhancer gain applied: $clampedGain mB")
-                            } catch (e: Exception) {
-                                reportException(e)
-                                releaseLoudnessEnhancer()
-                            }
-                        } else {
-                            loudnessEnhancer?.enabled = false
-                            Log.w(TAG, "setupLoudnessEnhancer: loudnessDb is null, enhancer disabled")
-                        }
+                    if (loudnessDb != null) {
+                        normGain = (-loudnessDb * 100).toInt().coerceIn(MIN_GAIN_MB, MAX_GAIN_MB)
                     }
-                } else {
-                    withContext(Dispatchers.Main) {
+                }
+
+                val isBoost = audioBoostEnabled.value
+                val boostFraction = ((audioBoostPercent.value - 100) / 100f).coerceIn(0f, 1f)
+                val boostGainMb = if (isBoost) (boostFraction * 1800).toInt() else 0
+                val totalGain = (normGain + boostGainMb).coerceIn(MIN_GAIN_MB, MAX_GAIN_MB + 1800)
+                val shouldEnable = isBoost || (normalizeAudio && normGain != 0)
+
+                withContext(Dispatchers.Main) {
+                    if (shouldEnable) {
+                        try {
+                            loudnessEnhancer?.setTargetGain(totalGain)
+                            loudnessEnhancer?.enabled = true
+                            Log.d(TAG, "LoudnessEnhancer gain applied: $totalGain mB (norm=$normGain, boost=$boostGainMb)")
+                        } catch (e: Exception) {
+                            reportException(e)
+                            releaseLoudnessEnhancer()
+                        }
+                    } else {
                         loudnessEnhancer?.enabled = false
-                        Log.d(TAG, "setupLoudnessEnhancer: normalization disabled or mediaId unavailable")
                     }
                 }
             } catch (e: Exception) {
@@ -1634,6 +1656,7 @@ class MusicService :
         isAudioEffectSessionOpened = true
         setupLoudnessEnhancer()
         setupEqualizer()
+        ensureVisualizer()
         sendBroadcast(
             Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION).apply {
                 putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
@@ -1647,6 +1670,7 @@ class MusicService :
         if (!isAudioEffectSessionOpened) return
         isAudioEffectSessionOpened = false
         releaseLoudnessEnhancer()
+        runCatching { visualizerManager.stop() }
         sendBroadcast(
             Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION).apply {
                 putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
@@ -1732,6 +1756,40 @@ class MusicService :
         eightDAudioProcessor.enabled = eightDAudioEnabled.value
     }
 
+    fun setAudioBoostEnabled(enabled: Boolean) {
+        audioBoostEnabled.value = enabled
+        setupLoudnessEnhancer()
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[AudioBoostEnabledKey] = enabled
+            }
+        }
+    }
+
+    fun setAudioBoostPercent(percent: Int) {
+        val clamped = percent.coerceIn(100, 200)
+        audioBoostPercent.value = clamped
+        setupLoudnessEnhancer()
+        scope.launch {
+            dataStore.edit { settings ->
+                settings[AudioBoostPercentKey] = clamped
+            }
+        }
+    }
+
+    fun resetAudioFx() {
+        setAudioBoostPercent(100)
+        setAudioBoostEnabled(false)
+        resetEqualizer()
+    }
+
+    fun ensureVisualizer() {
+        val sessionId = player.audioSessionId
+        if (sessionId > 0) {
+            visualizerManager.start(sessionId) { player.isPlaying }
+        }
+    }
+
     override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
         var isDolby = false
         for (group in tracks.groups) {
@@ -1757,6 +1815,7 @@ class MusicService :
         setupLoudnessEnhancer()
         setupEqualizer()
         updateSpatialAudio()
+        ensureVisualizer()
 
         discordUpdateJob?.cancel()
 
@@ -1865,6 +1924,7 @@ class MusicService :
         if (playWhenReady) {
             setupLoudnessEnhancer()
             setupEqualizer()
+            ensureVisualizer()
             scope.launch {
                 val enabled = dataStore.get(DynamicIslandKey, false)
                 if (enabled && Settings.canDrawOverlays(this@MusicService)) {
@@ -2615,6 +2675,7 @@ class MusicService :
         runCatching { trackAnalyzer.release() }
         releaseLoudnessEnhancer()
         releaseEqualizer()
+        runCatching { visualizerManager.stop() }
         mediaController?.release()
         mediaController = null
         mediaSession.release()

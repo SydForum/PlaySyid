@@ -308,6 +308,7 @@ fun PlayerMenu(
     var isMuted by remember { mutableStateOf(false) }
     var previousVolume by remember { mutableFloatStateOf(playerVolume.value) }
     var showEqualizerSheet by rememberSaveable { mutableStateOf(false) }
+    var showAudioFxSheet by rememberSaveable { mutableStateOf(false) }
     var showDolbyAtmosSheet by rememberSaveable { mutableStateOf(false) }
     var showEightDAudioSheet by rememberSaveable { mutableStateOf(false) }
     var showListenTogetherSheet by rememberSaveable { mutableStateOf(false) }
@@ -661,6 +662,49 @@ fun PlayerMenu(
                     }
 
                     item {
+                        val audioBoostEnabled by playerConnection.service.audioBoostEnabled.collectAsState()
+                        val audioBoostPercent by playerConnection.service.audioBoostPercent.collectAsState()
+                        androidx.compose.material3.ListItem(
+                            headlineContent = { Text("Audio FX") },
+                            supportingContent = {
+                                Text(
+                                    text = if (audioBoostEnabled) "${audioBoostPercent}% Volume Boost Active" else stringResource(R.string.disabled),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (audioBoostEnabled) Color(0xFFFF2A6D) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    painter = painterResource(R.drawable.volume_up),
+                                    contentDescription = null,
+                                    tint = if (audioBoostEnabled) Color(0xFFFF2A6D) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = audioBoostEnabled,
+                                    onCheckedChange = { enabled ->
+                                        if (enabled) {
+                                            playerConnection.service.setAudioBoostPercent(200)
+                                            playerConnection.service.setAudioBoostEnabled(true)
+                                        } else {
+                                            playerConnection.service.setAudioBoostEnabled(false)
+                                        }
+                                    },
+                                    colors = androidx.compose.material3.SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = Color(0xFFFF2A6D)
+                                    )
+                                )
+                            },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable {
+                                showAudioFxSheet = true
+                            }
+                        )
+                    }
+
+                    item {
                         val dolbyAtmosEnabled by playerConnection?.service?.dolbyAtmosEnabled?.collectAsState() ?: remember { mutableStateOf(true) }
                         androidx.compose.material3.ListItem(
                             headlineContent = { Text(stringResource(R.string.dolby_atmos)) },
@@ -806,6 +850,14 @@ fun PlayerMenu(
             InAppEqualizerSheet(
                 onDismiss = {
                     showEqualizerSheet = false
+                }
+            )
+        }
+
+        if (showAudioFxSheet) {
+            InAppAudioFxSheet(
+                onDismiss = {
+                    showAudioFxSheet = false
                 }
             )
         }
