@@ -205,7 +205,7 @@ fun PlayfulHomeScreen(
                             val totalHours by (statsViewModel?.totalListenHours ?: kotlinx.coroutines.flow.flowOf(0.0)).collectAsState(initial = 0.0)
                             val coroutineScope = rememberCoroutineScope()
 
-                            val greatVibesFontFamily = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(com.darkxvenom.airbeats.R.font.great_vibes))
+                            val greetingFontFamily = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(com.darkxvenom.airbeats.R.font.linotte))
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically
@@ -214,14 +214,14 @@ fun PlayfulHomeScreen(
                                     text = stringResource(R.string.greeting_prefix),
                                     fontSize = 36.sp,
                                     fontWeight = FontWeight.Bold,
-                                    fontFamily = greatVibesFontFamily,
+                                    fontFamily = greetingFontFamily,
                                     color = Color.Black
                                 )
                                 Text(
                                     text = displayName,
                                     fontSize = 36.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = greatVibesFontFamily,
+                                    fontFamily = greetingFontFamily,
                                     color = Color.Black
                                 )
 
