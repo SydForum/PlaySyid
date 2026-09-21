@@ -1,10 +1,15 @@
 package com.darkxvenom.airbeats.ui.menu
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -12,6 +17,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,12 +31,18 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,8 +50,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,14 +71,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.LiquidGlassKey
-import com.darkxvenom.airbeats.LocalPlayerConnection
-import com.darkxvenom.airbeats.playback.AudioVisualizerStats
+import com.darkxvenom.airbeats.playback.DjPreset
 import com.darkxvenom.airbeats.ui.component.LocalBackdrop
 import com.darkxvenom.airbeats.ui.component.drawBackdropCustomShape
 import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.utils.rememberPreference
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -74,12 +87,32 @@ import kotlin.math.sin
 @Composable
 fun InAppAudioFxSheet(onDismiss: () -> Unit) {
     val playerConnection = LocalPlayerConnection.current ?: return
-    val boostPercent by playerConnection.service.audioBoostPercent.collectAsState()
-    val boostEnabled by playerConnection.service.audioBoostEnabled.collectAsState()
-    val stats by playerConnection.service.visualizerManager.stats.collectAsState()
+    val service = playerConnection.service
+
+    val boostPercent by service.audioBoostPercent.collectAsState()
+    val boostEnabled by service.audioBoostEnabled.collectAsState()
+    val stats by service.visualizerManager.stats.collectAsState()
+
+    val echoEnabled by service.echoEnabled.collectAsState()
+    val echoDelayMs by service.echoDelayMs.collectAsState()
+    val echoFeedback by service.echoFeedback.collectAsState()
+    val echoWetMix by service.echoWetMix.collectAsState()
+    val echoPingPong by service.echoPingPong.collectAsState()
+
+    val djFilterSweep by service.djFilterSweep.collectAsState()
+    val djFlangerEnabled by service.djFlangerEnabled.collectAsState()
+    val djFlangerRate by service.djFlangerRate.collectAsState()
+    val djFlangerDepth by service.djFlangerDepth.collectAsState()
+    val djSaturation by service.djSaturation.collectAsState()
+
+    val djTempoSpeed by service.djTempoSpeed.collectAsState()
+    val djPitch by service.djPitch.collectAsState()
+    val djTurntableLinked by service.djTurntableLinked.collectAsState()
+
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Master, 1: Echo, 2: Mixer, 3: Turntable
 
     LaunchedEffect(Unit) {
-        playerConnection.service.ensureVisualizer()
+        service.ensureVisualizer()
     }
 
     val (enableLiquidGlass) = rememberPreference(LiquidGlassKey, false)
@@ -96,9 +129,9 @@ fun InAppAudioFxSheet(onDismiss: () -> Unit) {
         containerColor = if (enableLiquidGlass && !isFrosted && backdrop != null) {
             Color.Transparent
         } else if (isFrosted) {
-            if (isDark) Color(0xFF131417).copy(alpha = 0.94f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+            if (isDark) Color(0xFF111216).copy(alpha = 0.95f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
         } else {
-            Color(0xFF131417)
+            Color(0xFF111216)
         },
         shape = sheetShape,
         modifier = Modifier.then(
@@ -131,27 +164,28 @@ fun InAppAudioFxSheet(onDismiss: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // Header Row: Audio FX + PROFESSIONAL EQUALIZER and Reset Pill
+            // Header Row: Audio FX + STUDIO DJ SUITE and Reset Pill
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 22.dp),
+                    .padding(top = 4.dp, bottom = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     Text(
-                        text = "Audio FX",
+                        text = "Audio FX & DJ Studio",
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 25.sp,
+                            fontSize = 23.sp,
                             color = Color.White
                         )
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "PROFESSIONAL EQUALIZER",
+                        text = "PROFESSIONAL SOUND SCULPTING",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
@@ -167,79 +201,963 @@ fun InAppAudioFxSheet(onDismiss: () -> Unit) {
                         .clip(RoundedCornerShape(50))
                         .background(Color(0xFF28131C))
                         .clickable {
-                            playerConnection.service.resetAudioFx()
+                            service.resetAudioFx()
                         }
-                        .padding(horizontal = 18.dp, vertical = 7.dp),
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Reset",
+                        text = "Reset All",
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = Color(0xFFFF2A6D)
                         )
                     )
                 }
             }
 
-            // Three Reactive Circular Visualizer Dials
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AudioVisualizerDial(
-                    title = "BASS",
-                    dbValue = stats.bassDb,
-                    energy = stats.bass,
-                    isPeak = stats.isBassPeak,
-                    accentDefaultColor = Color(0xFFFF2A6D),
-                    modifier = Modifier.weight(1f)
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                AudioVisualizerDial(
-                    title = "MID",
-                    dbValue = stats.midDb,
-                    energy = stats.mid,
-                    isPeak = false,
-                    accentDefaultColor = Color(0xFFFFFFFF),
-                    modifier = Modifier.weight(1f)
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                AudioVisualizerDial(
-                    title = "TREBLE",
-                    dbValue = stats.trebleDb,
-                    energy = stats.treble,
-                    isPeak = false,
-                    accentDefaultColor = Color(0xFF00E5FF),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Master Boost Card
-            MasterBoostCard(
-                boostPercent = boostPercent,
-                boostEnabled = boostEnabled,
-                onBoostPercentChange = { percent ->
-                    playerConnection.service.setAudioBoostPercent(percent)
-                    if (!boostEnabled && percent > 100) {
-                        playerConnection.service.setAudioBoostEnabled(true)
-                    }
-                }
+            // Studio Navigation Tabs
+            StudioTabs(
+                selectedTab = selectedTab,
+                onTabSelect = { selectedTab = it },
+                echoActive = echoEnabled,
+                filterActive = abs(djFilterSweep) > 0.05f || djFlangerEnabled,
+                pitchActive = djTempoSpeed != 1.0f || djPitch != 1.0f
             )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            when (selectedTab) {
+                0 -> {
+                    // TAB 0: MASTER FX
+                    // Three Reactive Circular Visualizer Dials
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 20.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AudioVisualizerDial(
+                            title = "BASS",
+                            dbValue = stats.bassDb,
+                            energy = stats.bass,
+                            isPeak = stats.isBassPeak,
+                            accentDefaultColor = Color(0xFFFF2A6D),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        AudioVisualizerDial(
+                            title = "MID",
+                            dbValue = stats.midDb,
+                            energy = stats.mid,
+                            isPeak = false,
+                            accentDefaultColor = Color(0xFFFFFFFF),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        AudioVisualizerDial(
+                            title = "TREBLE",
+                            dbValue = stats.trebleDb,
+                            energy = stats.treble,
+                            isPeak = false,
+                            accentDefaultColor = Color(0xFF00E5FF),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    // Master Boost Card
+                    MasterBoostCard(
+                        boostPercent = boostPercent,
+                        boostEnabled = boostEnabled,
+                        onBoostPercentChange = { percent ->
+                            service.setAudioBoostPercent(percent)
+                            if (!boostEnabled && percent > 100) {
+                                service.setAudioBoostEnabled(true)
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // DJ Presets Section
+                    DjPresetsRow(
+                        onSelectPreset = { preset ->
+                            service.applyDjPreset(preset)
+                        }
+                    )
+                }
+
+                1 -> {
+                    // TAB 1: ECHO & DELAY
+                    EchoDelaySection(
+                        enabled = echoEnabled,
+                        delayMs = echoDelayMs,
+                        feedback = echoFeedback,
+                        wetMix = echoWetMix,
+                        pingPong = echoPingPong,
+                        onToggle = { service.setEchoEnabled(it) },
+                        onDelayMsChange = { service.setEchoDelayMs(it) },
+                        onFeedbackChange = { service.setEchoFeedback(it) },
+                        onWetMixChange = { service.setEchoWetMix(it) },
+                        onPingPongChange = { service.setEchoPingPong(it) }
+                    )
+                }
+
+                2 -> {
+                    // TAB 2: DJ MIXER & FILTERS
+                    DjMixerSection(
+                        filterSweep = djFilterSweep,
+                        flangerEnabled = djFlangerEnabled,
+                        flangerRate = djFlangerRate,
+                        flangerDepth = djFlangerDepth,
+                        saturation = djSaturation,
+                        onFilterSweepChange = { service.setDjFilterSweep(it) },
+                        onFlangerToggle = { service.setDjFlangerEnabled(it) },
+                        onFlangerRateChange = { service.setDjFlangerRate(it) },
+                        onFlangerDepthChange = { service.setDjFlangerDepth(it) },
+                        onSaturationChange = { service.setDjSaturation(it) }
+                    )
+                }
+
+                3 -> {
+                    // TAB 3: TURNTABLE & TEMPO
+                    DjTurntableSection(
+                        speed = djTempoSpeed,
+                        pitch = djPitch,
+                        linked = djTurntableLinked,
+                        onSpeedChange = { s ->
+                            if (djTurntableLinked) {
+                                service.setDjTempoAndPitch(s, s)
+                            } else {
+                                service.setDjTempoAndPitch(s, djPitch)
+                            }
+                        },
+                        onPitchChange = { p ->
+                            if (djTurntableLinked) {
+                                service.setDjTempoAndPitch(p, p)
+                            } else {
+                                service.setDjTempoAndPitch(djTempoSpeed, p)
+                            }
+                        },
+                        onLinkedToggle = { service.setDjTurntableLinked(it) },
+                        onReset = { service.setDjTempoAndPitch(1.0f, 1.0f) }
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * Circular visualizer dial matching screenshot with dynamic White -> Green -> Glowing Red progression.
+ * Studio Tabs bar with active glow indicators.
+ */
+@Composable
+private fun StudioTabs(
+    selectedTab: Int,
+    onTabSelect: (Int) -> Unit,
+    echoActive: Boolean,
+    filterActive: Boolean,
+    pitchActive: Boolean
+) {
+    val tabs = listOf(
+        "🎛️ Master" to false,
+        "🔁 Echo" to echoActive,
+        "🎚️ Mixer" to filterActive,
+        "💿 Turntable" to pitchActive
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF17191F))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        tabs.forEachIndexed { index, (title, isEffActive) ->
+            val isSelected = selectedTab == index
+            val bgColor by animateColorAsState(
+                targetValue = if (isSelected) Color(0xFF28131C) else Color.Transparent,
+                label = "tabBg"
+            )
+            val textColor by animateColorAsState(
+                targetValue = if (isSelected) Color(0xFFFF2A6D) else Color(0xFF8B8F9D),
+                label = "tabText"
+            )
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(bgColor)
+                    .clickable { onTabSelect(index) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 12.sp,
+                            color = textColor
+                        )
+                    )
+                    if (isEffActive && !isSelected) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF00E5FF))
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 1-Tap DJ Presets list for instant track transformation.
+ */
+@Composable
+private fun DjPresetsRow(onSelectPreset: (DjPreset) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFF17191E))
+            .border(BorderStroke(1.dp, Color(0xFF22252C)), RoundedCornerShape(22.dp))
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "INSTANT DJ PRESETS",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.2.sp,
+                    color = Color(0xFF8B8F9D)
+                )
+            )
+            Text(
+                text = "1-Tap Transform",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.sp,
+                    color = Color(0xFFFF2A6D)
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            DjPreset.entries.forEach { preset ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF21232B))
+                        .border(BorderStroke(1.dp, Color(0xFF2E323D)), RoundedCornerShape(14.dp))
+                        .clickable { onSelectPreset(preset) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = preset.emoji, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = preset.title,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = preset.subtitle,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 10.sp,
+                                color = Color(0xFF7A7E8D)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Echo & Delay Studio Panel.
+ */
+@Composable
+private fun EchoDelaySection(
+    enabled: Boolean,
+    delayMs: Int,
+    feedback: Float,
+    wetMix: Float,
+    pingPong: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onDelayMsChange: (Int) -> Unit,
+    onFeedbackChange: (Float) -> Unit,
+    onWetMixChange: (Float) -> Unit,
+    onPingPongChange: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFF17191E))
+            .border(BorderStroke(1.dp, if (enabled) Color(0xFFFF2A6D).copy(alpha = 0.4f) else Color(0xFF22252C)), RoundedCornerShape(22.dp))
+            .padding(18.dp)
+    ) {
+        // Echo Header with Master Toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Stereo Echo & Delay",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                )
+                Text(
+                    text = if (enabled) "Spatial repeating reflections active" else "Effect bypassed",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        color = if (enabled) Color(0xFFFF2A6D) else Color(0xFF6E7280)
+                    )
+                )
+            }
+
+            Switch(
+                checked = enabled,
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Color(0xFFFF2A6D),
+                    uncheckedTrackColor = Color(0xFF282A32)
+                )
+            )
+        }
+
+        AnimatedVisibility(
+            visible = enabled,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(modifier = Modifier.padding(top = 16.dp)) {
+                // Ping Pong Switch
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1F222A))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "3D Ping-Pong Bounce",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        )
+                        Text(
+                            text = "Alternates echoes Left ⇄ Right",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                color = Color(0xFF7A7E8D)
+                            )
+                        )
+                    }
+
+                    Switch(
+                        checked = pingPong,
+                        onCheckedChange = onPingPongChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFF00E5FF),
+                            uncheckedTrackColor = Color(0xFF2E313C)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Delay Time Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Delay Time",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFD0D3DC)
+                        )
+                    )
+                    Text(
+                        text = "${delayMs}ms",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFF2A6D)
+                        )
+                    )
+                }
+                Slider(
+                    value = delayMs.toFloat(),
+                    onValueChange = { onDelayMsChange(it.toInt()) },
+                    valueRange = 40f..800f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFFFF2A6D),
+                        activeTrackColor = Color(0xFFFF2A6D),
+                        inactiveTrackColor = Color(0xFF282A32)
+                    )
+                )
+
+                // Feedback Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Feedback (Repeats)",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFD0D3DC)
+                        )
+                    )
+                    Text(
+                        text = "${(feedback * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00E5FF)
+                        )
+                    )
+                }
+                Slider(
+                    value = feedback,
+                    onValueChange = onFeedbackChange,
+                    valueRange = 0.05f..0.80f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF00E5FF),
+                        activeTrackColor = Color(0xFF00E5FF),
+                        inactiveTrackColor = Color(0xFF282A32)
+                    )
+                )
+
+                // Wet Mix Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Wet / Dry Mix",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFD0D3DC)
+                        )
+                    )
+                    Text(
+                        text = "${(wetMix * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFB703)
+                        )
+                    )
+                }
+                Slider(
+                    value = wetMix,
+                    onValueChange = onWetMixChange,
+                    valueRange = 0.10f..1.0f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFFFFB703),
+                        activeTrackColor = Color(0xFFFFB703),
+                        inactiveTrackColor = Color(0xFF282A32)
+                    )
+                )
+
+                // Quick Delay Presets
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "Slapback (90ms)" to (90 to 0.20f),
+                        "Dub (280ms)" to (280 to 0.45f),
+                        "Space (480ms)" to (480 to 0.65f)
+                    ).forEach { (name, pair) ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF21232B))
+                                .clickable {
+                                    onDelayMsChange(pair.first)
+                                    onFeedbackChange(pair.second)
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp,
+                                    color = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * DJ Mixer & Filters (Club Resonant Filter Sweep, Flanger, Saturation).
+ */
+@Composable
+private fun DjMixerSection(
+    filterSweep: Float,
+    flangerEnabled: Boolean,
+    flangerRate: Float,
+    flangerDepth: Float,
+    saturation: Float,
+    onFilterSweepChange: (Float) -> Unit,
+    onFlangerToggle: (Boolean) -> Unit,
+    onFlangerRateChange: (Float) -> Unit,
+    onFlangerDepthChange: (Float) -> Unit,
+    onSaturationChange: (Float) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFF17191E))
+            .border(BorderStroke(1.dp, Color(0xFF22252C)), RoundedCornerShape(22.dp))
+            .padding(18.dp)
+    ) {
+        // BIPOLAR DJ FILTER SWEEP
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "DJ Filter Sweep",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                )
+                Text(
+                    text = when {
+                        filterSweep < -0.05f -> "Low-Pass Club Muffle (${(filterSweep * 100).toInt()}%)"
+                        filterSweep > 0.05f -> "High-Pass Bass Cut Drop (+${(filterSweep * 100).toInt()}%)"
+                        else -> "Flat / Center (Bypassed)"
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        color = when {
+                            filterSweep < -0.05f -> Color(0xFF00E5FF)
+                            filterSweep > 0.05f -> Color(0xFFFF2A6D)
+                            else -> Color(0xFF6E7280)
+                        }
+                    )
+                )
+            }
+
+            // Center Snap Button
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFF21242C))
+                    .clickable { onFilterSweepChange(0.0f) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "Snap Center",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD0D3DC)
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Visual LPF <— FLAT —> HPF bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = "◀ LOW-PASS (Muffle)", fontSize = 10.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+            Text(text = "FLAT", fontSize = 10.sp, color = Color(0xFF8B8F9D), fontWeight = FontWeight.Bold)
+            Text(text = "HIGH-PASS (Cut) ▶", fontSize = 10.sp, color = Color(0xFFFF2A6D), fontWeight = FontWeight.Bold)
+        }
+
+        Slider(
+            value = filterSweep,
+            onValueChange = onFilterSweepChange,
+            valueRange = -1.0f..1.0f,
+            colors = SliderDefaults.colors(
+                thumbColor = if (filterSweep < 0f) Color(0xFF00E5FF) else Color(0xFFFF2A6D),
+                activeTrackColor = Color(0xFFFF2A6D),
+                inactiveTrackColor = Color(0xFF00E5FF)
+            )
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // FLANGER SWEEP
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Jet Flanger Swoosh",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                )
+                Text(
+                    text = if (flangerEnabled) "Dynamic jet-plane phase sweep" else "Disabled",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        color = if (flangerEnabled) Color(0xFF9D4EDD) else Color(0xFF6E7280)
+                    )
+                )
+            }
+
+            Switch(
+                checked = flangerEnabled,
+                onCheckedChange = onFlangerToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Color(0xFF9D4EDD),
+                    uncheckedTrackColor = Color(0xFF282A32)
+                )
+            )
+        }
+
+        AnimatedVisibility(visible = flangerEnabled) {
+            Column(modifier = Modifier.padding(top = 10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "LFO Rate: ${String.format("%.1f", flangerRate)} Hz", fontSize = 11.sp, color = Color(0xFFD0D3DC))
+                    Text(text = "Depth: ${(flangerDepth * 100).toInt()}%", fontSize = 11.sp, color = Color(0xFF9D4EDD))
+                }
+                Slider(
+                    value = flangerDepth,
+                    onValueChange = onFlangerDepthChange,
+                    valueRange = 0.1f..1.0f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF9D4EDD),
+                        activeTrackColor = Color(0xFF9D4EDD),
+                        inactiveTrackColor = Color(0xFF282A32)
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ANALOG SATURATION
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Warm Tape Saturation",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                )
+                Text(
+                    text = "Harmonic punch & soft-limiting drive",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        color = Color(0xFF6E7280)
+                    )
+                )
+            }
+            Text(
+                text = "${(saturation * 100).toInt()}%",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFB703)
+                )
+            )
+        }
+
+        Slider(
+            value = saturation,
+            onValueChange = onSaturationChange,
+            valueRange = 0.0f..1.0f,
+            colors = SliderDefaults.colors(
+                thumbColor = Color(0xFFFFB703),
+                activeTrackColor = Color(0xFFFFB703),
+                inactiveTrackColor = Color(0xFF282A32)
+            )
+        )
+    }
+}
+
+/**
+ * DJ Turntable & Pitch/Tempo controls.
+ */
+@Composable
+private fun DjTurntableSection(
+    speed: Float,
+    pitch: Float,
+    linked: Boolean,
+    onSpeedChange: (Float) -> Unit,
+    onPitchChange: (Float) -> Unit,
+    onLinkedToggle: (Boolean) -> Unit,
+    onReset: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFF17191E))
+            .border(BorderStroke(1.dp, Color(0xFF22252C)), RoundedCornerShape(22.dp))
+            .padding(18.dp)
+    ) {
+        // Turntable Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Turntable & Tempo",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                )
+                Text(
+                    text = if (linked) "Vinyl Mode: Pitch linked with Speed" else "Independent Pitch & Tempo",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        color = if (linked) Color(0xFFFF2A6D) else Color(0xFF6E7280)
+                    )
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFF21242C))
+                    .clickable { onReset() }
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "1.0x Normal",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD0D3DC)
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Vinyl Mode Switch
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF1F222A))
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Vinyl Turntable Mode",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                )
+                Text(
+                    text = "Speeding up increases pitch (Nightcore / Slowed)",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        color = Color(0xFF7A7E8D)
+                    )
+                )
+            }
+
+            Switch(
+                checked = linked,
+                onCheckedChange = onLinkedToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Color(0xFFFF2A6D),
+                    uncheckedTrackColor = Color(0xFF2E313C)
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Speed Slider
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Playback Speed (BPM)",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFD0D3DC)
+                )
+            )
+            Text(
+                text = "${String.format("%.2f", speed)}x",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFF2A6D)
+                )
+            )
+        }
+        Slider(
+            value = speed,
+            onValueChange = onSpeedChange,
+            valueRange = 0.50f..2.00f,
+            colors = SliderDefaults.colors(
+                thumbColor = Color(0xFFFF2A6D),
+                activeTrackColor = Color(0xFFFF2A6D),
+                inactiveTrackColor = Color(0xFF282A32)
+            )
+        )
+
+        // Pitch Slider (if not linked)
+        AnimatedVisibility(visible = !linked) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Pitch Shift (Key)",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFD0D3DC)
+                        )
+                    )
+                    Text(
+                        text = "${String.format("%.2f", pitch)}x",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00E5FF)
+                        )
+                    )
+                }
+                Slider(
+                    value = pitch,
+                    onValueChange = onPitchChange,
+                    valueRange = 0.50f..2.00f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF00E5FF),
+                        activeTrackColor = Color(0xFF00E5FF),
+                        inactiveTrackColor = Color(0xFF282A32)
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Quick Tempo Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                "0.85x Slowed" to 0.85f,
+                "1.00x Pure" to 1.00f,
+                "1.25x Nightcore" to 1.25f,
+                "1.50x Fast" to 1.50f
+            ).forEach { (label, spd) ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (speed == spd) Color(0xFF28131C) else Color(0xFF21232B))
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                if (speed == spd) Color(0xFFFF2A6D) else Color.Transparent
+                            ),
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable { onSpeedChange(spd) }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = if (speed == spd) Color(0xFFFF2A6D) else Color.White
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Circular visualizer dial with dynamic White -> Green -> Glowing Red progression.
  */
 @Composable
 private fun AudioVisualizerDial(
@@ -250,10 +1168,8 @@ private fun AudioVisualizerDial(
     accentDefaultColor: Color,
     modifier: Modifier = Modifier
 ) {
-    // Dynamic color transition based on live playing energy
-    // White (< 0.35) -> Green (0.35 .. 0.70) -> Red (0.70+)
     val targetDynamicColor = when {
-        isPeak || energy > 0.70f -> Color(0xFFFF1744) // Neon Peak Red
+        isPeak || energy > 0.70f -> Color(0xFFFF1744)
         energy > 0.35f -> {
             val t = ((energy - 0.35f) / 0.35f).coerceIn(0f, 1f)
             lerp(Color(0xFF00E676), Color(0xFFFF1744), t)
@@ -277,12 +1193,6 @@ private fun AudioVisualizerDial(
         label = "dialSweep"
     )
 
-    val animatedScale by animateFloatAsState(
-        targetValue = if (isPeak) 1.04f else 1.0f,
-        animationSpec = tween(100),
-        label = "dialPulse"
-    )
-
     Box(
         modifier = modifier
             .height(116.dp)
@@ -297,20 +1207,17 @@ private fun AudioVisualizerDial(
             ),
         contentAlignment = Alignment.Center
     ) {
-        // Canvas for circular tracks and indicator pill
         Canvas(modifier = Modifier.size(86.dp)) {
             val strokeWidth = 5.dp.toPx()
             val radius = (size.minDimension - strokeWidth) / 2
             val center = Offset(size.width / 2, size.height / 2)
 
-            // Inner dark circle
             drawCircle(
                 color = Color(0xFF141519),
                 radius = radius - strokeWidth / 2,
                 center = center
             )
 
-            // Outer inactive track ring
             drawCircle(
                 color = Color(0xFF22252C),
                 radius = radius,
@@ -318,7 +1225,6 @@ private fun AudioVisualizerDial(
                 style = Stroke(width = strokeWidth)
             )
 
-            // Active reactive arc
             if (animatedSweep > 5f) {
                 drawArc(
                     color = animatedColor,
@@ -331,7 +1237,6 @@ private fun AudioVisualizerDial(
                 )
             }
 
-            // Top indicator pill/dot (as in screenshot)
             val pillAngleRad = Math.toRadians(-90.0).toFloat()
             val pillX = center.x + radius * cos(pillAngleRad)
             val pillY = center.y + radius * sin(pillAngleRad)
@@ -343,7 +1248,6 @@ private fun AudioVisualizerDial(
             )
 
             if (isPeak) {
-                // Peak glow aura
                 drawCircle(
                     color = animatedColor.copy(alpha = 0.35f),
                     radius = 8.dp.toPx(),
@@ -352,27 +1256,34 @@ private fun AudioVisualizerDial(
             }
         }
 
-        // Center content: dB Value and Title Label
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "$dbValue",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 22.sp,
+                text = title,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.4.sp,
+                    color = Color(0xFF8B8F9D)
+                )
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = if (dbValue >= 0) "+$dbValue" else "$dbValue",
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Black,
+                    fontSize = 20.sp,
                     color = Color.White
                 )
             )
-            Spacer(modifier = Modifier.height(1.dp))
             Text(
-                text = title,
+                text = "dB",
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 10.sp,
-                    letterSpacing = 1.2.sp,
-                    color = Color(0xFF6E7280)
+                    color = Color(0xFF5E6270)
                 )
             )
         }
@@ -380,7 +1291,7 @@ private fun AudioVisualizerDial(
 }
 
 /**
- * Master Boost Card with speaker badge, live percentage, segmented slider, and power labels.
+ * 200% Master Boost Card with quick preset pills and segmented bar slider.
  */
 @Composable
 private fun MasterBoostCard(
@@ -388,124 +1299,122 @@ private fun MasterBoostCard(
     boostEnabled: Boolean,
     onBoostPercentChange: (Int) -> Unit
 ) {
-    val displayPercent = if (boostEnabled) boostPercent else 100
-
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(Color(0xFF17191E))
-            .border(BorderStroke(1.dp, Color(0xFF22252C)), RoundedCornerShape(22.dp))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (boostEnabled) Color(0xFFFF2A6D).copy(alpha = 0.40f) else Color(0xFF22252C)
+                ),
+                RoundedCornerShape(24.dp)
+            )
             .padding(20.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Top row: Speaker Icon + Titles and Percentage Display
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Speaker Icon badge container
+                    Text(
+                        text = "MASTER BOOST",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.sp,
+                            letterSpacing = 1.6.sp,
+                            color = Color.White
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF28131C)),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFF2A6D))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.volume_up),
-                            contentDescription = "Master Boost",
-                            tint = Color(0xFFFF2A6D),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(14.dp))
-
-                    Column {
                         Text(
-                            text = "Master Boost",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 17.sp,
+                            text = "200% MAX",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Black,
+                                fontSize = 9.sp,
                                 color = Color.White
                             )
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "200% OUTPUT POWER",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 11.sp,
-                                letterSpacing = 1.sp,
-                                color = Color(0xFF6E7280)
-                            )
-                        )
                     }
                 }
-
-                // Right side: 200% VOLUME BOOST
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "${displayPercent}%",
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 24.sp,
-                            color = Color(0xFFFF2A6D)
-                        )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "High-fidelity hardware digital amplifier",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        color = Color(0xFF6E7280)
                     )
+                )
+            }
+
+            Text(
+                text = "${boostPercent}%",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    fontSize = 28.sp,
+                    color = if (boostEnabled) Color(0xFFFF2A6D) else Color.White
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        SegmentedBoostSlider(
+            currentPercent = boostPercent,
+            onPercentChange = onBoostPercentChange
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(100, 125, 150, 175, 200).forEach { presetPercent ->
+                val isSelected = boostPercent == presetPercent
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isSelected) Color(0xFF28131C) else Color(0xFF1E2027)
+                        )
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                if (isSelected) Color(0xFFFF2A6D) else Color.Transparent
+                            ),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .clickable { onBoostPercentChange(presetPercent) }
+                        .padding(vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = "VOLUME BOOST",
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        text = "${presetPercent}%",
+                        style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.2.sp,
-                            color = Color(0xFFFF2A6D)
+                            fontSize = 12.sp,
+                            color = if (isSelected) Color(0xFFFF2A6D) else Color(0xFF8B8F9D)
                         )
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
-
-            // Segmented interactive slider bar
-            SegmentedBoostSlider(
-                currentPercent = displayPercent,
-                onPercentChange = onBoostPercentChange
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Bottom labels: NORMAL (100%) and ULTRA BOOST (200%)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "NORMAL (100%)",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp,
-                        color = Color(0xFF6E7280)
-                    )
-                )
-                Text(
-                    text = "ULTRA BOOST (200%)",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp,
-                        color = Color(0xFF6E7280)
-                    )
-                )
             }
         }
     }
 }
 
 /**
- * Custom segmented slider bar matching the screenshot with smooth interactive drag/tap.
+ * Segmented slider bar matching design system with smooth interactive drag/tap.
  */
 @Composable
 private fun SegmentedBoostSlider(
@@ -542,7 +1451,6 @@ private fun SegmentedBoostSlider(
             val height = size.height
             val activeWidth = width * progressFraction
 
-            // Active bar fill with neon pink and subtle gradient
             if (activeWidth > 0) {
                 drawRoundRect(
                     brush = Brush.horizontalGradient(
@@ -558,12 +1466,11 @@ private fun SegmentedBoostSlider(
                 )
             }
 
-            // Segment vertical tick notches (10 segments across the track)
             val segments = 10
             for (i in 1 until segments) {
                 val segX = width * (i.toFloat() / segments)
                 drawLine(
-                    color = Color(0xFF17191E), // Match card background to create clean segment gaps
+                    color = Color(0xFF17191E),
                     start = Offset(segX, 0f),
                     end = Offset(segX, height),
                     strokeWidth = 2.dp.toPx()

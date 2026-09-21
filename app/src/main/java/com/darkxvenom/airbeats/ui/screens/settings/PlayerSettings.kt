@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -35,14 +38,19 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import kotlin.math.abs
 import androidx.navigation.NavController
 import com.darkxvenom.airbeats.LocalPlayerAwareWindowInsets
 import com.darkxvenom.airbeats.LocalPlayerConnection
@@ -188,6 +196,14 @@ fun PlayerSettings(
     var showQualityDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
 
+    val service = playerConnection?.service
+    val audioBoostEnabled by service?.audioBoostEnabled?.collectAsState() ?: remember { mutableStateOf(false) }
+    val audioBoostPercent by service?.audioBoostPercent?.collectAsState() ?: remember { mutableIntStateOf(100) }
+    val echoEnabled by service?.echoEnabled?.collectAsState() ?: remember { mutableStateOf(false) }
+    val echoDelayMs by service?.echoDelayMs?.collectAsState() ?: remember { mutableIntStateOf(280) }
+    val djFilterSweep by service?.djFilterSweep?.collectAsState() ?: remember { mutableFloatStateOf(0.0f) }
+    var showAudioFxModal by remember { mutableStateOf(false) }
+
     SettingsPage(
         title = stringResource(R.string.player_and_audio),
         navController = navController,
@@ -279,6 +295,152 @@ fun PlayerSettings(
                         playerConnection?.service?.setSpatialAudioEnabled(enabled)
                     }
                 )},
+
+                {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        SwitchPreference(
+                            title = { Text("Audio FX & DJ Studio") },
+                            description = if (audioBoostEnabled) "${audioBoostPercent}% Boost Active • Tap to expand controls" else "Studio DJ effects: 200% Volume Boost, Echo & Delay, Club Filters, and Slowed/Nightcore",
+                            icon = { Icon(painterResource(R.drawable.volume_up), null) },
+                            checked = audioBoostEnabled,
+                            onCheckedChange = { enabled ->
+                                service?.setAudioBoostEnabled(enabled)
+                                if (enabled && audioBoostPercent <= 100) {
+                                    service?.setAudioBoostPercent(150)
+                                }
+                            }
+                        )
+
+                        AnimatedVisibility(
+                            visible = audioBoostEnabled,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 20.dp, end = 20.dp, bottom = 14.dp, top = 2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Master Volume Boost",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${audioBoostPercent}%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF2A6D)
+                                    )
+                                }
+                                Slider(
+                                    value = audioBoostPercent.toFloat(),
+                                    onValueChange = { service?.setAudioBoostPercent(it.toInt()) },
+                                    valueRange = 100f..200f,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Color(0xFFFF2A6D),
+                                        activeTrackColor = Color(0xFFFF2A6D)
+                                    )
+                                )
+
+                                Spacer(Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Echo & Delay Effect",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (echoEnabled) {
+                                            Text(
+                                                text = "${echoDelayMs}ms delay active",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF00E5FF)
+                                            )
+                                        }
+                                    }
+                                    Switch(
+                                        checked = echoEnabled,
+                                        onCheckedChange = { service?.setEchoEnabled(it) },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = Color(0xFF00E5FF)
+                                        )
+                                    )
+                                }
+
+                                Spacer(Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "DJ Filter Sweep",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = when {
+                                            djFilterSweep < -0.05f -> "Low-Pass ${(djFilterSweep * 100).toInt()}%"
+                                            djFilterSweep > 0.05f -> "High-Pass +${(djFilterSweep * 100).toInt()}%"
+                                            else -> "FLAT"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (abs(djFilterSweep) > 0.05f) Color(0xFFFF2A6D) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Slider(
+                                    value = djFilterSweep,
+                                    onValueChange = { service?.setDjFilterSweep(it) },
+                                    valueRange = -1.0f..1.0f,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = if (djFilterSweep < 0f) Color(0xFF00E5FF) else Color(0xFFFF2A6D),
+                                        activeTrackColor = Color(0xFFFF2A6D),
+                                        inactiveTrackColor = Color(0xFF00E5FF)
+                                    )
+                                )
+
+                                Spacer(Modifier.height(8.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFF28131C),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showAudioFxModal = true }
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(vertical = 12.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "🎛️ Open Full DJ Studio Console",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFFF2A6D)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
 
                 {
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -695,5 +857,11 @@ fun PlayerSettings(
                 }
             }
         }
+    }
+
+    if (showAudioFxModal) {
+        com.darkxvenom.airbeats.ui.menu.InAppAudioFxSheet(
+            onDismiss = { showAudioFxModal = false }
+        )
     }
 }

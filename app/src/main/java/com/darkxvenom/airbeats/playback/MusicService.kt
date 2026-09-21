@@ -81,6 +81,19 @@ import com.darkxvenom.airbeats.constants.DynamicIslandKey
 import com.darkxvenom.airbeats.constants.EnableDiscordRPCKey
 import com.darkxvenom.airbeats.constants.AudioBoostEnabledKey
 import com.darkxvenom.airbeats.constants.AudioBoostPercentKey
+import com.darkxvenom.airbeats.constants.EchoEnabledKey
+import com.darkxvenom.airbeats.constants.EchoDelayMsKey
+import com.darkxvenom.airbeats.constants.EchoFeedbackKey
+import com.darkxvenom.airbeats.constants.EchoWetMixKey
+import com.darkxvenom.airbeats.constants.EchoPingPongKey
+import com.darkxvenom.airbeats.constants.DjFilterSweepKey
+import com.darkxvenom.airbeats.constants.DjFlangerEnabledKey
+import com.darkxvenom.airbeats.constants.DjFlangerRateKey
+import com.darkxvenom.airbeats.constants.DjFlangerDepthKey
+import com.darkxvenom.airbeats.constants.DjSaturationKey
+import com.darkxvenom.airbeats.constants.DjTurntableLinkedKey
+import com.darkxvenom.airbeats.constants.DjTempoSpeedKey
+import com.darkxvenom.airbeats.constants.DjPitchKey
 import com.darkxvenom.airbeats.constants.DolbyAtmosEnabledKey
 import com.darkxvenom.airbeats.constants.SpatialAudioEnabledKey
 import com.darkxvenom.airbeats.constants.EightDAudioEnabledKey
@@ -360,6 +373,20 @@ class MusicService :
     val equalizerState = MutableStateFlow(EqualizerUiState())
     val spatialAudioProcessor = SpatialAudioProcessor()
     val eightDAudioProcessor = EightDAudioProcessor()
+    val djAudioProcessor = DjAudioProcessor()
+    val echoEnabled = MutableStateFlow(false)
+    val echoDelayMs = MutableStateFlow(280)
+    val echoFeedback = MutableStateFlow(0.40f)
+    val echoWetMix = MutableStateFlow(0.45f)
+    val echoPingPong = MutableStateFlow(true)
+    val djFilterSweep = MutableStateFlow(0.0f)
+    val djFlangerEnabled = MutableStateFlow(false)
+    val djFlangerRate = MutableStateFlow(0.5f)
+    val djFlangerDepth = MutableStateFlow(0.5f)
+    val djSaturation = MutableStateFlow(0.0f)
+    val djTempoSpeed = MutableStateFlow(1.0f)
+    val djPitch = MutableStateFlow(1.0f)
+    val djTurntableLinked = MutableStateFlow(false)
     val dolbyAtmosEnabled = MutableStateFlow(true)
     val spatialAudioEnabled = MutableStateFlow(false)
     val eightDAudioEnabled = MutableStateFlow(false)
@@ -580,6 +607,93 @@ class MusicService :
             .collectLatest(scope) { percent ->
                 audioBoostPercent.value = percent
                 setupLoudnessEnhancer()
+            }
+
+        dataStore.data
+            .map { it[EchoEnabledKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                echoEnabled.value = enabled
+                djAudioProcessor.echoEnabled = enabled
+            }
+
+        dataStore.data
+            .map { it[EchoDelayMsKey] ?: 280 }
+            .distinctUntilChanged()
+            .collectLatest(scope) { delayMs ->
+                echoDelayMs.value = delayMs
+                djAudioProcessor.echoDelayMs = delayMs
+            }
+
+        dataStore.data
+            .map { it[EchoFeedbackKey] ?: 0.40f }
+            .distinctUntilChanged()
+            .collectLatest(scope) { feedback ->
+                echoFeedback.value = feedback
+                djAudioProcessor.echoFeedback = feedback
+            }
+
+        dataStore.data
+            .map { it[EchoWetMixKey] ?: 0.45f }
+            .distinctUntilChanged()
+            .collectLatest(scope) { wet ->
+                echoWetMix.value = wet
+                djAudioProcessor.echoWetMix = wet
+            }
+
+        dataStore.data
+            .map { it[EchoPingPongKey] ?: true }
+            .distinctUntilChanged()
+            .collectLatest(scope) { pingPong ->
+                echoPingPong.value = pingPong
+                djAudioProcessor.echoPingPong = pingPong
+            }
+
+        dataStore.data
+            .map { it[DjFilterSweepKey] ?: 0.0f }
+            .distinctUntilChanged()
+            .collectLatest(scope) { sweep ->
+                djFilterSweep.value = sweep
+                djAudioProcessor.filterSweep = sweep
+            }
+
+        dataStore.data
+            .map { it[DjFlangerEnabledKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                djFlangerEnabled.value = enabled
+                djAudioProcessor.flangerEnabled = enabled
+            }
+
+        dataStore.data
+            .map { it[DjFlangerRateKey] ?: 0.5f }
+            .distinctUntilChanged()
+            .collectLatest(scope) { rate ->
+                djFlangerRate.value = rate
+                djAudioProcessor.flangerRate = rate
+            }
+
+        dataStore.data
+            .map { it[DjFlangerDepthKey] ?: 0.5f }
+            .distinctUntilChanged()
+            .collectLatest(scope) { depth ->
+                djFlangerDepth.value = depth
+                djAudioProcessor.flangerDepth = depth
+            }
+
+        dataStore.data
+            .map { it[DjSaturationKey] ?: 0.0f }
+            .distinctUntilChanged()
+            .collectLatest(scope) { sat ->
+                djSaturation.value = sat
+                djAudioProcessor.saturation = sat
+            }
+
+        dataStore.data
+            .map { it[DjTurntableLinkedKey] ?: false }
+            .distinctUntilChanged()
+            .collectLatest(scope) { linked ->
+                djTurntableLinked.value = linked
             }
 
         dataStore.data
@@ -1778,10 +1892,187 @@ class MusicService :
         }
     }
 
+    fun setEchoEnabled(enabled: Boolean) {
+        echoEnabled.value = enabled
+        djAudioProcessor.echoEnabled = enabled
+        scope.launch { dataStore.edit { it[EchoEnabledKey] = enabled } }
+    }
+
+    fun setEchoDelayMs(ms: Int) {
+        val clamped = ms.coerceIn(20, 1000)
+        echoDelayMs.value = clamped
+        djAudioProcessor.echoDelayMs = clamped
+        scope.launch { dataStore.edit { it[EchoDelayMsKey] = clamped } }
+    }
+
+    fun setEchoFeedback(feedback: Float) {
+        val clamped = feedback.coerceIn(0.0f, 0.85f)
+        echoFeedback.value = clamped
+        djAudioProcessor.echoFeedback = clamped
+        scope.launch { dataStore.edit { it[EchoFeedbackKey] = clamped } }
+    }
+
+    fun setEchoWetMix(mix: Float) {
+        val clamped = mix.coerceIn(0.0f, 1.0f)
+        echoWetMix.value = clamped
+        djAudioProcessor.echoWetMix = clamped
+        scope.launch { dataStore.edit { it[EchoWetMixKey] = clamped } }
+    }
+
+    fun setEchoPingPong(enabled: Boolean) {
+        echoPingPong.value = enabled
+        djAudioProcessor.echoPingPong = enabled
+        scope.launch { dataStore.edit { it[EchoPingPongKey] = enabled } }
+    }
+
+    fun setDjFilterSweep(sweep: Float) {
+        val clamped = sweep.coerceIn(-1.0f, 1.0f)
+        djFilterSweep.value = clamped
+        djAudioProcessor.filterSweep = clamped
+        scope.launch { dataStore.edit { it[DjFilterSweepKey] = clamped } }
+    }
+
+    fun setDjFlangerEnabled(enabled: Boolean) {
+        djFlangerEnabled.value = enabled
+        djAudioProcessor.flangerEnabled = enabled
+        scope.launch { dataStore.edit { it[DjFlangerEnabledKey] = enabled } }
+    }
+
+    fun setDjFlangerRate(rate: Float) {
+        val clamped = rate.coerceIn(0.1f, 4.0f)
+        djFlangerRate.value = clamped
+        djAudioProcessor.flangerRate = clamped
+        scope.launch { dataStore.edit { it[DjFlangerRateKey] = clamped } }
+    }
+
+    fun setDjFlangerDepth(depth: Float) {
+        val clamped = depth.coerceIn(0.0f, 1.0f)
+        djFlangerDepth.value = clamped
+        djAudioProcessor.flangerDepth = clamped
+        scope.launch { dataStore.edit { it[DjFlangerDepthKey] = clamped } }
+    }
+
+    fun setDjSaturation(sat: Float) {
+        val clamped = sat.coerceIn(0.0f, 1.0f)
+        djSaturation.value = clamped
+        djAudioProcessor.saturation = clamped
+        scope.launch { dataStore.edit { it[DjSaturationKey] = clamped } }
+    }
+
+    fun setDjTempoAndPitch(speed: Float, pitch: Float) {
+        val clampedSpeed = speed.coerceIn(0.5f, 2.0f)
+        val clampedPitch = pitch.coerceIn(0.5f, 2.0f)
+        djTempoSpeed.value = clampedSpeed
+        djPitch.value = clampedPitch
+        player.playbackParameters = androidx.media3.common.PlaybackParameters(clampedSpeed, clampedPitch)
+        scope.launch {
+            dataStore.edit {
+                it[DjTempoSpeedKey] = clampedSpeed
+                it[DjPitchKey] = clampedPitch
+            }
+        }
+    }
+
+    fun setDjTurntableLinked(linked: Boolean) {
+        djTurntableLinked.value = linked
+        if (linked) {
+            setDjTempoAndPitch(djTempoSpeed.value, djTempoSpeed.value)
+        }
+        scope.launch { dataStore.edit { it[DjTurntableLinkedKey] = linked } }
+    }
+
+    fun resetDjFx() {
+        setEchoEnabled(false)
+        setEchoDelayMs(280)
+        setEchoFeedback(0.40f)
+        setEchoWetMix(0.45f)
+        setEchoPingPong(true)
+        setDjFilterSweep(0.0f)
+        setDjFlangerEnabled(false)
+        setDjFlangerRate(0.5f)
+        setDjFlangerDepth(0.5f)
+        setDjSaturation(0.0f)
+        setDjTurntableLinked(false)
+        setDjTempoAndPitch(1.0f, 1.0f)
+    }
+
+    fun applyDjPreset(preset: DjPreset) {
+        when (preset) {
+            DjPreset.DEFAULT -> {
+                resetDjFx()
+            }
+            DjPreset.CLUB_BOOTH -> {
+                setEchoEnabled(true)
+                setEchoDelayMs(180)
+                setEchoFeedback(0.30f)
+                setEchoWetMix(0.35f)
+                setEchoPingPong(true)
+                setDjFilterSweep(-0.15f)
+                setDjSaturation(0.20f)
+                setAudioBoostPercent(130)
+                setAudioBoostEnabled(true)
+                setDjTempoAndPitch(1.0f, 1.0f)
+            }
+            DjPreset.SLOWED_REVERB -> {
+                setEchoEnabled(true)
+                setEchoDelayMs(380)
+                setEchoFeedback(0.55f)
+                setEchoWetMix(0.50f)
+                setEchoPingPong(true)
+                setDjFilterSweep(-0.25f)
+                setDjSaturation(0.15f)
+                setDjTurntableLinked(true)
+                setDjTempoAndPitch(0.85f, 0.85f)
+            }
+            DjPreset.NIGHTCORE -> {
+                setEchoEnabled(false)
+                setDjFilterSweep(0.20f)
+                setDjSaturation(0.10f)
+                setDjTurntableLinked(true)
+                setDjTempoAndPitch(1.25f, 1.25f)
+            }
+            DjPreset.BASS_BOMB -> {
+                setEchoEnabled(false)
+                setDjFilterSweep(-0.35f)
+                setDjSaturation(0.40f)
+                setAudioBoostPercent(160)
+                setAudioBoostEnabled(true)
+                setDjTempoAndPitch(1.0f, 1.0f)
+            }
+            DjPreset.LOFI_VINYL -> {
+                setEchoEnabled(true)
+                setEchoDelayMs(120)
+                setEchoFeedback(0.25f)
+                setEchoWetMix(0.30f)
+                setEchoPingPong(false)
+                setDjFilterSweep(-0.50f)
+                setDjSaturation(0.35f)
+                setDjFlangerEnabled(true)
+                setDjFlangerRate(0.2f)
+                setDjFlangerDepth(0.25f)
+                setDjTempoAndPitch(0.95f, 0.95f)
+            }
+            DjPreset.SPACE_ECHO -> {
+                setEchoEnabled(true)
+                setEchoDelayMs(450)
+                setEchoFeedback(0.65f)
+                setEchoWetMix(0.60f)
+                setEchoPingPong(true)
+                setDjFilterSweep(0.0f)
+                setDjFlangerEnabled(true)
+                setDjFlangerRate(0.4f)
+                setDjFlangerDepth(0.35f)
+                setDjSaturation(0.10f)
+                setDjTempoAndPitch(1.0f, 1.0f)
+            }
+        }
+    }
+
     fun resetAudioFx() {
         setAudioBoostPercent(100)
         setAudioBoostEnabled(false)
         resetEqualizer()
+        resetDjFx()
     }
 
     fun ensureVisualizer() {
@@ -2515,7 +2806,7 @@ class MusicService :
     }
 
     private fun createRenderersFactory(
-        audioProcessors: Array<androidx.media3.common.audio.AudioProcessor> = arrayOf(spatialAudioProcessor, eightDAudioProcessor)
+        audioProcessors: Array<androidx.media3.common.audio.AudioProcessor> = arrayOf(djAudioProcessor, spatialAudioProcessor, eightDAudioProcessor)
     ) =
         object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
