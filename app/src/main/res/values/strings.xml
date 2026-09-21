@@ -1020,5 +1020,27 @@
     <string name="generate_playlist">Generate Playlist</string>
     <string name="enable_jiosaavn">JioSaavn Integration</string>
     <string name="enable_jiosaavn_desc">Prioritize JioSaavn 320kbps high-fidelity streams with seamless YouTube fallback</string>
+
+    <!-- Share-to-Identify Music -->
+    <string name="identify_music">Identify Music</string>
+    <string name="identifying_music">Finding your song…</string>
+    <string name="analyzing_media">Analyzing the shared media…</string>
+    <string name="extracting_audio">Extracting audio segment…</string>
+    <string name="selecting_segment">Selecting clearest music segment…</string>
+    <string name="recognizing_song">Recognizing track…</string>
+    <string name="searching_airbeats">Finding song in AirBeats…</string>
+    <string name="music_found">Music Found</string>
+    <string name="no_music_found_title">Couldn\'t identify the music</string>
+    <string name="no_music_found_desc">Try sharing a section where the music is clearer and louder.</string>
+    <string name="no_audio_found">No audio track found in the shared video.</string>
+    <string name="unsupported_media">This media format cannot be processed.</string>
+    <string name="network_error_identify_title">No Internet Connection</string>
+    <string name="network_error_identify_desc">Music identification requires an active internet connection.</string>
+    <string name="play_in_airbeats">Play in AirBeats</string>
+    <string name="url_share_title">Shared Link Received</string>
+    <string name="url_share_desc">The source app shared a web link instead of the media file. To identify the music, please download or save the video/audio and share the file directly to AirBeats.</string>
+    <string name="audd_token_title">Music Recognition Token</string>
+    <string name="audd_token_desc">Optional custom AudD API token for unlimited song identification</string>
+    <string name="search_another_provider">Search manually in AirBeats</string>
 </resources>
 

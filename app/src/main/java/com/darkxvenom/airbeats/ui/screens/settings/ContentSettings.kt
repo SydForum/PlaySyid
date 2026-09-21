@@ -75,6 +75,10 @@ fun ContentSettings(
         key = QuickPicksKey,
         defaultValue = QuickPicks.QUICK_PICKS
     )
+    val (auddToken, onAuddTokenChange) = rememberPreference(
+        key = AudDTokenKey,
+        defaultValue = ""
+    )
     SettingsPage(
         title = stringResource(R.string.content),
         navController = navController,
@@ -203,6 +207,22 @@ fun ContentSettings(
                     value = historyDuration,
                     onValueChange = onHistoryDurationChange,
                 )},
+            )
+        )
+
+        // Music Recognition
+        SettingsGeneralCategory(
+            title = stringResource(R.string.identify_music),
+            items = listOf(
+                {
+                    EditTextPreference(
+                        title = { Text(stringResource(R.string.audd_token_title)) },
+                        icon = { Icon(painterResource(R.drawable.music_note), null) },
+                        value = auddToken,
+                        isInputValid = { true },
+                        onValueChange = onAuddTokenChange,
+                    )
+                }
             )
         )
     }

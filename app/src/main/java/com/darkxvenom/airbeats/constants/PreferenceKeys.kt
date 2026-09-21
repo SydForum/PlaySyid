@@ -137,6 +137,7 @@ val EnableYouTubeSubtitleLyricsKey = booleanPreferencesKey("enableYouTubeSubtitl
 val EnableYouTubeMusicLyricsKey = booleanPreferencesKey("enableYouTubeMusicLyrics")
 val MusicProviderKey = stringPreferencesKey("musicProvider")
 val EnableJioSaavnKey = booleanPreferencesKey("enableJioSaavn")
+val AudDTokenKey = stringPreferencesKey("audd_api_token")
 val HideExplicitKey = booleanPreferencesKey("hideExplicit")
 val LastNewReleaseCheckKey = longPreferencesKey("last_new_release_check")
 val minPlaybackDurKey = intPreferencesKey("minPlaybackDur")
