@@ -121,8 +121,8 @@ class IdentifySharedMusicUseCase(
                 emit(Pair(IdentificationStep.IDENTIFYING, null))
                 var recResult = recognitionEngine.recognize(currentAudioSource)
 
-                // If candidate 1 returned no match and media is longer than 15s, try candidate 2 within the first 30s
-                if (!recResult.success && mediaInfo.durationMs > 15_000L) {
+                // If candidate 0 returned no match, try candidate 1 (skipping intro speech / sound effects)
+                if ((!recResult.success || recResult.title.isNullOrBlank()) && mediaInfo.durationMs > 8_000L) {
                     tempManager.cleanup(currentAudioSource.file)
                     val window2 = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = 1)
                     currentAudioSource = audioExtractor.extractSegment(
@@ -130,6 +130,19 @@ class IdentifySharedMusicUseCase(
                         mediaInfo = mediaInfo,
                         startMs = window2.startMs,
                         durationMs = window2.durationMs
+                    )
+                    recResult = recognitionEngine.recognize(currentAudioSource)
+                }
+
+                // If candidate 1 returned no match, try candidate 2 (catches late drops / sound-only beats)
+                if ((!recResult.success || recResult.title.isNullOrBlank()) && mediaInfo.durationMs > 14_000L) {
+                    tempManager.cleanup(currentAudioSource.file)
+                    val window3 = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = 2)
+                    currentAudioSource = audioExtractor.extractSegment(
+                        uri = targetUri,
+                        mediaInfo = mediaInfo,
+                        startMs = window3.startMs,
+                        durationMs = window3.durationMs
                     )
                     recResult = recognitionEngine.recognize(currentAudioSource)
                 }

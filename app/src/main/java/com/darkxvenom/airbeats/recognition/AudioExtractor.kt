@@ -85,6 +85,9 @@ class AudioExtractor(
             var startPtsUs = -1L
             var totalPcmBytes = 0L
 
+            var actualSampleRate = sampleRate
+            var actualChannels = channels
+
             FileOutputStream(targetFile).use { fos ->
                 // Write placeholder for 44-byte WAV header
                 fos.write(ByteArray(44))
@@ -121,27 +124,42 @@ class AudioExtractor(
                     }
 
                     val outIndex = codec.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
-                    if (outIndex >= 0) {
-                        val outBuffer = codec.getOutputBuffer(outIndex)
-                        if (outBuffer != null && bufferInfo.size > 0) {
-                            if (startPtsUs < 0) {
-                                startPtsUs = bufferInfo.presentationTimeUs
+                    when (outIndex) {
+                        MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                            val newFormat = codec.outputFormat
+                            if (newFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                                actualSampleRate = newFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                             }
-                            accumulatedUs = bufferInfo.presentationTimeUs - startPtsUs
-
-                            outBuffer.position(bufferInfo.offset)
-                            outBuffer.limit(bufferInfo.offset + bufferInfo.size)
-
-                            val chunk = ByteArray(bufferInfo.size)
-                            outBuffer.get(chunk)
-                            fos.write(chunk)
-                            totalPcmBytes += chunk.size
+                            if (newFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                                actualChannels = newFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                            }
+                            Log.d(TAG, "Audio output format updated: sampleRate=$actualSampleRate, channels=$actualChannels")
                         }
+                        MediaCodec.INFO_TRY_AGAIN_LATER -> {}
+                        else -> {
+                            if (outIndex >= 0) {
+                                val outBuffer = codec.getOutputBuffer(outIndex)
+                                if (outBuffer != null && bufferInfo.size > 0) {
+                                    if (startPtsUs < 0) {
+                                        startPtsUs = bufferInfo.presentationTimeUs
+                                    }
+                                    accumulatedUs = bufferInfo.presentationTimeUs - startPtsUs
 
-                        codec.releaseOutputBuffer(outIndex, false)
+                                    outBuffer.position(bufferInfo.offset)
+                                    outBuffer.limit(bufferInfo.offset + bufferInfo.size)
 
-                        if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                            outputEOS = true
+                                    val chunk = ByteArray(bufferInfo.size)
+                                    outBuffer.get(chunk)
+                                    fos.write(chunk)
+                                    totalPcmBytes += chunk.size
+                                }
+
+                                codec.releaseOutputBuffer(outIndex, false)
+
+                                if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                                    outputEOS = true
+                                }
+                            }
                         }
                     }
                 }
@@ -153,17 +171,17 @@ class AudioExtractor(
             }
 
             // Write real WAV header with total PCM size
-            writeWavHeader(targetFile, totalPcmBytes, sampleRate, channels)
+            writeWavHeader(targetFile, totalPcmBytes, actualSampleRate, actualChannels)
 
-            val actualDurationMs = if (sampleRate > 0 && channels > 0) {
-                (totalPcmBytes / (sampleRate * channels * 2L)) * 1000L
+            val actualDurationMs = if (actualSampleRate > 0 && actualChannels > 0) {
+                (totalPcmBytes / (actualSampleRate * actualChannels * 2L)) * 1000L
             } else durationMs
 
             AudioSource(
                 file = targetFile,
                 durationMs = actualDurationMs,
-                sampleRate = sampleRate,
-                channels = channels
+                sampleRate = actualSampleRate,
+                channels = actualChannels
             )
         } catch (e: Exception) {
             targetFile.delete()

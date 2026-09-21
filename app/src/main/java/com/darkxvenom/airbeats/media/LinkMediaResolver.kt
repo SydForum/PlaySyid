@@ -30,7 +30,7 @@ class LinkMediaResolver(
 
     companion object {
         private const val TAG = "LinkMediaResolver"
-        private const val MAX_CHUNK_BYTES = 2 * 1024 * 1024L // 2MB is sufficient for ~2 minutes of audio
+        private const val MAX_CHUNK_BYTES = 12 * 1024 * 1024L // 12MB to capture full 15-30s high-res videos
 
         private val YT_REGEX = Regex("""(?:youtu\.be/|youtube\.com/(?:embed/|v/|watch\?v=|watch\?.+&v=|shorts/))([\w-]{11})""")
         private val IG_SHORTCODE_REGEX = Regex("""instagram\.com/(?:reel|reels|p|share/reel)/([A-Za-z0-9_-]+)""")
@@ -56,7 +56,7 @@ class LinkMediaResolver(
         }
 
         // 3. Snapchat Spotlight & Stories
-        if (cleanUrl.contains("snapchat.com")) {
+        if (cleanUrl.contains("snapchat.com") || cleanUrl.contains("snap.com")) {
             Log.d(TAG, "Identified Snapchat URL: $cleanUrl")
             resolveSnapchatMedia(cleanUrl)?.let { return@withContext it }
         }
@@ -179,54 +179,101 @@ class LinkMediaResolver(
 
     private suspend fun resolveSnapchatMedia(url: String): File? {
         try {
-            // Follow redirects to get canonical URL
+            var currentUrl = url
+            val mobileUa = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.80 Mobile Safari/537.36"
             val request = Request.Builder()
-                .url(url)
-                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                .url(currentUrl)
+                .addHeader("User-Agent", mobileUa)
+                .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .addHeader("Accept-Language", "en-US,en;q=0.9")
                 .build()
 
+            var html = ""
             okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val html = response.body?.string().orEmpty()
+                if (response.isSuccessful) {
+                    html = response.body?.string().orEmpty()
+                }
+            }
 
-                // 1. Check OpenGraph tags
-                var mediaUrl = extractMediaUrlFromHtml(html)
+            // Check if there is a canonical or og:url redirect (e.g. t.snapchat.com short links)
+            val canonicalRegex = Regex("""<link\s+[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            val ogUrlRegex = Regex("""<meta\s+[^>]*property=["']og:url["'][^>]*content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            val canonicalUrl = canonicalRegex.find(html)?.groupValues?.get(1)
+                ?: ogUrlRegex.find(html)?.groupValues?.get(1)
 
-                // 2. Search for Snapchat CDN video URL in HTML / Next.js data
-                if (mediaUrl.isNullOrBlank()) {
-                    val scCdnRegex = Regex("""https://[a-zA-Z0-9.-]*(?:sc-cdn\.net|bolt-gcdn\.sc-cdn\.net)[^"'\s\\]+\.mp4[^"'\s\\]*""")
-                    val match = scCdnRegex.find(html)
-                    if (match != null) {
-                        mediaUrl = unescapeJsonString(match.value)
+            if (!canonicalUrl.isNullOrBlank() && canonicalUrl != currentUrl && (canonicalUrl.contains("snapchat.com") || canonicalUrl.contains("snap.com"))) {
+                Log.d(TAG, "Following Snapchat canonical URL: $canonicalUrl")
+                val redirectReq = Request.Builder()
+                    .url(canonicalUrl)
+                    .addHeader("User-Agent", mobileUa)
+                    .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .addHeader("Accept-Language", "en-US,en;q=0.9")
+                    .build()
+                okHttpClient.newCall(redirectReq).execute().use { response ->
+                    if (response.isSuccessful) {
+                        html = response.body?.string().orEmpty()
                     }
                 }
+            }
 
-                // 3. Search for mediaUrl in __NEXT_DATA__
-                if (mediaUrl.isNullOrBlank()) {
-                    val nextDataRegex = Regex("""<script id="__NEXT_DATA__" type="application/json">([^<]+)</script>""")
-                    val match = nextDataRegex.find(html)
-                    if (match != null) {
-                        val jsonStr = match.groupValues[1]
-                        val jsonMediaRegex = Regex(""""(?:mediaUrl|videoUrl)":\s*"([^"]+)"""")
-                        val mediaMatch = jsonMediaRegex.find(jsonStr)
-                        if (mediaMatch != null) {
-                            mediaUrl = unescapeJsonString(mediaMatch.groupValues[1])
-                        }
-                    }
+            val mediaUrl = extractSnapchatMediaUrl(html)
+            if (!mediaUrl.isNullOrBlank()) {
+                Log.d(TAG, "Resolved Snapchat media URL: $mediaUrl")
+                val targetFile = tempManager.createTempFile("mp4")
+                if (downloadMediaChunk(mediaUrl, targetFile)) {
+                    return targetFile
                 }
-
-                if (!mediaUrl.isNullOrBlank()) {
-                    val targetFile = tempManager.createTempFile("mp4")
-                    if (downloadMediaChunk(mediaUrl, targetFile)) {
-                        return targetFile
-                    }
-                    tempManager.cleanup(targetFile)
-                }
+                tempManager.cleanup(targetFile)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to resolve Snapchat media for URL: $url", e)
         }
         return null
+    }
+
+    private fun extractSnapchatMediaUrl(html: String): String? {
+        fun isValidSnapchatVideo(u: String): Boolean {
+            val lower = u.lowercase()
+            if (lower.contains("largethumbnail") || lower.contains("thumbnail") ||
+                lower.contains("_fmjpeg") || lower.contains(".jpg") || lower.contains(".jpeg") ||
+                lower.contains(".png") || lower.contains(".webp") || lower.contains(".256.") ||
+                lower.contains(".1400.") || lower.contains("snapcode") || lower.contains("profilepicture")
+            ) {
+                return false
+            }
+            return lower.contains(".27.") || lower.contains("/d/") || lower.contains("/u/") ||
+                    lower.contains("/c/") || lower.contains("/h/") || lower.contains("/x/") ||
+                    lower.contains(".mp4") || lower.contains("mo=")
+        }
+
+        // 1. Search in __NEXT_DATA__
+        val nextDataRegex = Regex("""<script\s+id=["']__NEXT_DATA__["'][^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+        val nextDataMatch = nextDataRegex.find(html)
+        if (nextDataMatch != null) {
+            val jsonStr = nextDataMatch.groupValues[1]
+            val keys = listOf("contentUrl", "mediaUrl")
+            for (key in keys) {
+                val keyRegex = Regex(""""$key"\s*:\s*"([^"]+)"""")
+                for (match in keyRegex.findAll(jsonStr)) {
+                    val cand = unescapeJsonString(match.groupValues[1])
+                    if (isValidSnapchatVideo(cand)) {
+                        return cand
+                    }
+                }
+            }
+        }
+
+        // 2. Search whole HTML for Snapchat CDN video URLs (cf-st.sc-cdn.net or bolt-gcdn.sc-cdn.net)
+        val cdnRegex = Regex("""https://[a-zA-Z0-9.-]*(?:sc-cdn\.net|bolt-gcdn\.sc-cdn\.net)[^"'\s\\]+""")
+        for (match in cdnRegex.findAll(html)) {
+            val cand = unescapeJsonString(match.value)
+            if (isValidSnapchatVideo(cand)) {
+                return cand
+            }
+        }
+
+        // 3. Fallback to OpenGraph / HTML5 video tags
+        return extractMediaUrlFromHtml(html)
     }
 
     private suspend fun resolveTikTokMedia(url: String): File? {
@@ -429,7 +476,8 @@ class LinkMediaResolver(
 
     private fun unescapeJsonString(str: String): String {
         return str
-            .replace("\\u0026", "&")
+            .replace(Regex("""\\u0026""", RegexOption.IGNORE_CASE), "&")
+            .replace(Regex("""\\u002f""", RegexOption.IGNORE_CASE), "/")
             .replace("\\/", "/")
             .replace("&amp;", "&")
             .replace("\\", "")

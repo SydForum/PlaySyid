@@ -7,32 +7,30 @@ object AudioSegmentSelector {
         val durationMs: Long
     )
 
-    private const val MAX_DETECTION_WINDOW_MS = 30_000L // User requirement: detect first 30s
-    private const val DEFAULT_SEGMENT_DURATION_MS = 15_000L
+    private const val MAX_DETECTION_WINDOW_MS = 30_000L // Detect within first 30 seconds
 
     fun selectSegment(totalDurationMs: Long, candidateIndex: Int = 0): SelectedWindow {
         val boundedTotal = if (totalDurationMs > 0) minOf(totalDurationMs, MAX_DETECTION_WINDOW_MS) else MAX_DETECTION_WINDOW_MS
 
-        if (boundedTotal <= DEFAULT_SEGMENT_DURATION_MS) {
+        if (boundedTotal <= 10_000L) {
             return SelectedWindow(startMs = 0L, durationMs = boundedTotal)
         }
 
-        // Generate candidate windows strictly within the first 30 seconds
         val windows = listOf(
-            // Segment 1: from 0s up to 15s (or up to 20s if available)
+            // Candidate 0: Broad intro window (0s to 22s)
             SelectedWindow(
                 startMs = 0L,
-                durationMs = minOf(20_000L, boundedTotal)
+                durationMs = minOf(22_000L, boundedTotal)
             ),
-            // Segment 2: from 10s to 25s (often clearer music past intro speech)
+            // Candidate 1: Skips initial 6s of talking / intro sound effects (6s to 26s)
             SelectedWindow(
-                startMs = 10_000L,
-                durationMs = minOf(DEFAULT_SEGMENT_DURATION_MS, (boundedTotal - 10_000L).coerceAtLeast(5_000L))
+                startMs = 6_000L,
+                durationMs = minOf(20_000L, (boundedTotal - 6_000L).coerceAtLeast(6_000L))
             ),
-            // Segment 3: from 15s to 30s
+            // Candidate 2: Catches the late music drop / hook (12s to 30s)
             SelectedWindow(
-                startMs = 15_000L,
-                durationMs = minOf(DEFAULT_SEGMENT_DURATION_MS, (boundedTotal - 15_000L).coerceAtLeast(5_000L))
+                startMs = 12_000L,
+                durationMs = minOf(18_000L, (boundedTotal - 12_000L).coerceAtLeast(6_000L))
             )
         )
 

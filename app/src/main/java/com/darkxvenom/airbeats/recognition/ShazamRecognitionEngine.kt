@@ -39,19 +39,28 @@ class ShazamRecognitionEngine(
             return@withContext RecognitionResult(success = false)
         }
 
+        var inSampleRate = if (audioSource.sampleRate > 0) audioSource.sampleRate else 44100
+        var inChannels = if (audioSource.channels > 0) audioSource.channels else 2
+
         val pcmBytes = try {
             file.inputStream().use { input ->
                 val header = ByteArray(44)
-                input.read(header)
+                val readCount = input.read(header)
+                if (readCount == 44 && header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte()) {
+                    val channelsFromHdr = (header[22].toInt() and 0xFF) or ((header[23].toInt() and 0xFF) shl 8)
+                    val rateFromHdr = (header[24].toInt() and 0xFF) or
+                            ((header[25].toInt() and 0xFF) shl 8) or
+                            ((header[26].toInt() and 0xFF) shl 16) or
+                            ((header[27].toInt() and 0xFF) shl 24)
+                    if (channelsFromHdr in 1..8) inChannels = channelsFromHdr
+                    if (rateFromHdr in 8000..192000) inSampleRate = rateFromHdr
+                }
                 input.readBytes()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read PCM bytes from file", e)
             return@withContext RecognitionResult(success = false)
         }
-
-        val inSampleRate = if (audioSource.sampleRate > 0) audioSource.sampleRate else 44100
-        val inChannels = if (audioSource.channels > 0) audioSource.channels else 2
 
         val samples16kMono = convertTo16kMono(
             pcmBytes = pcmBytes,
@@ -62,6 +71,21 @@ class ShazamRecognitionEngine(
         if (samples16kMono.isEmpty()) {
             Log.e(TAG, "Converted sample buffer is empty")
             return@withContext RecognitionResult(success = false)
+        }
+
+        // Apply peak normalization / gain boost if audio is quiet (e.g. background funk/phonk)
+        var maxAbs = 0
+        for (sample in samples16kMono) {
+            val abs = Math.abs(sample.toInt())
+            if (abs > maxAbs) maxAbs = abs
+        }
+        if (maxAbs in 300..18000) {
+            val gain = 28000.0 / maxAbs
+            for (i in samples16kMono.indices) {
+                val amplified = (samples16kMono[i] * gain).toInt().coerceIn(-32768, 32767)
+                samples16kMono[i] = amplified.toShort()
+            }
+            Log.d(TAG, "Applied audio gain boost of ${"%.2f".format(gain)}x (peak: $maxAbs -> 28000)")
         }
 
         val signatureUri = try {
