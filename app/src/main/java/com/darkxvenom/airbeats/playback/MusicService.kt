@@ -400,6 +400,12 @@ class MusicService :
     val trackAnalyzer by lazy { TrackAnalyzer(this) }
     val bitPerfectEnabled = MutableStateFlow(false)
     val isBitPerfectActive = MutableStateFlow(false)
+    val preferredAudioDevice = MutableStateFlow<AudioDeviceInfo?>(null)
+    val availableAudioDevices = MutableStateFlow<List<AudioDeviceInfo>>(emptyList())
+    val simultaneousAudioProcessor by lazy { SimultaneousAudioProcessor(this) }
+    val isDualAudioEnabled = MutableStateFlow(false)
+    val dualAudioSecondaryDeviceId = MutableStateFlow<Int?>(null)
+    val dualAudioSecondaryVolume = MutableStateFlow(1.0f)
     private var usbBitPerfectOutput: UsbBitPerfectOutput? = null
     private var audioDeviceCallback: AudioDeviceCallback? = null
 
@@ -937,16 +943,71 @@ class MusicService :
             val callback = object : AudioDeviceCallback() {
                 override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
                     updateUsbDacRoute(bitPerfect)
+                    refreshAudioOutputDevices()
                 }
 
                 override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
                     updateUsbDacRoute(bitPerfect)
+                    refreshAudioOutputDevices()
                 }
             }
             audioDeviceCallback = callback
             audioManager.registerAudioDeviceCallback(callback, null)
         }
         updateUsbDacRoute(bitPerfect)
+        refreshAudioOutputDevices()
+    }
+
+    fun setPreferredOutputDevice(device: AudioDeviceInfo?) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                player.setPreferredAudioDevice(device)
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to set player preferred audio device")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                try {
+                    if (device?.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                        audioManager.setCommunicationDevice(device)
+                    } else {
+                        audioManager.clearCommunicationDevice()
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to update communication device routing")
+                }
+            }
+        }
+        preferredAudioDevice.value = device
+    }
+
+    fun refreshAudioOutputDevices() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
+                availableAudioDevices.value = devices
+                val currentPreferred = preferredAudioDevice.value
+                if (currentPreferred != null && devices.none { it.id == currentPreferred.id }) {
+                    setPreferredOutputDevice(null)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to refresh audio output devices")
+            }
+        }
+    }
+
+    fun setDualAudioEnabled(enabled: Boolean) {
+        isDualAudioEnabled.value = enabled
+        simultaneousAudioProcessor.setEnabled(enabled)
+    }
+
+    fun setDualAudioSecondaryDevice(device: AudioDeviceInfo?) {
+        dualAudioSecondaryDeviceId.value = device?.id
+        simultaneousAudioProcessor.setTargetDevice(device)
+    }
+
+    fun setDualAudioSecondaryVolume(volume: Float) {
+        dualAudioSecondaryVolume.value = volume
+        simultaneousAudioProcessor.setVolume(volume)
     }
 
     private fun updateUsbDacRoute(bitPerfect: UsbBitPerfectOutput) {
@@ -2298,6 +2359,9 @@ class MusicService :
         visualizerManager.isPlaying = isPlaying
         if (isPlaying) {
             ensureVisualizer()
+            simultaneousAudioProcessor.onPlay()
+        } else {
+            simultaneousAudioProcessor.onPause()
         }
     }
 
@@ -2888,7 +2952,12 @@ class MusicService :
     }
 
     private fun createRenderersFactory(
-        audioProcessors: Array<androidx.media3.common.audio.AudioProcessor> = arrayOf(djAudioProcessor, spatialAudioProcessor, eightDAudioProcessor)
+        audioProcessors: Array<androidx.media3.common.audio.AudioProcessor> = arrayOf(
+            djAudioProcessor,
+            spatialAudioProcessor,
+            eightDAudioProcessor,
+            simultaneousAudioProcessor,
+        )
     ) =
         object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
@@ -3054,6 +3123,7 @@ class MusicService :
             crossfadeAudio = null
         } catch (_: Exception) {}
         runCatching { trackAnalyzer.release() }
+        runCatching { simultaneousAudioProcessor.setEnabled(false) }
         releaseLoudnessEnhancer()
         releaseEqualizer()
         runCatching { visualizerManager.stop() }

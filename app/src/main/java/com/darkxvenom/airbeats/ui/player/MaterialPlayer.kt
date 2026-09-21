@@ -1,8 +1,14 @@
 package com.darkxvenom.airbeats.ui.player
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -129,11 +135,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 
 
-private fun AudioDeviceInfo.isMaterialBluetoothOutput(): Boolean =
-    type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-        type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-        (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-            type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+
 
 /**
  * Material Expressive Player matching reference design:
@@ -199,9 +201,33 @@ fun MaterialPlayer(
 
     val currentFormat by playerConnection.currentFormat.collectAsState(initial = null)
 
-    val availableDevices = remember { getAvailableDevices(context) }
-    val activeDevice = remember(availableDevices) { getActiveDevice(availableDevices) }
-    val isBluetooth = activeDevice?.isMaterialBluetoothOutput() == true
+    val preferredAudioDevice by playerConnection.service.preferredAudioDevice.collectAsState()
+    val availableAudioDevices by playerConnection.service.availableAudioDevices.collectAsState()
+
+    val fallbackDevices = remember { getAvailableDevices(context) }
+    val displayDevices = if (availableAudioDevices.isNotEmpty()) availableAudioDevices else fallbackDevices
+    val activeDevice = preferredAudioDevice ?: remember(displayDevices) { getActiveDevice(displayDevices) }
+    val isBluetooth = activeDevice?.isBluetoothOutput() == true
+
+    val hasBluetoothPermission = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+    var bluetoothPermissionGranted by remember { mutableStateOf(hasBluetoothPermission) }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        bluetoothPermissionGranted = isGranted
+        playerConnection.service.refreshAudioOutputDevices()
+        showDeviceSheet = true
+    }
 
     val equalizerState by playerConnection.service.equalizerState.collectAsState()
     val equalizerPreset by rememberPreference(EqualizerPresetKey, "Flat")
@@ -415,9 +441,17 @@ fun MaterialPlayer(
     if (showDeviceSheet) {
         DeviceSelectionBottomSheet(
             onDismiss = { showDeviceSheet = false },
-            availableDevices = availableDevices,
+            availableDevices = displayDevices,
             activeDevice = activeDevice,
+            preferredDevice = preferredAudioDevice,
+            onSelectDevice = { device ->
+                playerConnection.service.setPreferredOutputDevice(device)
+            },
             textBackgroundColor = onBackgroundColor,
+            hasBluetoothPermission = bluetoothPermissionGranted,
+            onRequestBluetoothPermission = {
+                bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
         )
     }
 
@@ -887,7 +921,13 @@ fun MaterialPlayer(
                         }
                     },
                     label = activeDevice?.outputName() ?: "This phone",
-                    onClick = { showDeviceSheet = true },
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !bluetoothPermissionGranted) {
+                            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                        } else {
+                            showDeviceSheet = true
+                        }
+                    },
                     containerColor = surfaceContainer,
                     contentColor = onBackgroundColor,
                     modifier = Modifier.weight(1f)

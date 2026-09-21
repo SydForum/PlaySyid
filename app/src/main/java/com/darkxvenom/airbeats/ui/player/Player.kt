@@ -1,8 +1,13 @@
 package com.darkxvenom.airbeats.ui.player
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.graphics.drawable.BitmapDrawable
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -774,6 +779,53 @@ fun BottomSheetPlayer(
 
     var showDetailsDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var showDeviceSheet by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    val preferredAudioDevice by playerConnection.service.preferredAudioDevice.collectAsState()
+    val availableAudioDevices by playerConnection.service.availableAudioDevices.collectAsState()
+    val fallbackDevices = remember { getAvailableDevices(context) }
+    val displayDevices = if (availableAudioDevices.isNotEmpty()) availableAudioDevices else fallbackDevices
+    val activeDevice = preferredAudioDevice ?: remember(displayDevices) { getActiveDevice(displayDevices) }
+
+    val hasBluetoothPermission = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+    var bluetoothPermissionGranted by remember { mutableStateOf(hasBluetoothPermission) }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        bluetoothPermissionGranted = isGranted
+        playerConnection.service.refreshAudioOutputDevices()
+        showDeviceSheet = true
+    }
+
+    if (showDeviceSheet) {
+        DeviceSelectionBottomSheet(
+            onDismiss = { showDeviceSheet = false },
+            availableDevices = displayDevices,
+            activeDevice = activeDevice,
+            preferredDevice = preferredAudioDevice,
+            onSelectDevice = { device ->
+                playerConnection.service.setPreferredOutputDevice(device)
+            },
+            textBackgroundColor = MaterialTheme.colorScheme.onSurface,
+            hasBluetoothPermission = bluetoothPermissionGranted,
+            onRequestBluetoothPermission = {
+                bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        )
     }
 
     if (showDetailsDialog) {
@@ -2717,9 +2769,13 @@ fun BottomSheetPlayer(
                         onOpenQueue = queueSheetState::expandSoft,
                         onOpenLyrics = onOpenFullscreenLyrics,
                         onDeviceClick = {
-                            Toast.makeText(context, playbackOutputName, Toast.LENGTH_SHORT).show()
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !bluetoothPermissionGranted) {
+                                bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                            } else {
+                                showDeviceSheet = true
+                            }
                         },
-                        deviceName = playbackOutputName,
+                        deviceName = activeDevice?.outputName() ?: playbackOutputName,
                     )
                 }
             }
@@ -3759,13 +3815,7 @@ private fun resolvePlaybackOutputName(context: Context): String {
     return "Speaker"
 }
 
-private fun AudioDeviceInfo.isBluetoothOutput(): Boolean =
-    type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-        type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            (type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                type == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
-                type == AudioDeviceInfo.TYPE_BLE_BROADCAST))
+
 
 private fun AudioDeviceInfo.isWiredOutput(): Boolean =
     type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
