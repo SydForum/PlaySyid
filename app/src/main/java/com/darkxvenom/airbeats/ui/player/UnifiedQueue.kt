@@ -81,6 +81,12 @@ fun UnifiedQueue(
         if (!state.isCollapsed && currentIndex >= 0) listState.scrollToItem(0)
     }
 
+    LaunchedEffect(endlessQueue, upcoming.size) {
+        if (endlessQueue && upcoming.isEmpty()) {
+            playerConnection.service.triggerEndlessQueueIfNeeded()
+        }
+    }
+
     BottomSheet(
         state = state,
         modifier = modifier,
@@ -157,7 +163,16 @@ fun UnifiedQueue(
                     if (!queueTitle.isNullOrBlank()) Text(queueTitle!!, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text("Endless queue", style = MaterialTheme.typography.labelLarge)
-                Switch(checked = endlessQueue, onCheckedChange = { endlessQueue = it }, modifier = Modifier.padding(start = 10.dp))
+                Switch(
+                    checked = endlessQueue,
+                    onCheckedChange = {
+                        endlessQueue = it
+                        if (it) {
+                            playerConnection.service.triggerEndlessQueueIfNeeded()
+                        }
+                    },
+                    modifier = Modifier.padding(start = 10.dp)
+                )
             }
 
             Text("Up next", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))

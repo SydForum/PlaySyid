@@ -12,6 +12,9 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+import androidx.annotation.DrawableRes
+import com.darkxvenom.airbeats.R
+
 /**
  * Studio-Grade DJ Audio Processor for AirBeats:
  * - Real-Time Echo & Ping-Pong Stereo Delay (20ms - 1000ms, feedback, wet/dry mix)
@@ -21,14 +24,14 @@ import kotlin.math.sin
  *
  * Runs inside Media3 DefaultAudioSink with O(1) complexity and zero heap allocations per frame.
  */
-enum class DjPreset(val title: String, val subtitle: String, val emoji: String) {
-    DEFAULT("Flat / Reset", "Pure original mix", "🎧"),
-    CLUB_BOOTH("Club Booth", "Warm echo & bass pump", "🎛️"),
-    SLOWED_REVERB("Slowed + Reverb", "0.85x speed & spacious reverb", "🌙"),
-    NIGHTCORE("Nightcore", "1.25x speed & high pitch", "⚡"),
-    BASS_BOMB("Bass Bomb", "Subwoofer drive & punch", "🔊"),
-    LOFI_VINYL("Lo-Fi Radio", "Muffled telephone filter & warmth", "📻"),
-    SPACE_ECHO("Cosmic Echo", "Infinite stereo ping-pong", "🌌")
+enum class DjPreset(val title: String, val subtitle: String, @DrawableRes val iconRes: Int) {
+    DEFAULT("Flat / Reset", "Pure original mix", R.drawable.headphones),
+    CLUB_BOOTH("Club Booth", "Warm echo & bass pump", R.drawable.graphic_eq),
+    SLOWED_REVERB("Slowed + Reverb", "0.85x speed & spacious reverb", R.drawable.bedtime),
+    NIGHTCORE("Nightcore", "1.25x speed & high pitch", R.drawable.speed),
+    BASS_BOMB("Bass Bomb", "Subwoofer drive & punch", R.drawable.volume_up),
+    LOFI_VINYL("Lo-Fi Radio", "Muffled telephone filter & warmth", R.drawable.radio),
+    SPACE_ECHO("Cosmic Echo", "Infinite stereo ping-pong", R.drawable.waves)
 }
 
 @UnstableApi

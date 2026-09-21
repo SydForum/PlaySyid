@@ -666,228 +666,43 @@ fun PlayerMenu(
                         val service = playerConnection.service
                         val audioBoostEnabled by service.audioBoostEnabled.collectAsState()
                         val audioBoostPercent by service.audioBoostPercent.collectAsState()
-                        val echoEnabled by service.echoEnabled.collectAsState()
-                        val echoDelayMs by service.echoDelayMs.collectAsState()
-                        val djFilterSweep by service.djFilterSweep.collectAsState()
 
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            androidx.compose.material3.ListItem(
-                                headlineContent = { Text("Audio FX & DJ Studio") },
-                                supportingContent = {
-                                    Text(
-                                        text = if (audioBoostEnabled) "${audioBoostPercent}% Boost Active • Tap for full studio" else stringResource(R.string.disabled),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (audioBoostEnabled) Color(0xFFFF2A6D) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                leadingContent = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.volume_up),
-                                        contentDescription = null,
-                                        tint = if (audioBoostEnabled) Color(0xFFFF2A6D) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                trailingContent = {
-                                    Switch(
-                                        checked = audioBoostEnabled,
-                                        onCheckedChange = { enabled ->
-                                            service.setAudioBoostEnabled(enabled)
-                                            if (enabled && audioBoostPercent <= 100) {
-                                                service.setAudioBoostPercent(150)
-                                            }
-                                        },
-                                        colors = androidx.compose.material3.SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
-                                            checkedTrackColor = Color(0xFFFF2A6D)
-                                        )
-                                    )
-                                },
-                                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
-                                modifier = Modifier.clickable {
-                                    showAudioFxSheet = true
-                                }
-                            )
-
-                            // Show all options below when ON
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = audioBoostEnabled,
-                                enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
-                                exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(Color(0xFF181A20))
-                                        .border(BorderStroke(1.dp, Color(0xFF262933)), RoundedCornerShape(18.dp))
-                                        .padding(14.dp)
-                                ) {
-                                    // 1. Master Boost Volume Slider
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Master Volume Boost",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            text = "${audioBoostPercent}%",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFFF2A6D)
-                                        )
-                                    }
-                                    Slider(
-                                        value = audioBoostPercent.toFloat(),
-                                        onValueChange = { service.setAudioBoostPercent(it.toInt()) },
-                                        valueRange = 100f..200f,
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = Color(0xFFFF2A6D),
-                                            activeTrackColor = Color(0xFFFF2A6D),
-                                            inactiveTrackColor = Color(0xFF2E313C)
-                                        )
-                                    )
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    // 2. Quick DJ Presets Row
-                                    Text(
-                                        text = "1-TAP DJ PRESETS",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF8B8F9D),
-                                            letterSpacing = 1.sp
-                                        )
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        com.darkxvenom.airbeats.playback.DjPreset.entries.forEach { preset ->
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(Color(0xFF22252E))
-                                                    .clickable { service.applyDjPreset(preset) }
-                                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                                            ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Text(text = preset.emoji, fontSize = 12.sp)
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text(
-                                                        text = preset.title,
-                                                        style = MaterialTheme.typography.labelSmall.copy(
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = Color.White
-                                                        )
-                                                    )
-                                                }
-                                            }
+                        androidx.compose.material3.ListItem(
+                            headlineContent = { Text("Audio FX & DJ Studio") },
+                            supportingContent = {
+                                Text(
+                                    text = if (audioBoostEnabled) "${audioBoostPercent}% Boost Active • Tap for DJ Studio" else "Tap to open DJ Studio console",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (audioBoostEnabled) Color(0xFFFF2A6D) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_dj_console),
+                                    contentDescription = null,
+                                    tint = if (audioBoostEnabled) Color(0xFFFF2A6D) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = audioBoostEnabled,
+                                    onCheckedChange = { enabled ->
+                                        service.setAudioBoostEnabled(enabled)
+                                        if (enabled && audioBoostPercent <= 100) {
+                                            service.setAudioBoostPercent(150)
                                         }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-                                    // 3. Echo Toggle
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column {
-                                            Text(
-                                                text = "Echo & Delay Effect",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.Medium,
-                                                color = Color(0xFFD0D3DC)
-                                            )
-                                            if (echoEnabled) {
-                                                Text(
-                                                    text = "${echoDelayMs}ms delay active",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontSize = 10.sp,
-                                                    color = Color(0xFF00E5FF)
-                                                )
-                                            }
-                                        }
-                                        Switch(
-                                            checked = echoEnabled,
-                                            onCheckedChange = { service.setEchoEnabled(it) },
-                                            colors = androidx.compose.material3.SwitchDefaults.colors(
-                                                checkedThumbColor = Color.White,
-                                                checkedTrackColor = Color(0xFF00E5FF)
-                                            )
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    // 4. DJ Club Filter Sweep Slider
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "DJ Filter Sweep",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = Color(0xFFD0D3DC)
-                                        )
-                                        Text(
-                                            text = when {
-                                                djFilterSweep < -0.05f -> "LPF ${(djFilterSweep * 100).toInt()}%"
-                                                djFilterSweep > 0.05f -> "HPF +${(djFilterSweep * 100).toInt()}%"
-                                                else -> "FLAT"
-                                            },
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (abs(djFilterSweep) > 0.05f) Color(0xFFFF2A6D) else Color(0xFF8B8F9D)
-                                        )
-                                    }
-                                    Slider(
-                                        value = djFilterSweep,
-                                        onValueChange = { service.setDjFilterSweep(it) },
-                                        valueRange = -1.0f..1.0f,
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = if (djFilterSweep < 0f) Color(0xFF00E5FF) else Color(0xFFFF2A6D),
-                                            activeTrackColor = Color(0xFFFF2A6D),
-                                            inactiveTrackColor = Color(0xFF00E5FF)
-                                        )
+                                    },
+                                    colors = androidx.compose.material3.SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = Color(0xFFFF2A6D)
                                     )
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    // 5. Open Full Studio Button
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(Color(0xFF28131C))
-                                            .clickable { showAudioFxSheet = true }
-                                            .padding(vertical = 10.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "🎛️ Open Full DJ Studio Console",
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFFF2A6D)
-                                            )
-                                        )
-                                    }
-                                }
+                                )
+                            },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable {
+                                showAudioFxSheet = true
                             }
-                        }
+                        )
                     }
 
                     item {

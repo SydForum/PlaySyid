@@ -174,25 +174,46 @@ fun InAppAudioFxSheet(onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = "Audio FX & DJ Studio",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 23.sp,
-                            color = Color.White
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF28131C))
+                            .border(BorderStroke(1.dp, Color(0xFFFF2A6D).copy(alpha = 0.3f)), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_dj_console),
+                            contentDescription = null,
+                            tint = Color(0xFFFF2A6D),
+                            modifier = Modifier.size(24.dp)
                         )
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "PROFESSIONAL SOUND SCULPTING",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            letterSpacing = 1.6.sp,
-                            color = Color(0xFF6E7280)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Audio FX & DJ Studio",
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 21.sp,
+                                color = Color.White
+                            )
                         )
-                    )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "PROFESSIONAL SOUND SCULPTING",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                letterSpacing = 1.4.sp,
+                                color = Color(0xFF6E7280)
+                            )
+                        )
+                    }
                 }
 
                 // Reset Pill Button
@@ -200,20 +221,30 @@ fun InAppAudioFxSheet(onDismiss: () -> Unit) {
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
                         .background(Color(0xFF28131C))
+                        .border(BorderStroke(1.dp, Color(0xFFFF2A6D).copy(alpha = 0.35f)), RoundedCornerShape(50))
                         .clickable {
                             service.resetAudioFx()
                         }
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Reset All",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = Color(0xFFFF2A6D)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            painter = painterResource(R.drawable.refresh),
+                            contentDescription = null,
+                            tint = Color(0xFFFF2A6D),
+                            modifier = Modifier.size(13.dp)
                         )
-                    )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "Reset All",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = Color(0xFFFF2A6D)
+                            )
+                        )
+                    }
                 }
             }
 
@@ -354,6 +385,12 @@ fun InAppAudioFxSheet(onDismiss: () -> Unit) {
     }
 }
 
+private data class StudioTabItem(
+    val title: String,
+    val iconRes: Int,
+    val isActive: Boolean
+)
+
 /**
  * Studio Tabs bar with active glow indicators.
  */
@@ -366,10 +403,10 @@ private fun StudioTabs(
     pitchActive: Boolean
 ) {
     val tabs = listOf(
-        "🎛️ Master" to false,
-        "🔁 Echo" to echoActive,
-        "🎚️ Mixer" to filterActive,
-        "💿 Turntable" to pitchActive
+        StudioTabItem("Master", R.drawable.graphic_eq, false),
+        StudioTabItem("Echo", R.drawable.waves, echoActive),
+        StudioTabItem("Mixer", R.drawable.tune, filterActive),
+        StudioTabItem("Turntable", R.drawable.album, pitchActive)
     )
 
     Row(
@@ -380,7 +417,7 @@ private fun StudioTabs(
             .padding(4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        tabs.forEachIndexed { index, (title, isEffActive) ->
+        tabs.forEachIndexed { index, tab ->
             val isSelected = selectedTab == index
             val bgColor by animateColorAsState(
                 targetValue = if (isSelected) Color(0xFF28131C) else Color.Transparent,
@@ -397,23 +434,33 @@ private fun StudioTabs(
                     .clip(RoundedCornerShape(10.dp))
                     .background(bgColor)
                     .clickable { onTabSelect(index) }
-                    .padding(vertical = 10.dp),
+                    .padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        painter = painterResource(tab.iconRes),
+                        contentDescription = null,
+                        tint = textColor,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = title,
+                        text = tab.title,
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             color = textColor
                         )
                     )
-                    if (isEffActive && !isSelected) {
+                    if (tab.isActive && !isSelected) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Box(
                             modifier = Modifier
-                                .size(6.dp)
+                                .size(5.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF00E5FF))
                         )
@@ -479,8 +526,21 @@ private fun DjPresetsRow(onSelectPreset: (DjPreset) -> Unit) {
                 ) {
                     Column(horizontalAlignment = Alignment.Start) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = preset.emoji, fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF2B2E38)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(preset.iconRes),
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF2A6D),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = preset.title,
                                 style = MaterialTheme.typography.labelMedium.copy(
@@ -489,7 +549,7 @@ private fun DjPresetsRow(onSelectPreset: (DjPreset) -> Unit) {
                                 )
                             )
                         }
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = preset.subtitle,
                             style = MaterialTheme.typography.bodySmall.copy(

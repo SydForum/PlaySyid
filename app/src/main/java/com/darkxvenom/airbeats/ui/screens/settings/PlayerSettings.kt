@@ -301,7 +301,7 @@ fun PlayerSettings(
                         SwitchPreference(
                             title = { Text("Audio FX & DJ Studio") },
                             description = if (audioBoostEnabled) "${audioBoostPercent}% Boost Active • Tap to expand controls" else "Studio DJ effects: 200% Volume Boost, Echo & Delay, Club Filters, and Slowed/Nightcore",
-                            icon = { Icon(painterResource(R.drawable.volume_up), null) },
+                            icon = { Icon(painterResource(R.drawable.ic_dj_console), null) },
                             checked = audioBoostEnabled,
                             onCheckedChange = { enabled ->
                                 service?.setAudioBoostEnabled(enabled)
@@ -425,12 +425,20 @@ fun PlayerSettings(
                                         .fillMaxWidth()
                                         .clickable { showAudioFxModal = true }
                                 ) {
-                                    Box(
+                                    Row(
                                         modifier = Modifier.padding(vertical = 12.dp),
-                                        contentAlignment = Alignment.Center
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_dj_console),
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF2A6D),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "🎛️ Open Full DJ Studio Console",
+                                            text = "Open Full DJ Studio Console",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFFFF2A6D)
