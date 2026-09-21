@@ -469,7 +469,19 @@ private fun HomeScreenMockupCard(
                         .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(22.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (!icon.svgUrl.isNullOrBlank()) {
+                    if (icon.id == "default") {
+                        Image(
+                            painter = painterResource(R.mipmap.ic_launcher_foreground),
+                            contentDescription = icon.title,
+                            modifier = Modifier.fillMaxSize(0.72f)
+                        )
+                    } else if (icon.id == "airbeats_winters") {
+                        Image(
+                            painter = painterResource(R.mipmap.ic_launcher_winter_foreground),
+                            contentDescription = icon.title,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else if (!icon.svgUrl.isNullOrBlank()) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(icon.svgUrl)
@@ -598,6 +610,12 @@ private fun InAppIconCard(
                         painter = painterResource(R.mipmap.ic_launcher_foreground),
                         contentDescription = icon.title,
                         modifier = Modifier.fillMaxSize(0.72f)
+                    )
+                } else if (icon.id == "airbeats_winters") {
+                    Image(
+                        painter = painterResource(R.mipmap.ic_launcher_winter_foreground),
+                        contentDescription = icon.title,
+                        modifier = Modifier.fillMaxSize()
                     )
                 } else if (!icon.svgUrl.isNullOrBlank()) {
                     AsyncImage(

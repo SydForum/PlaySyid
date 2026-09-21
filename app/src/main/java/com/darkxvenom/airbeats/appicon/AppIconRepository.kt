@@ -54,7 +54,7 @@ object AppIconRepository {
         isDefault = false,
         isCommunity = false,
         inApp = true,
-        svgUrl = "file:///android_asset/icons/Airbeats_Winters.png"
+        svgUrl = "https://raw.githubusercontent.com/d0x-dev/AirBeats/main/assets/icons/Airbeats_Winters.png"
     )
 
     val BUILT_IN_ICONS: List<AppIcon> = listOf(
@@ -248,7 +248,7 @@ object AppIconRepository {
                     svgUrl = "https://" + svgUrl.substring(7)
                 }
                 if (svgUrl.isBlank() && id == "airbeats_winters") {
-                    svgUrl = "file:///android_asset/icons/Airbeats_Winters.png"
+                    svgUrl = "https://raw.githubusercontent.com/d0x-dev/AirBeats/main/assets/icons/Airbeats_Winters.png"
                 }
 
                 val matchingBuiltIn = BUILT_IN_ICONS.find { it.id == id }
