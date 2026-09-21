@@ -3,17 +3,18 @@ package com.darkxvenom.airbeats.usecases
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.util.Log
+import com.darkxvenom.airbeats.media.LinkMediaResolver
 import com.darkxvenom.airbeats.media.MediaInspector
 import com.darkxvenom.airbeats.media.TemporaryMediaManager
 import com.darkxvenom.airbeats.providers.ProviderSearchManager
-import com.darkxvenom.airbeats.recognition.AudDRecognitionEngine
 import com.darkxvenom.airbeats.recognition.AudioExtractor
 import com.darkxvenom.airbeats.recognition.AudioSegmentSelector
 import com.darkxvenom.airbeats.recognition.AudioSource
+import com.darkxvenom.airbeats.recognition.CompositeRecognitionEngine
 import com.darkxvenom.airbeats.recognition.MusicRecognitionEngine
 import com.darkxvenom.airbeats.recognition.RecognitionCache
-import com.darkxvenom.airbeats.recognition.RecognitionResult
 import com.darkxvenom.airbeats.share.SharedContent
 import com.darkxvenom.airbeats.share.SharedContentType
 import com.darkxvenom.airbeats.songs.IdentifiedSong
@@ -22,9 +23,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import java.io.File
 
 enum class IdentificationStep {
     VALIDATING,
+    RESOLVING_LINK,
     ANALYZING_MEDIA,
     EXTRACTING_AUDIO,
     IDENTIFYING,
@@ -36,7 +39,8 @@ class IdentifySharedMusicUseCase(
     private val context: Context,
     private val tempManager: TemporaryMediaManager = TemporaryMediaManager(context),
     private val audioExtractor: AudioExtractor = AudioExtractor(context, tempManager),
-    private val recognitionEngine: MusicRecognitionEngine = AudDRecognitionEngine(context),
+    private val linkMediaResolver: LinkMediaResolver = LinkMediaResolver(context, tempManager),
+    private val recognitionEngine: MusicRecognitionEngine = CompositeRecognitionEngine(context),
     private val providerSearchManager: ProviderSearchManager = ProviderSearchManager(context)
 ) {
 
@@ -47,28 +51,46 @@ class IdentifySharedMusicUseCase(
     fun execute(content: SharedContent): Flow<Pair<IdentificationStep, IdentificationOutcome?>> = flow {
         emit(Pair(IdentificationStep.VALIDATING, null))
 
-        // 1. Validate content type
-        if (content.type == SharedContentType.URL) {
-            emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.IsUrlOnly(content.text.orEmpty())))
-            return@flow
-        }
-
-        val uri = content.uri
-        if (uri == null) {
-            emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.UnsupportedMedia("No media URI provided")))
-            return@flow
-        }
-
-        // 2. Check network connectivity
+        // 1. Check network connectivity
         if (!isNetworkConnected(context)) {
             emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.NetworkError))
             return@flow
         }
 
+        var downloadedMediaFile: File? = null
+        val targetUri: Uri
+
+        // 2. Resolve media URI or download audio from shared link
+        if (content.type == SharedContentType.URL) {
+            val url = content.text.orEmpty().trim()
+            if (url.isBlank()) {
+                emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.UnsupportedMedia("Empty URL shared")))
+                return@flow
+            }
+            emit(Pair(IdentificationStep.RESOLVING_LINK, null))
+            val resolvedFile = withContext(Dispatchers.IO) {
+                linkMediaResolver.resolveMedia(url)
+            }
+            if (resolvedFile == null || !resolvedFile.exists()) {
+                Log.w(TAG, "LinkMediaResolver could not download media from $url, prompting user")
+                emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.IsUrlOnly(url)))
+                return@flow
+            }
+            downloadedMediaFile = resolvedFile
+            targetUri = Uri.fromFile(resolvedFile)
+        } else {
+            val uri = content.uri
+            if (uri == null) {
+                emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.UnsupportedMedia("No media URI provided")))
+                return@flow
+            }
+            targetUri = uri
+        }
+
         // 3. Inspect Media
         emit(Pair(IdentificationStep.ANALYZING_MEDIA, null))
         val mediaInfo = withContext(Dispatchers.IO) {
-            MediaInspector.inspect(context, uri)
+            MediaInspector.inspect(context, targetUri)
         }
 
         if (!mediaInfo.hasAudio) {
@@ -79,11 +101,11 @@ class IdentifySharedMusicUseCase(
         var currentAudioSource: AudioSource? = null
 
         try {
-            // 4. Extract Audio Segment (focused on the first 30s as requested)
+            // 4. Extract Audio Segment (focused on the first 30s)
             emit(Pair(IdentificationStep.EXTRACTING_AUDIO, null))
             val window1 = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = 0)
             currentAudioSource = audioExtractor.extractSegment(
-                uri = uri,
+                uri = targetUri,
                 mediaInfo = mediaInfo,
                 startMs = window1.startMs,
                 durationMs = window1.durationMs
@@ -104,7 +126,7 @@ class IdentifySharedMusicUseCase(
                     tempManager.cleanup(currentAudioSource.file)
                     val window2 = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = 1)
                     currentAudioSource = audioExtractor.extractSegment(
-                        uri = uri,
+                        uri = targetUri,
                         mediaInfo = mediaInfo,
                         startMs = window2.startMs,
                         durationMs = window2.durationMs
@@ -141,8 +163,9 @@ class IdentifySharedMusicUseCase(
             Log.e(TAG, "Identification pipeline failed", e)
             emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.Error(e.localizedMessage ?: "Processing error")))
         } finally {
-            // Clean up temporary audio files to protect user storage and privacy
+            // Clean up temporary audio & downloaded files to protect user storage and privacy
             tempManager.cleanup(currentAudioSource?.file)
+            tempManager.cleanup(downloadedMediaFile)
             tempManager.cleanupAll()
         }
     }

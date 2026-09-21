@@ -1043,5 +1043,6 @@
     <string name="audd_token_desc">Optional custom AudD API token for unlimited song identification</string>
     <string name="search_another_provider">Search manually in AirBeats</string>
     <string name="error">Error</string>
+    <string name="resolving_link">Fetching audio from shared link…</string>
 </resources>
 

@@ -162,7 +162,11 @@ fun SharedMusicScreen(
                             title = stringResource(R.string.url_share_title),
                             description = stringResource(R.string.url_share_desc),
                             primaryButtonText = stringResource(R.string.close),
-                            onPrimaryClick = onClose
+                            onPrimaryClick = onClose,
+                            secondaryButtonText = if (sharedContent != null) stringResource(R.string.retry) else null,
+                            onSecondaryClick = {
+                                if (sharedContent != null) viewModel.processSharedContent(sharedContent)
+                            }
                         )
                     }
 
@@ -252,6 +256,7 @@ private fun ProcessingContent(
 
         val stepText = when (step) {
             IdentificationStep.VALIDATING -> stringResource(R.string.analyzing_media)
+            IdentificationStep.RESOLVING_LINK -> stringResource(R.string.resolving_link)
             IdentificationStep.ANALYZING_MEDIA -> stringResource(R.string.analyzing_media)
             IdentificationStep.EXTRACTING_AUDIO -> stringResource(R.string.extracting_audio)
             IdentificationStep.IDENTIFYING -> stringResource(R.string.recognizing_song)
