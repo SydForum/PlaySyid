@@ -191,7 +191,6 @@ private data class AodMediaState(
     val artist: String,
 )
 
-@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun AlwaysOnDisplayScreen(navController: NavController) {
     val playerConnection = LocalPlayerConnection.current ?: run {
