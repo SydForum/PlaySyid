@@ -96,3 +96,9 @@
 # Keep models loaded from remote Firebase endpoints
 -keep class com.darkxvenom.airbeats.models.** { *; }
 
+# Keep native Shazam JNI bindings
+-keep class com.alexmercerind.audire.native.** { *; }
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+

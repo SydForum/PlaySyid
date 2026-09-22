@@ -84,6 +84,7 @@ jobs:
           path: ${{ env.FINAL_APK_NAME }}
 
       - name: Upload Debug APK to Telegram (Topic 44)
+        continue-on-error: true
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: "-1004388752678"
