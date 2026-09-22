@@ -448,6 +448,11 @@
                 <data android:mimeType="audio/*" />
             </intent-filter>
         </activity>
+
+        <!-- Remove legacy AlarmManagerScheduler receiver from Google DataTransport which crashes on null intent data during system/test broadcasts -->
+        <receiver
+            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+            tools:node="remove" />
     </application>
 
 </manifest>
