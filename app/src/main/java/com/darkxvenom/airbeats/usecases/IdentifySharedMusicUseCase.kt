@@ -115,70 +115,76 @@ class IdentifySharedMusicUseCase(
         var currentAudioSource: AudioSource? = null
 
         try {
-            // 4. Extract Audio Segment (focused on the first 30s)
+            // 4. Extract Audio Segments dynamically and Recognize
             emit(Pair(IdentificationStep.EXTRACTING_AUDIO, null))
-            val window1 = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = 0)
-            GlobalLog.append(Log.INFO, TAG, "Extracting audio segment 0: ${window1.startMs}ms - ${window1.startMs + window1.durationMs}ms")
-            currentAudioSource = audioExtractor.extractSegment(
-                uri = targetUri,
-                mediaInfo = mediaInfo,
-                startMs = window1.startMs,
-                durationMs = window1.durationMs
-            )
-            GlobalLog.append(Log.INFO, TAG, "Segment 0 extracted: ${currentAudioSource.file.name} (${currentAudioSource.file.length()} bytes)")
 
-            // Check local recognition cache
-            val hash = RecognitionCache.computeHash(currentAudioSource.file)
-            val cachedSong = RecognitionCache.get(hash)
+            val maxCandidates = AudioSegmentSelector.getCandidateCount(mediaInfo.durationMs)
+            var currentCandidate = 0
+            var recResult = com.darkxvenom.airbeats.recognition.RecognitionResult(success = false)
+            var audioHash: String? = null
 
-            val identifiedSong: IdentifiedSong = if (cachedSong != null) {
-                GlobalLog.append(Log.INFO, TAG, "Cache hit for audio hash $hash: '${cachedSong.title}' by '${cachedSong.artist}'")
-                cachedSong
-            } else {
+            while (currentCandidate < maxCandidates && (!recResult.success || recResult.title.isNullOrBlank())) {
+                val window = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = currentCandidate)
+                if (currentCandidate > 0) {
+                    tempManager.cleanup(currentAudioSource?.file)
+                    GlobalLog.append(Log.INFO, TAG, "Candidate ${currentCandidate - 1} returned no match. Trying candidate $currentCandidate (${window.startMs / 1000}s - ${(window.startMs + window.durationMs) / 1000}s)...")
+                } else {
+                    GlobalLog.append(Log.INFO, TAG, "Extracting audio segment 0 (${window.startMs / 1000}s - ${(window.startMs + window.durationMs) / 1000}s)...")
+                }
+
+                currentAudioSource = audioExtractor.extractSegment(
+                    uri = targetUri,
+                    mediaInfo = mediaInfo,
+                    startMs = window.startMs,
+                    durationMs = window.durationMs
+                )
+                GlobalLog.append(Log.INFO, TAG, "Segment $currentCandidate extracted: ${currentAudioSource.file.name} (${currentAudioSource.file.length()} bytes)")
+
+                if (currentCandidate == 0) {
+                    audioHash = RecognitionCache.computeHash(currentAudioSource.file)
+                    val cachedSong = RecognitionCache.get(audioHash)
+                    if (cachedSong != null) {
+                        GlobalLog.append(Log.INFO, TAG, "Cache hit for audio: '${cachedSong.title}' by '${cachedSong.artist}'")
+                        recResult = com.darkxvenom.airbeats.recognition.RecognitionResult(
+                            success = true,
+                            title = cachedSong.title,
+                            artist = cachedSong.artist,
+                            album = cachedSong.album,
+                            albumArtUrl = cachedSong.albumArtUrl,
+                            provider = "Cache"
+                        )
+                        break
+                    }
+                }
+
                 emit(Pair(IdentificationStep.IDENTIFYING, null))
-                GlobalLog.append(Log.INFO, TAG, "Recognizing candidate 0 with Shazam...")
-                var recResult = recognitionEngine.recognize(currentAudioSource)
+                GlobalLog.append(Log.INFO, TAG, "Recognizing segment $currentCandidate with Shazam...")
+                recResult = recognitionEngine.recognize(currentAudioSource)
+                currentCandidate++
+            }
 
-                // If candidate 0 returned no match, try candidate 1 (skipping intro speech / sound effects)
-                if ((!recResult.success || recResult.title.isNullOrBlank()) && mediaInfo.durationMs > 8_000L) {
-                    GlobalLog.append(Log.INFO, TAG, "Candidate 0 returned no match. Trying candidate 1 (middle segment)...")
-                    tempManager.cleanup(currentAudioSource.file)
-                    val window2 = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = 1)
-                    currentAudioSource = audioExtractor.extractSegment(
-                        uri = targetUri,
-                        mediaInfo = mediaInfo,
-                        startMs = window2.startMs,
-                        durationMs = window2.durationMs
+            val identifiedSong: IdentifiedSong = if (recResult.success && !recResult.title.isNullOrBlank()) {
+                val normalized = SongMetadataNormalizer.normalize(recResult)
+                GlobalLog.append(Log.INFO, TAG, "Song recognized: '${normalized.title}' by '${normalized.artist}'")
+                audioHash?.let { RecognitionCache.put(it, normalized) }
+                normalized
+            } else {
+                val ytTitle = linkMediaResolver.lastSuggestedTitle
+                if (!ytTitle.isNullOrBlank()) {
+                    GlobalLog.append(Log.INFO, TAG, "Shazam returned no match across segments. Falling back to video metadata: '$ytTitle'")
+                    SongMetadataNormalizer.normalize(
+                        com.darkxvenom.airbeats.recognition.RecognitionResult(
+                            success = true,
+                            title = ytTitle,
+                            artist = linkMediaResolver.lastSuggestedArtist,
+                            provider = "YouTube"
+                        )
                     )
-                    GlobalLog.append(Log.INFO, TAG, "Segment 1 extracted: ${currentAudioSource.file.name} (${currentAudioSource.file.length()} bytes)")
-                    recResult = recognitionEngine.recognize(currentAudioSource)
-                }
-
-                // If candidate 1 returned no match, try candidate 2 (catches late drops / sound-only beats)
-                if ((!recResult.success || recResult.title.isNullOrBlank()) && mediaInfo.durationMs > 14_000L) {
-                    GlobalLog.append(Log.INFO, TAG, "Candidate 1 returned no match. Trying candidate 2 (late segment)...")
-                    tempManager.cleanup(currentAudioSource.file)
-                    val window3 = AudioSegmentSelector.selectSegment(mediaInfo.durationMs, candidateIndex = 2)
-                    currentAudioSource = audioExtractor.extractSegment(
-                        uri = targetUri,
-                        mediaInfo = mediaInfo,
-                        startMs = window3.startMs,
-                        durationMs = window3.durationMs
-                    )
-                    GlobalLog.append(Log.INFO, TAG, "Segment 2 extracted: ${currentAudioSource.file.name} (${currentAudioSource.file.length()} bytes)")
-                    recResult = recognitionEngine.recognize(currentAudioSource)
-                }
-
-                if (!recResult.success || recResult.title.isNullOrBlank()) {
+                } else {
                     GlobalLog.append(Log.WARN, TAG, "Recognition completed: No music matched")
                     emit(Pair(IdentificationStep.COMPLETE, IdentificationOutcome.NoMusicFound))
                     return@flow
                 }
-
-                val normalized = SongMetadataNormalizer.normalize(recResult)
-                GlobalLog.append(Log.INFO, TAG, "Song recognized: '${normalized.title}' by '${normalized.artist}'")
-                RecognitionCache.put(hash, normalized)
-                normalized
             }
 
             // 5. Search existing AirBeats providers

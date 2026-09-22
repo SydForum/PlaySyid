@@ -3,6 +3,7 @@ package com.darkxvenom.airbeats.recognition
 import android.content.Context
 import android.util.Log
 import com.alexmercerind.audire.native.ShazamSignature
+import com.darkxvenom.airbeats.utils.GlobalLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -36,6 +37,7 @@ class ShazamRecognitionEngine(
         val file = audioSource.file
         if (!file.exists() || file.length() <= 44) {
             Log.e(TAG, "Audio file does not exist or has invalid size: ${file.length()}")
+            GlobalLog.append(Log.ERROR, TAG, "Audio file invalid or too small: ${file.length()} bytes")
             return@withContext RecognitionResult(success = false)
         }
 
@@ -59,49 +61,50 @@ class ShazamRecognitionEngine(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read PCM bytes from file", e)
+            GlobalLog.append(Log.ERROR, TAG, "Failed to read PCM bytes: ${e.message}")
             return@withContext RecognitionResult(success = false)
         }
 
-        val samples16kMono = convertTo16kMono(
+        val converted = convertTo16kMono(
             pcmBytes = pcmBytes,
             inSampleRate = inSampleRate,
             inChannels = inChannels
         )
 
-        if (samples16kMono.isEmpty()) {
+        if (converted.isEmpty()) {
             Log.e(TAG, "Converted sample buffer is empty")
+            GlobalLog.append(Log.ERROR, TAG, "Shazam sample buffer is empty")
             return@withContext RecognitionResult(success = false)
         }
 
-        // Apply peak normalization / gain boost if audio is quiet (e.g. background funk/phonk)
-        var maxAbs = 0
-        for (sample in samples16kMono) {
-            val abs = Math.abs(sample.toInt())
-            if (abs > maxAbs) maxAbs = abs
+        // Optimal Shazam fingerprint window is 10-12s (192,000 samples). Cap to avoid signature distortion.
+        val maxSamples = 12 * TARGET_SAMPLE_RATE
+        val samples16kMono = if (converted.size > maxSamples) {
+            converted.copyOf(maxSamples)
+        } else {
+            converted
         }
-        if (maxAbs in 300..18000) {
-            val gain = 28000.0 / maxAbs
-            for (i in samples16kMono.indices) {
-                val amplified = (samples16kMono[i] * gain).toInt().coerceIn(-32768, 32767)
-                samples16kMono[i] = amplified.toShort()
-            }
-            Log.d(TAG, "Applied audio gain boost of ${"%.2f".format(gain)}x (peak: $maxAbs -> 28000)")
-        }
+
+        val samplems = (samples16kMono.size * 1000L / TARGET_SAMPLE_RATE).toInt()
+        GlobalLog.append(Log.INFO, TAG, "Shazam: generating signature for ${samples16kMono.size} samples (${samplems}ms)...")
 
         val signatureUri = try {
             ShazamSignature.create(samples16kMono)
         } catch (t: Throwable) {
             Log.e(TAG, "Native ShazamSignature.create call failed", t)
+            GlobalLog.append(Log.ERROR, TAG, "Native ShazamSignature failed: ${t.message}")
             return@withContext RecognitionResult(success = false)
         }
 
         if (signatureUri.isBlank()) {
             Log.e(TAG, "Native signature uri returned blank")
+            GlobalLog.append(Log.ERROR, TAG, "Native Shazam signature returned blank")
             return@withContext RecognitionResult(success = false)
         }
 
+        GlobalLog.append(Log.INFO, TAG, "Shazam: signature generated successfully (uri length=${signatureUri.length})")
+
         try {
-            val samplems = (samples16kMono.size * 1000L / TARGET_SAMPLE_RATE).toInt()
             val timestamp = System.currentTimeMillis()
             val uuid1 = UUID.randomUUID().toString().uppercase(Locale.US)
             val uuid2 = UUID.randomUUID().toString().lowercase(Locale.US)
@@ -135,17 +138,23 @@ class ShazamRecognitionEngine(
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     Log.e(TAG, "Shazam API HTTP ${response.code}: $body")
+                    GlobalLog.append(Log.ERROR, TAG, "Shazam API HTTP ${response.code}: $body")
                     return@withContext RecognitionResult(success = false)
                 }
 
                 val json = JSONObject(body)
-                val track = json.optJSONObject("track") ?: return@withContext RecognitionResult(
-                    success = false,
-                    rawMetadata = mapOf("shazam_response" to body)
-                )
+                val track = json.optJSONObject("track")
+                if (track == null) {
+                    GlobalLog.append(Log.INFO, TAG, "Shazam API: No track matched in database")
+                    return@withContext RecognitionResult(
+                        success = false,
+                        rawMetadata = mapOf("shazam_response" to body)
+                    )
+                }
 
                 val title = track.optString("title").takeIf { it.isNotBlank() }
                 val artist = track.optString("subtitle").takeIf { it.isNotBlank() }
+                GlobalLog.append(Log.INFO, TAG, "Shazam matched: '$title' by '$artist'")
 
                 val images = track.optJSONObject("images")
                 val coverArt = images?.optString("coverarthq")?.takeIf { it.isNotBlank() }
@@ -189,6 +198,7 @@ class ShazamRecognitionEngine(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Shazam recognition failed", e)
+            GlobalLog.append(Log.ERROR, TAG, "Shazam recognition failed: ${e.message}")
             RecognitionResult(success = false)
         }
     }
