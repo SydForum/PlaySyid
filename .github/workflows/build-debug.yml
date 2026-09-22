@@ -52,35 +52,6 @@ jobs:
           fi
           
 
-      - name: Configure Signing Keystore
-        env:
-          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: |
-          if [ -n "${SIGNING_KEY_BASE64}" ]; then
-            echo "Using repository signing key..."
-            echo "${SIGNING_KEY_BASE64}" | base64 --decode > app/keystore.jks
-            echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=${KEY_PASSWORD}" >> $GITHUB_ENV
-            echo "KEY_ALIAS=${KEY_ALIAS}" >> $GITHUB_ENV
-          else
-            echo "Generating clean developer keystore to prevent Play Protect test-key blocking..."
-            keytool -genkeypair -v \
-              -keystore app/keystore.jks \
-              -storepass "airbeats123" \
-              -alias "airbeats" \
-              -keypass "airbeats123" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=AirBeats, OU=Mobile, O=AirBeats Team, L=San Francisco, ST=California, C=US"
-            echo "KEYSTORE_PASSWORD=airbeats123" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=airbeats123" >> $GITHUB_ENV
-            echo "KEY_ALIAS=airbeats" >> $GITHUB_ENV
-          fi
-
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 

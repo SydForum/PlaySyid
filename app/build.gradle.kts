@@ -62,39 +62,20 @@ android {
                 keyPassword = localSigningKeyPassword
                 enableV1Signing = true
                 enableV2Signing = true
-                enableV3Signing = true
-                enableV4Signing = true
             }
         }
         getByName("debug") {
-            val ksFile = if (!localSigningFile.isNullOrBlank() && file(localSigningFile).exists()) {
-                file(localSigningFile)
-            } else if (file("keystore.jks").exists()) {
-                file("keystore.jks")
-            } else if (rootProject.file("app/keystore.jks").exists()) {
-                rootProject.file("app/keystore.jks")
-            } else if (System.getenv("MUSIC_DEBUG_KEYSTORE_FILE") != null) {
-                file(System.getenv("MUSIC_DEBUG_KEYSTORE_FILE"))
-            } else null
-
-            if (ksFile != null && ksFile.exists()) {
-                storeFile = ksFile
+            if (!localSigningFile.isNullOrBlank() && file(localSigningFile).exists()) {
+                storeFile = file(localSigningFile)
                 storePassword = localSigningStorePassword
-                    ?: System.getenv("KEYSTORE_PASSWORD")
-                    ?: System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD")
-                    ?: "airbeats123"
                 keyAlias = localSigningKeyAlias
-                    ?: System.getenv("KEY_ALIAS")
-                    ?: "airbeats"
                 keyPassword = localSigningKeyPassword
-                    ?: System.getenv("KEY_PASSWORD")
-                    ?: System.getenv("MUSIC_DEBUG_SIGNING_KEY_PASSWORD")
-                    ?: "airbeats123"
+            } else if (System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD") != null) {
+                storeFile = file(System.getenv("MUSIC_DEBUG_KEYSTORE_FILE"))
+                storePassword = System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD")
+                keyAlias = "debug"
+                keyPassword = System.getenv("MUSIC_DEBUG_SIGNING_KEY_PASSWORD")
             }
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
-            enableV4Signing = true
         }
     }
 
