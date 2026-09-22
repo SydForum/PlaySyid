@@ -1,10 +1,13 @@
 package com.darkxvenom.airbeats.ui.sharedmusic
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -157,17 +160,43 @@ fun SharedMusicScreen(
                     }
 
                     is SharedMusicUiState.UrlShared -> {
-                        StatusErrorContent(
-                            icon = Icons.Default.Link,
-                            title = stringResource(R.string.url_share_title),
-                            description = stringResource(R.string.url_share_desc),
-                            primaryButtonText = stringResource(R.string.close),
-                            onPrimaryClick = onClose,
-                            secondaryButtonText = if (sharedContent != null) stringResource(R.string.retry) else null,
-                            onSecondaryClick = {
-                                if (sharedContent != null) viewModel.processSharedContent(sharedContent)
-                            }
-                        )
+                        val context = LocalContext.current
+                        val isInstagram = state.url.contains("instagram.com", ignoreCase = true) ||
+                                state.url.contains("instagr.am", ignoreCase = true)
+                        if (isInstagram) {
+                            StatusErrorContent(
+                                icon = Icons.Default.Link,
+                                title = "Instagram Reel Protected",
+                                description = "Instagram requires authentication for this link because the reel may be private or restricted.\n\nTo identify this song:\n1. Open the reel in Instagram\n2. Tap Share and select 'Download' or 'Save Video'\n3. Share the saved video file directly to AirBeats",
+                                primaryButtonText = "Open in Instagram",
+                                onPrimaryClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(state.url)).apply {
+                                            setPackage("com.instagram.android")
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        try {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.url)))
+                                        } catch (_: Exception) {}
+                                    }
+                                },
+                                secondaryButtonText = stringResource(R.string.close),
+                                onSecondaryClick = onClose
+                            )
+                        } else {
+                            StatusErrorContent(
+                                icon = Icons.Default.Link,
+                                title = stringResource(R.string.url_share_title),
+                                description = stringResource(R.string.url_share_desc),
+                                primaryButtonText = stringResource(R.string.close),
+                                onPrimaryClick = onClose,
+                                secondaryButtonText = if (sharedContent != null) stringResource(R.string.retry) else null,
+                                onSecondaryClick = {
+                                    if (sharedContent != null) viewModel.processSharedContent(sharedContent)
+                                }
+                            )
+                        }
                     }
 
                     is SharedMusicUiState.UnsupportedMedia -> {
