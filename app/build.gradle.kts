@@ -46,7 +46,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 228
-        versionName = "6.1.9"
+        versionName = "6.1.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Strip out language resources from libraries that the app doesn't support
