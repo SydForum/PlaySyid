@@ -144,9 +144,10 @@ class LinkMediaResolver(
                     try {
                         val resp = com.darkxvenom.airbeats.innertube.YouTube.player(videoId, null, client = client).getOrNull()
                         val audioFormat = resp?.streamingData?.adaptiveFormats?.firstOrNull { it.isAudio }
-                        if (audioFormat?.url != null && audioFormat.url.isNotBlank()) {
-                            streamUrl = audioFormat.url
-                            val mime = audioFormat.mimeType
+                        val formatUrl = audioFormat?.url
+                        if (!formatUrl.isNullOrBlank()) {
+                            streamUrl = formatUrl
+                            val mime = audioFormat?.mimeType.orEmpty()
                             ext = if (mime.contains("webm") || mime.contains("opus")) "webm" else "m4a"
                             GlobalLog.append(Log.INFO, TAG, "YouTube stream resolved via fallback ${client.clientName}: $streamUrl (ext=$ext)")
                             break

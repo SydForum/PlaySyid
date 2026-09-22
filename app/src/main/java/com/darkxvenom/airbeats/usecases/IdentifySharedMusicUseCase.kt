@@ -104,7 +104,7 @@ class IdentifySharedMusicUseCase(
         val mediaInfo = withContext(Dispatchers.IO) {
             MediaInspector.inspect(context, targetUri)
         }
-        GlobalLog.append(Log.INFO, TAG, "Media metadata: duration=${mediaInfo.durationMs}ms, hasAudio=${mediaInfo.hasAudio}, mime=${mediaInfo.mimeType}")
+        GlobalLog.append(Log.INFO, TAG, "Media metadata: duration=${mediaInfo.durationMs}ms, hasAudio=${mediaInfo.hasAudio}, audioMime=${mediaInfo.audioMime}")
 
         if (!mediaInfo.hasAudio) {
             GlobalLog.append(Log.WARN, TAG, "No audio track detected in media file")
