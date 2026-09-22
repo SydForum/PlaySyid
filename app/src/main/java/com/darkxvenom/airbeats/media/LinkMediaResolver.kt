@@ -9,6 +9,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.darkxvenom.airbeats.constants.AudioQuality
+import com.darkxvenom.airbeats.utils.GlobalLog
 import com.darkxvenom.airbeats.utils.YTPlayerUtils
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ import org.jsoup.Jsoup
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -39,7 +41,7 @@ class LinkMediaResolver(
         private const val TAG = "LinkMediaResolver"
         private const val MAX_CHUNK_BYTES = 12 * 1024 * 1024L // 12MB to capture full 15-30s high-res videos
 
-        private val YT_REGEX = Regex("""(?:youtu\.be/|youtube\.com/(?:embed/|v/|watch\?v=|watch\?.+&v=|shorts/))([\w-]{11})""")
+        private val YT_REGEX = Regex("""(?:youtu\.be/|(?:www\.|m\.|music\.)?youtube\.com/(?:embed/|v/|watch\?v=|watch\?.+&v=|shorts/|live/))([\w-]{11})""")
         private val IG_SHORTCODE_REGEX = Regex("""(?:instagram\.com|instagr\.am)/(?:reel|reels|p|share/reel|share/p|tv)/([A-Za-z0-9_-]+)""")
         private val SNAPCHAT_REGEX = Regex("""snapchat\.com/(?:spotlight|add|p|t)/([A-Za-z0-9_-]+)""")
         private val TIKTOK_REGEX = Regex("""(?:tiktok\.com/|vm\.tiktok\.com/|vt\.tiktok\.com/)""")
@@ -48,35 +50,41 @@ class LinkMediaResolver(
     suspend fun resolveMedia(url: String): File? = withContext(Dispatchers.IO) {
         val cleanUrl = url.trim()
         Log.d(TAG, "Attempting to resolve media from URL: $cleanUrl")
+        GlobalLog.append(Log.INFO, TAG, "Attempting to resolve media from URL: $cleanUrl")
 
         // 1. YouTube & YouTube Shorts
         val ytVideoId = extractYouTubeVideoId(cleanUrl)
         if (ytVideoId != null) {
             Log.d(TAG, "Identified YouTube video ID: $ytVideoId")
+            GlobalLog.append(Log.INFO, TAG, "Identified YouTube video ID: $ytVideoId")
             resolveYouTubeAudio(ytVideoId)?.let { return@withContext it }
         }
 
         // 2. Instagram Reels & Posts
         if (cleanUrl.contains("instagram.com") || cleanUrl.contains("instagr.am")) {
             Log.d(TAG, "Identified Instagram URL: $cleanUrl")
+            GlobalLog.append(Log.INFO, TAG, "Identified Instagram URL: $cleanUrl")
             resolveInstagramMedia(cleanUrl)?.let { return@withContext it }
         }
 
         // 3. Snapchat Spotlight & Stories
         if (cleanUrl.contains("snapchat.com") || cleanUrl.contains("snap.com")) {
             Log.d(TAG, "Identified Snapchat URL: $cleanUrl")
+            GlobalLog.append(Log.INFO, TAG, "Identified Snapchat URL: $cleanUrl")
             resolveSnapchatMedia(cleanUrl)?.let { return@withContext it }
         }
 
         // 4. TikTok
         if (TIKTOK_REGEX.containsMatchIn(cleanUrl)) {
             Log.d(TAG, "Identified TikTok URL: $cleanUrl")
+            GlobalLog.append(Log.INFO, TAG, "Identified TikTok URL: $cleanUrl")
             resolveTikTokMedia(cleanUrl)?.let { return@withContext it }
         }
 
         // 5. Direct Media Links (.mp4, .mp3, .wav, .m4a, .webm, etc.)
         if (isDirectMediaUrl(cleanUrl)) {
             Log.d(TAG, "Identified direct media link: $cleanUrl")
+            GlobalLog.append(Log.INFO, TAG, "Identified direct media link: $cleanUrl")
             val ext = cleanUrl.substringAfterLast('.', "mp4").substringBefore('?')
             val targetFile = tempManager.createTempFile(ext)
             if (downloadMediaChunk(cleanUrl, targetFile)) {
@@ -88,6 +96,7 @@ class LinkMediaResolver(
         resolveGenericWebMedia(cleanUrl)?.let { return@withContext it }
 
         Log.w(TAG, "Could not resolve audio or video stream from link: $cleanUrl")
+        GlobalLog.append(Log.WARN, TAG, "Could not resolve audio or video stream from link: $cleanUrl")
         null
     }
 
@@ -97,31 +106,74 @@ class LinkMediaResolver(
     }
 
     private suspend fun resolveYouTubeAudio(videoId: String): File? {
+        GlobalLog.append(Log.INFO, TAG, "Starting YouTube resolution for videoId: $videoId")
         return try {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                ?: return null
-            val playbackData = YTPlayerUtils.playerResponseForPlayback(
-                videoId = videoId,
-                audioQuality = AudioQuality.LOW,
-                connectivityManager = cm
-            ).getOrNull() ?: return null
+            var streamUrl: String? = null
+            var ext = "m4a"
 
-            val streamUrl = playbackData.streamUrl
-            if (streamUrl.isBlank()) return null
+            // Primary: Try YTPlayerUtils with AUTO quality
+            if (cm != null) {
+                try {
+                    val playbackData = YTPlayerUtils.playerResponseForPlayback(
+                        videoId = videoId,
+                        audioQuality = AudioQuality.AUTO,
+                        connectivityManager = cm
+                    ).getOrNull()
 
-            val format = playbackData.format
-            val ext = if (format.mimeType.contains("webm") || format.mimeType.contains("opus")) "webm" else "m4a"
+                    if (playbackData != null && playbackData.streamUrl.isNotBlank()) {
+                        streamUrl = playbackData.streamUrl
+                        val mime = playbackData.format.mimeType
+                        ext = if (mime.contains("webm") || mime.contains("opus")) "webm" else "m4a"
+                        GlobalLog.append(Log.INFO, TAG, "YouTube stream resolved via YTPlayerUtils: $streamUrl (ext=$ext)")
+                    }
+                } catch (e: Exception) {
+                    GlobalLog.append(Log.WARN, TAG, "YTPlayerUtils failed: ${e.message}")
+                }
+            }
+
+            // Fallback: Direct Innertube player with ANDROID_VR_NO_AUTH or IOS
+            if (streamUrl.isNullOrBlank()) {
+                GlobalLog.append(Log.INFO, TAG, "Trying fallback Innertube player for videoId: $videoId")
+                val fallbackClients = listOf(
+                    com.darkxvenom.airbeats.innertube.models.YouTubeClient.ANDROID_VR_NO_AUTH,
+                    com.darkxvenom.airbeats.innertube.models.YouTubeClient.IOS,
+                    com.darkxvenom.airbeats.innertube.models.YouTubeClient.WEB_REMIX
+                )
+                for (client in fallbackClients) {
+                    try {
+                        val resp = com.darkxvenom.airbeats.innertube.YouTube.player(videoId, null, client = client).getOrNull()
+                        val audioFormat = resp?.streamingData?.adaptiveFormats?.firstOrNull { it.isAudio }
+                        if (audioFormat?.url != null && audioFormat.url.isNotBlank()) {
+                            streamUrl = audioFormat.url
+                            val mime = audioFormat.mimeType
+                            ext = if (mime.contains("webm") || mime.contains("opus")) "webm" else "m4a"
+                            GlobalLog.append(Log.INFO, TAG, "YouTube stream resolved via fallback ${client.clientName}: $streamUrl (ext=$ext)")
+                            break
+                        }
+                    } catch (e: Exception) {
+                        GlobalLog.append(Log.WARN, TAG, "Fallback client ${client.clientName} failed: ${e.message}")
+                    }
+                }
+            }
+
+            if (streamUrl.isNullOrBlank()) {
+                GlobalLog.append(Log.ERROR, TAG, "All YouTube stream resolution strategies failed for videoId: $videoId")
+                return null
+            }
+
             val targetFile = tempManager.createTempFile(ext)
-
-            // Append range to avoid throttling from YouTube CDN
-            val downloadUrl = if (streamUrl.contains("range=")) streamUrl else "${streamUrl}&range=0-2097151"
-            if (downloadMediaChunk(downloadUrl, targetFile)) {
+            GlobalLog.append(Log.INFO, TAG, "Downloading YouTube audio chunk...")
+            if (downloadMediaChunk(streamUrl, targetFile, 12 * 1024 * 1024L)) {
+                GlobalLog.append(Log.INFO, TAG, "YouTube audio download succeeded (${targetFile.length()} bytes)")
                 targetFile
             } else {
+                GlobalLog.append(Log.ERROR, TAG, "YouTube audio download failed for videoId: $videoId")
                 tempManager.cleanup(targetFile)
                 null
             }
         } catch (e: Exception) {
+            GlobalLog.append(Log.ERROR, TAG, "Exception in resolveYouTubeAudio for videoId $videoId: ${e.message}")
             Log.e(TAG, "Failed to resolve YouTube audio for videoId: $videoId", e)
             null
         }
@@ -129,63 +181,109 @@ class LinkMediaResolver(
 
     private suspend fun resolveInstagramMedia(url: String): File? {
         val cleanUrl = url.trim()
+        GlobalLog.append(Log.INFO, TAG, "Starting Instagram resolution for: $cleanUrl")
         var shortcode = IG_SHORTCODE_REGEX.find(cleanUrl)?.groupValues?.getOrNull(1)
 
         if (shortcode.isNullOrBlank()) {
             val canonicalUrl = resolveCanonicalUrl(cleanUrl)
             shortcode = IG_SHORTCODE_REGEX.find(canonicalUrl)?.groupValues?.getOrNull(1)
         }
+        GlobalLog.append(Log.INFO, TAG, "Instagram shortcode: $shortcode")
 
-        // Strategy A: Headless Android WebView resolving the embed page
-        if (!shortcode.isNullOrBlank()) {
-            try {
-                val mediaUrl = resolveInstagramViaWebView(cleanUrl, shortcode)
-                if (!mediaUrl.isNullOrBlank()) {
-                    Log.d(TAG, "Instagram WebView resolved media URL: $mediaUrl")
-                    val targetFile = tempManager.createTempFile("mp4")
-                    if (downloadMediaChunk(mediaUrl, targetFile)) {
-                        return targetFile
-                    }
-                    tempManager.cleanup(targetFile)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Instagram WebView resolution failed for shortcode: $shortcode", e)
-            }
-        }
+        // Strategy 1 (Primary): High-speed Worker API
+        try {
+            val apiUrl = "https://instagram-downloader-api.cybershield47.workers.dev/api/download?url=" + URLEncoder.encode(cleanUrl, "UTF-8")
+            GlobalLog.append(Log.INFO, TAG, "Querying Instagram worker API: $apiUrl")
+            val request = Request.Builder()
+                .url(apiUrl)
+                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
 
-        // Strategy B: Check Instagram embed captioned page via direct HTTP
-        if (!shortcode.isNullOrBlank()) {
-            try {
-                val embedUrl = if (cleanUrl.contains("/p/") || cleanUrl.contains("/share/p/")) {
-                    "https://www.instagram.com/p/$shortcode/embed/captioned/"
-                } else {
-                    "https://www.instagram.com/reel/$shortcode/embed/captioned/"
-                }
-                val request = Request.Builder()
-                    .url(embedUrl)
-                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    val json = JSONObject(body)
+                    if (json.optString("status") == "success") {
+                        val dataObj = json.optJSONObject("data")
+                        val videoUrl = dataObj?.optString("videoUrl")?.takeIf { it.isNotBlank() }
+                            ?: dataObj?.optString("downloadUrl")?.takeIf { it.isNotBlank() }
 
-                okHttpClient.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val html = response.body?.string().orEmpty()
-                        val mediaUrl = extractMediaUrlFromHtml(html)
-                        if (!mediaUrl.isNullOrBlank()) {
+                        if (!videoUrl.isNullOrBlank()) {
+                            GlobalLog.append(Log.INFO, TAG, "Worker API returned media URL: $videoUrl")
                             val targetFile = tempManager.createTempFile("mp4")
-                            if (downloadMediaChunk(mediaUrl, targetFile)) {
+                            if (downloadMediaChunk(videoUrl, targetFile)) {
+                                GlobalLog.append(Log.INFO, TAG, "Downloaded media from worker API (${targetFile.length()} bytes)")
                                 return targetFile
                             }
                             tempManager.cleanup(targetFile)
                         }
+                    } else {
+                        GlobalLog.append(Log.WARN, TAG, "Worker API status not success: $body")
+                    }
+                } else {
+                    GlobalLog.append(Log.WARN, TAG, "Worker API returned HTTP ${response.code}")
+                }
+            }
+        } catch (e: Exception) {
+            GlobalLog.append(Log.WARN, TAG, "Worker API failed: ${e.message}")
+        }
+
+        // Strategy 2: Headless Android WebView resolving original URL first (preserving tokens) then embed
+        try {
+            val mediaUrl = resolveInstagramViaWebView(cleanUrl, shortcode ?: "")
+            if (!mediaUrl.isNullOrBlank()) {
+                GlobalLog.append(Log.INFO, TAG, "Instagram WebView resolved media URL: $mediaUrl")
+                val targetFile = tempManager.createTempFile("mp4")
+                if (downloadMediaChunk(mediaUrl, targetFile)) {
+                    GlobalLog.append(Log.INFO, TAG, "Downloaded media from WebView (${targetFile.length()} bytes)")
+                    return targetFile
+                }
+                tempManager.cleanup(targetFile)
+            }
+        } catch (e: Exception) {
+            GlobalLog.append(Log.WARN, TAG, "Instagram WebView resolution error: ${e.message}")
+        }
+
+        // Strategy 3: Check Instagram embed captioned page / mobile API via direct HTTP
+        if (!shortcode.isNullOrBlank()) {
+            try {
+                val apiUrls = listOf(
+                    "https://www.instagram.com/reel/$shortcode/?__a=1&__d=1",
+                    "https://www.instagram.com/p/$shortcode/?__a=1&__d=1",
+                    "https://www.instagram.com/p/$shortcode/embed/captioned/"
+                )
+                for (apiEndpoint in apiUrls) {
+                    GlobalLog.append(Log.INFO, TAG, "Checking Instagram endpoint: $apiEndpoint")
+                    val request = Request.Builder()
+                        .url(apiEndpoint)
+                        .addHeader("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1")
+                        .addHeader("X-IG-App-ID", "936619743392459")
+                        .addHeader("Accept", "*/*")
+                        .build()
+
+                    okHttpClient.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val html = response.body?.string().orEmpty()
+                            val mediaUrl = extractMediaUrlFromHtml(html)
+                            if (!mediaUrl.isNullOrBlank()) {
+                                GlobalLog.append(Log.INFO, TAG, "Found media URL from $apiEndpoint: $mediaUrl")
+                                val targetFile = tempManager.createTempFile("mp4")
+                                if (downloadMediaChunk(mediaUrl, targetFile)) {
+                                    return targetFile
+                                }
+                                tempManager.cleanup(targetFile)
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Instagram embed resolution failed for shortcode: $shortcode", e)
+                GlobalLog.append(Log.WARN, TAG, "Instagram HTTP API check failed: ${e.message}")
             }
         }
 
-        // Strategy C: Bot User-Agent OpenGraph scrape
+        // Strategy 4: Bot User-Agent OpenGraph scrape
         try {
+            GlobalLog.append(Log.INFO, TAG, "Trying bot OpenGraph scrape for $cleanUrl")
             val request = Request.Builder()
                 .url(cleanUrl)
                 .addHeader("User-Agent", "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)")
@@ -196,6 +294,7 @@ class LinkMediaResolver(
                     val html = response.body?.string().orEmpty()
                     val mediaUrl = extractMediaUrlFromHtml(html)
                     if (!mediaUrl.isNullOrBlank()) {
+                        GlobalLog.append(Log.INFO, TAG, "Found media URL via OpenGraph: $mediaUrl")
                         val targetFile = tempManager.createTempFile("mp4")
                         if (downloadMediaChunk(mediaUrl, targetFile)) {
                             return targetFile
@@ -205,9 +304,10 @@ class LinkMediaResolver(
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Instagram OpenGraph resolution failed", e)
+            GlobalLog.append(Log.WARN, TAG, "Instagram OpenGraph resolution failed: ${e.message}")
         }
 
+        GlobalLog.append(Log.WARN, TAG, "All Instagram resolution strategies failed for: $cleanUrl")
         return null
     }
 
@@ -215,6 +315,7 @@ class LinkMediaResolver(
         val deferredMediaUrl = CompletableDeferred<String?>()
         var webView: WebView? = null
         try {
+            GlobalLog.append(Log.INFO, TAG, "Creating in-memory WebView for Instagram: $originalUrl")
             webView = WebView(context.applicationContext)
             webView.layout(0, 0, 1080, 1920)
 
@@ -239,7 +340,7 @@ class LinkMediaResolver(
                 ): WebResourceResponse? {
                     val reqUrl = request?.url?.toString()
                     if (reqUrl != null && isInstagramMediaUrl(reqUrl)) {
-                        Log.d(TAG, "WebView intercepted Instagram media URL: $reqUrl")
+                        GlobalLog.append(Log.INFO, TAG, "WebView intercepted Instagram media URL: $reqUrl")
                         val cleanMediaUrl = reqUrl
                             .replace(Regex("""[?&]bytestart=\d+"""), "")
                             .replace(Regex("""[?&]byteend=\d+"""), "")
@@ -252,30 +353,41 @@ class LinkMediaResolver(
 
                 override fun onPageFinished(view: WebView?, pageUrl: String?) {
                     super.onPageFinished(view, pageUrl)
+                    GlobalLog.append(Log.INFO, TAG, "WebView page finished: $pageUrl")
                     val js = """
                         (function() {
                             var v = document.querySelector('video');
                             if (v && (v.currentSrc || v.src)) {
-                                return v.currentSrc || v.src;
+                                var s = v.currentSrc || v.src;
+                                if (s && !s.startsWith('blob:')) return s;
                             }
-                            var s = document.querySelector('video source');
-                            if (s && s.src) {
-                                return s.src;
+                            var a = document.querySelector('audio');
+                            if (a && (a.currentSrc || a.src)) {
+                                var s = a.currentSrc || a.src;
+                                if (s && !s.startsWith('blob:')) return s;
                             }
-                            var btn = document.querySelector('div[role="button"]') || 
-                                      document.querySelector('.PlayButton') || 
-                                      document.querySelector('.EmbeddedMediaImage');
-                            if (btn) { btn.click(); }
-                            if (v) {
-                                try { v.play(); } catch(e){}
-                                return v.currentSrc || v.src || null;
+                            var vs = document.querySelector('video source');
+                            if (vs && vs.src && !vs.src.startsWith('blob:')) return vs.src;
+                            var asrc = document.querySelector('audio source');
+                            if (asrc && asrc.src && !asrc.src.startsWith('blob:')) return asrc.src;
+
+                            var btns = document.querySelectorAll('button, div[role="button"], .PlayButton, .EmbeddedMediaImage');
+                            for (var i = 0; i < btns.length; i++) {
+                                var btn = btns[i];
+                                var txt = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase();
+                                if (txt.includes('play') || txt.includes('allow') || txt.includes('accept') || txt.includes('agree')) {
+                                    try { btn.click(); } catch(e){}
+                                }
                             }
+                            if (v) { try { v.play(); } catch(e){} }
+                            if (a) { try { a.play(); } catch(e){} }
                             return null;
                         })()
                     """.trimIndent()
                     view?.evaluateJavascript(js) { result ->
                         val clean = result?.trim('"', ' ', '\'', '\\')
                         if (!clean.isNullOrBlank() && clean != "null" && clean.startsWith("http")) {
+                            GlobalLog.append(Log.INFO, TAG, "WebView JS found media URL: $clean")
                             if (!deferredMediaUrl.isCompleted) {
                                 deferredMediaUrl.complete(clean)
                             }
@@ -284,31 +396,51 @@ class LinkMediaResolver(
                 }
             }
 
-            val embedUrl = if (originalUrl.contains("/p/") || originalUrl.contains("/share/p/")) {
-                "https://www.instagram.com/p/$shortcode/embed/captioned/"
-            } else {
-                "https://www.instagram.com/reel/$shortcode/embed/captioned/"
+            // Load originalUrl first to keep any share tokens (?stkn=...)
+            val primaryUrl = if (originalUrl.isNotBlank()) originalUrl else {
+                "https://www.instagram.com/reel/$shortcode/"
             }
+            GlobalLog.append(Log.INFO, TAG, "WebView loading primary URL: $primaryUrl")
+            webView.loadUrl(primaryUrl)
 
-            Log.d(TAG, "Loading Instagram embed URL in WebView: $embedUrl")
-            webView.loadUrl(embedUrl)
-
-            val maxWaitMs = 7000L
+            val maxWaitMs = 7500L
             val startTime = System.currentTimeMillis()
+            var embedFallbackTried = false
+
             while (!deferredMediaUrl.isCompleted && System.currentTimeMillis() - startTime < maxWaitMs) {
                 delay(400)
                 if (deferredMediaUrl.isCompleted) break
+
+                // If 3.5s elapsed and nothing found, try embed URL
+                if (!embedFallbackTried && System.currentTimeMillis() - startTime > 3500L && shortcode.isNotBlank()) {
+                    embedFallbackTried = true
+                    val embedUrl = "https://www.instagram.com/p/$shortcode/embed/captioned/"
+                    GlobalLog.append(Log.INFO, TAG, "WebView switching to embed fallback: $embedUrl")
+                    webView.loadUrl(embedUrl)
+                }
+
                 webView.evaluateJavascript("""
                     (function() {
                         var v = document.querySelector('video');
-                        if (v && (v.currentSrc || v.src)) return v.currentSrc || v.src;
-                        var s = document.querySelector('video source');
-                        if (s && s.src) return s.src;
+                        if (v && (v.currentSrc || v.src)) {
+                            var s = v.currentSrc || v.src;
+                            if (s && !s.startsWith('blob:')) return s;
+                        }
+                        var a = document.querySelector('audio');
+                        if (a && (a.currentSrc || a.src)) {
+                            var s = a.currentSrc || a.src;
+                            if (s && !s.startsWith('blob:')) return s;
+                        }
+                        var vs = document.querySelector('video source');
+                        if (vs && vs.src && !vs.src.startsWith('blob:')) return vs.src;
+                        var asrc = document.querySelector('audio source');
+                        if (asrc && asrc.src && !asrc.src.startsWith('blob:')) return asrc.src;
                         return null;
                     })()
                 """.trimIndent()) { result ->
                     val clean = result?.trim('"', ' ', '\'', '\\')
                     if (!clean.isNullOrBlank() && clean != "null" && clean.startsWith("http")) {
+                        GlobalLog.append(Log.INFO, TAG, "WebView periodic poll found media URL: $clean")
                         if (!deferredMediaUrl.isCompleted) {
                             deferredMediaUrl.complete(clean)
                         }
@@ -318,7 +450,7 @@ class LinkMediaResolver(
 
             if (deferredMediaUrl.isCompleted) deferredMediaUrl.getCompleted() else null
         } catch (e: Exception) {
-            Log.e(TAG, "WebView error while resolving Instagram media", e)
+            GlobalLog.append(Log.ERROR, TAG, "WebView exception during Instagram resolution: ${e.message}")
             null
         } finally {
             try {
@@ -337,8 +469,12 @@ class LinkMediaResolver(
         ) {
             return false
         }
-        return (lower.contains("cdninstagram.com") || lower.contains("fbcdn.net")) &&
-                (lower.contains(".mp4") || lower.contains("/v/t50.") || lower.contains("mime_type=video") || lower.contains("bytestart="))
+        val isMetaCdn = lower.contains("cdninstagram.com") || lower.contains("fbcdn.net")
+        val isMedia = lower.contains(".mp4") || lower.contains(".m4a") || lower.contains(".mp3") ||
+                lower.contains("/v/t50.") || lower.contains("/v/t0.") || lower.contains("/v/t64.") ||
+                lower.contains("/m1/v/") || lower.contains("mime_type=video") || lower.contains("mime_type=audio") ||
+                lower.contains("bytestart=")
+        return isMetaCdn && isMedia
     }
 
     private fun resolveCanonicalUrl(rawUrl: String): String {
@@ -577,18 +713,26 @@ class LinkMediaResolver(
     private suspend fun downloadMediaChunk(
         mediaUrl: String,
         targetFile: File,
-        maxBytes: Long = MAX_CHUNK_BYTES
+        maxBytes: Long = MAX_CHUNK_BYTES,
+        customUserAgent: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder()
+            val hasRangeInUrl = mediaUrl.contains("range=") || mediaUrl.contains("bytestart=")
+            val defaultUa = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            val reqBuilder = Request.Builder()
                 .url(mediaUrl)
-                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-                .addHeader("Range", "bytes=0-${maxBytes - 1}")
-                .build()
+                .addHeader("User-Agent", customUserAgent ?: defaultUa)
+                .addHeader("Accept", "*/*")
 
+            if (!hasRangeInUrl) {
+                reqBuilder.addHeader("Range", "bytes=0-${maxBytes - 1}")
+            }
+
+            val request = reqBuilder.build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful && response.code != 206) {
-                    return@use downloadWithoutRange(mediaUrl, targetFile, maxBytes)
+                    GlobalLog.append(Log.WARN, TAG, "Chunk download HTTP ${response.code}, trying direct download...")
+                    return@use downloadWithoutRange(mediaUrl, targetFile, maxBytes, customUserAgent)
                 }
                 val body = response.body ?: return@use false
                 body.byteStream().use { input ->
@@ -603,27 +747,37 @@ class LinkMediaResolver(
                         }
                     }
                 }
-                targetFile.exists() && targetFile.length() > 2048
+                val success = targetFile.exists() && targetFile.length() > 2048
+                if (success) {
+                    GlobalLog.append(Log.INFO, TAG, "Downloaded ${targetFile.length()} bytes to ${targetFile.name}")
+                }
+                success
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Range download failed, attempting direct download", e)
-            downloadWithoutRange(mediaUrl, targetFile, maxBytes)
+            GlobalLog.append(Log.WARN, TAG, "Range download failed (${e.message}), trying direct download...")
+            downloadWithoutRange(mediaUrl, targetFile, maxBytes, customUserAgent)
         }
     }
 
     private fun downloadWithoutRange(
         mediaUrl: String,
         targetFile: File,
-        maxBytes: Long
+        maxBytes: Long,
+        customUserAgent: String? = null
     ): Boolean {
         return try {
+            val defaultUa = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
             val request = Request.Builder()
                 .url(mediaUrl)
-                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                .addHeader("User-Agent", customUserAgent ?: defaultUa)
+                .addHeader("Accept", "*/*")
                 .build()
 
             okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return false
+                if (!response.isSuccessful) {
+                    GlobalLog.append(Log.ERROR, TAG, "Direct download failed with HTTP ${response.code}")
+                    return false
+                }
                 val body = response.body ?: return false
                 body.byteStream().use { input ->
                     FileOutputStream(targetFile).use { output ->
@@ -637,10 +791,14 @@ class LinkMediaResolver(
                         }
                     }
                 }
-                targetFile.exists() && targetFile.length() > 2048
+                val success = targetFile.exists() && targetFile.length() > 2048
+                if (success) {
+                    GlobalLog.append(Log.INFO, TAG, "Direct download succeeded: ${targetFile.length()} bytes")
+                }
+                success
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Direct download without range failed", e)
+            GlobalLog.append(Log.ERROR, TAG, "Direct download exception: ${e.message}")
             false
         }
     }
