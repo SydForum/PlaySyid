@@ -1,6 +1,6 @@
 [versions]
 re2j = "1.8"
-rhino = "1.9.1"
+rhino = "1.7.15"
 okhttp-dns = "5.3.2"
 androidGradlePlugin = "8.13.2"
 annotation = "1.9.1"
