@@ -22,6 +22,7 @@ import com.darkxvenom.airbeats.share.ShareIntentParser
 import com.darkxvenom.airbeats.share.SharedContent
 import com.darkxvenom.airbeats.ui.theme.AirBeatsTheme
 import dagger.hilt.android.AndroidEntryPoint
+import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -59,12 +60,17 @@ class SharedMusicIdentificationActivity : ComponentActivity() {
         // Bind or reuse existing player connection
         playerConnection = PlayerConnection.instance
         if (playerConnection == null) {
-            startService(Intent(this, MusicService::class.java))
-            isServiceBound = bindService(
-                Intent(this, MusicService::class.java),
-                serviceConnection,
-                Context.BIND_AUTO_CREATE
-            )
+            runCatching {
+                startService(Intent(this, MusicService::class.java))
+            }.onFailure { Timber.e(it, "Failed to start MusicService") }
+            runCatching {
+                bindService(
+                    Intent(this, MusicService::class.java),
+                    serviceConnection,
+                    Context.BIND_AUTO_CREATE
+                )
+            }.onSuccess { isServiceBound = it }
+             .onFailure { Timber.e(it, "Failed to bind MusicService") }
         }
 
         val sharedContents = ShareIntentParser.parse(this, intent)

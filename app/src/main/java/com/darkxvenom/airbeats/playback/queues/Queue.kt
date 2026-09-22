@@ -38,3 +38,21 @@ fun List<MediaItem>.filterExplicit(enabled: Boolean = true) =
     } else {
         this
     }
+
+fun Queue.Status.filterExcluded(excludedSongIds: Set<String>): Queue.Status {
+    if (excludedSongIds.isEmpty()) return this
+    val currentItem = items.getOrNull(mediaItemIndex)
+    val filtered = items.filterIndexed { index, mediaItem ->
+        index == mediaItemIndex || mediaItem.mediaId !in excludedSongIds
+    }
+    val newIndex = if (currentItem != null) {
+        filtered.indexOfFirst { it.mediaId == currentItem.mediaId }.takeIf { it >= 0 } ?: 0
+    } else {
+        0
+    }
+    return copy(items = filtered, mediaItemIndex = newIndex)
+}
+
+fun List<MediaItem>.filterExcluded(excludedSongIds: Set<String>): List<MediaItem> =
+    if (excludedSongIds.isEmpty()) this else filterNot { it.mediaId in excludedSongIds }
+

@@ -1044,5 +1044,18 @@
     <string name="search_another_provider">Search manually in AirBeats</string>
     <string name="error">Error</string>
     <string name="resolving_link">Fetching audio from shared link…</string>
+
+    <!-- Recommendation Exclusions -->
+    <string name="dont_recommend_again">Don\'t recommend again</string>
+    <string name="allow_recommendations">Allow recommendations</string>
+    <string name="dont_recommend_applied">Song removed from recommendations</string>
+    <string name="recommendation_restored">Song restored to recommendations</string>
+    <string name="excluded_songs">Excluded Songs</string>
+    <string name="excluded_songs_desc">%d songs hidden from recommendations</string>
+    <string name="no_excluded_songs">No Excluded Songs</string>
+    <string name="no_excluded_songs_desc">Songs you mark “Don\'t recommend again” will appear here. You can restore each one separately.</string>
+    <string name="clear_all_exclusions">Restore All</string>
+    <string name="all_exclusions_cleared">All excluded songs restored</string>
+    <string name="recommendations">Recommendations</string>
 </resources>
 

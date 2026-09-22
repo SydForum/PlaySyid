@@ -105,6 +105,7 @@ fun SongMenu(
     val playerConnection = LocalPlayerConnection.current ?: return
     val songState = database.song(originalSong.id).collectAsState(initial = originalSong)
     val song = songState.value ?: originalSong
+    val isExcluded by database.isRecommendationExcluded(originalSong.id).collectAsState(initial = false)
     val download by LocalDownloadUtil.current.getDownload(originalSong.id)
         .collectAsState(initial = null)
     val coroutineScope = rememberCoroutineScope()
@@ -657,6 +658,46 @@ fun SongMenu(
                     bottomSheetPageState.show {
                         (song.id)
                     }
+                }
+            )
+        }
+        item {
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = stringResource(
+                            if (isExcluded) R.string.allow_recommendations
+                            else R.string.dont_recommend_again
+                        )
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.thumb_down),
+                        contentDescription = null,
+                    )
+                },
+                modifier = Modifier.clickable {
+                    val wasExcluded = isExcluded
+                    coroutineScope.launch(Dispatchers.IO) {
+                        if (wasExcluded) {
+                            database.removeRecommendationExclusion(song.id)
+                        } else {
+                            database.insert(
+                                com.darkxvenom.airbeats.db.entities.RecommendationExclusionEntity(
+                                    songId = song.id,
+                                    title = song.song.title,
+                                    artist = song.artists.joinToString { it.name },
+                                    thumbnailUrl = song.song.thumbnailUrl
+                                )
+                            )
+                        }
+                    }
+                    Toast.makeText(
+                        context,
+                        if (wasExcluded) R.string.recommendation_restored else R.string.dont_recommend_applied,
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             )
         }

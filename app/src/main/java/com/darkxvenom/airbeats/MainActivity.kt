@@ -329,14 +329,18 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         com.darkxvenom.airbeats.playback.AppForegroundTracker.isForeground = true
-        startService(Intent(this, MusicService::class.java))
+        runCatching {
+            startService(Intent(this, MusicService::class.java))
+        }.onFailure { Timber.e(it, "Failed to start MusicService from MainActivity") }
         if (!isServiceBound) {
-            bindService(
-                Intent(this, MusicService::class.java),
-                serviceConnection,
-                Context.BIND_AUTO_CREATE
-            )
-            isServiceBound = true
+            runCatching {
+                bindService(
+                    Intent(this, MusicService::class.java),
+                    serviceConnection,
+                    Context.BIND_AUTO_CREATE
+                )
+            }.onSuccess { isServiceBound = it }
+             .onFailure { Timber.e(it, "Failed to bind MusicService from MainActivity") }
         }
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {

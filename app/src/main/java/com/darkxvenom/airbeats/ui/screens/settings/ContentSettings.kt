@@ -9,12 +9,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.darkxvenom.airbeats.LocalDatabase
 import com.darkxvenom.airbeats.NotificationPermissionPreference
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.innertube.YouTube
 import com.darkxvenom.airbeats.constants.*
 import com.darkxvenom.airbeats.ui.component.EditTextPreference
 import com.darkxvenom.airbeats.ui.component.ListPreference
+import com.darkxvenom.airbeats.ui.component.PreferenceEntry
 import com.darkxvenom.airbeats.ui.component.SettingsGeneralCategory
 import com.darkxvenom.airbeats.ui.component.SettingsPage
 import com.darkxvenom.airbeats.ui.component.SliderPreference
@@ -141,6 +145,23 @@ fun ContentSettings(
                 )},
 
                 {NotificationPermissionPreference()},
+            )
+        )
+
+        // Recommendations
+        val database = LocalDatabase.current
+        val excludedCount by database.getRecommendationExclusionsCount().collectAsState(initial = 0)
+        SettingsGeneralCategory(
+            title = stringResource(R.string.recommendations),
+            items = listOf(
+                {
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.excluded_songs)) },
+                        description = stringResource(R.string.excluded_songs_desc, excludedCount),
+                        icon = { Icon(painterResource(R.drawable.thumb_down), null) },
+                        onClick = { navController.navigate("settings/content/excluded_songs") },
+                    )
+                }
             )
         )
 

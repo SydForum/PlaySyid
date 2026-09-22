@@ -34,6 +34,7 @@ import com.darkxvenom.airbeats.db.entities.Playlist
 import com.darkxvenom.airbeats.db.entities.PlaylistEntity
 import com.darkxvenom.airbeats.db.entities.PlaylistSong
 import com.darkxvenom.airbeats.db.entities.PlaylistSongMap
+import com.darkxvenom.airbeats.db.entities.RecommendationExclusionEntity
 import com.darkxvenom.airbeats.db.entities.RelatedSongMap
 import com.darkxvenom.airbeats.db.entities.SearchHistory
 import com.darkxvenom.airbeats.db.entities.SetVideoIdEntity
@@ -1389,4 +1390,33 @@ interface DatabaseDao {
     @Transaction
     @Query("SELECT * FROM song WHERE inLibrary IS NOT NULL OR dateDownload IS NOT NULL")
     suspend fun getAllLibrarySongsSync(): List<Song>
+
+    // ==================== Recommendation Exclusions ("Don't recommend again") ====================
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(exclusion: RecommendationExclusionEntity): Long
+
+    @Query("DELETE FROM recommendation_exclusions WHERE songId = :songId")
+    fun removeRecommendationExclusion(songId: String): Int
+
+    @Query("SELECT * FROM recommendation_exclusions ORDER BY excludedAt DESC")
+    fun getAllRecommendationExclusions(): List<RecommendationExclusionEntity>
+
+    @Query("SELECT * FROM recommendation_exclusions ORDER BY excludedAt DESC")
+    fun observeRecommendationExclusions(): Flow<List<RecommendationExclusionEntity>>
+
+    @Query("SELECT COUNT(*) FROM recommendation_exclusions")
+    fun getRecommendationExclusionsCount(): Flow<Int>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM recommendation_exclusions WHERE songId = :songId)")
+    fun isRecommendationExcluded(songId: String): Flow<Boolean>
+
+    @Query("SELECT songId FROM recommendation_exclusions")
+    fun getExcludedSongIds(): List<String>
+
+    @Query("SELECT songId FROM recommendation_exclusions")
+    fun observeExcludedSongIds(): Flow<List<String>>
+
+    @Query("DELETE FROM recommendation_exclusions")
+    fun clearRecommendationExclusions(): Int
 }

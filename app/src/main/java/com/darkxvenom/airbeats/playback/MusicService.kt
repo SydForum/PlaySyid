@@ -60,6 +60,7 @@ import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaController
 import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionToken
 import com.darkxvenom.airbeats.innertube.YouTube
@@ -146,6 +147,7 @@ import com.darkxvenom.airbeats.models.toMediaMetadata
 import com.darkxvenom.airbeats.playback.queues.EmptyQueue
 import com.darkxvenom.airbeats.playback.queues.Queue
 import com.darkxvenom.airbeats.playback.queues.YouTubeQueue
+import com.darkxvenom.airbeats.playback.queues.filterExcluded
 import com.darkxvenom.airbeats.playback.queues.filterExplicit
 import com.darkxvenom.airbeats.utils.CoilBitmapLoader
 import com.darkxvenom.airbeats.utils.DiscordRPC
@@ -423,6 +425,11 @@ class MusicService :
     override fun onCreate() {
         super.onCreate()
         instance = this
+        setListener(object : MediaSessionService.Listener {
+            override fun onForegroundServiceStartNotAllowedException() {
+                Timber.w("MediaSessionService listener: onForegroundServiceStartNotAllowedException caught and suppressed")
+            }
+        })
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider(
                 this,
@@ -1310,9 +1317,12 @@ class MusicService :
             player.playWhenReady = playWhenReady
         }
         scope.launch(SilentHandler) {
+            val excludedSongIds = withContext(Dispatchers.IO) { database.getExcludedSongIds().toHashSet() }
             val initialStatus =
                 withContext(Dispatchers.IO) {
-                    queue.getInitialStatus().filterExplicit(dataStore.get(HideExplicitKey, false))
+                    queue.getInitialStatus()
+                        .filterExplicit(dataStore.get(HideExplicitKey, false))
+                        .filterExcluded(excludedSongIds)
                 }
             if (queue.preloadItem != null && player.playbackState == STATE_IDLE) return@launch
             if (initialStatus.title != null) {
@@ -1495,6 +1505,9 @@ class MusicService :
                 }
             }
 
+            val excludedSongIds = withContext(Dispatchers.IO) { database.getExcludedSongIds().toHashSet() }
+            newMediaItems = newMediaItems.filter { it.mediaId !in excludedSongIds }
+
             if (newMediaItems.isNotEmpty() && player.playbackState != STATE_IDLE) {
                 val previousCount = player.mediaItemCount
                 val wasEnded = player.playbackState == Player.STATE_ENDED || !player.isPlaying
@@ -1534,7 +1547,8 @@ class MusicService :
             val radioQueue = YouTubeQueue(
                 endpoint = WatchEndpoint(videoId = currentMediaMetadata.id)
             )
-            val initialStatus = radioQueue.getInitialStatus()
+            val excludedSongIds = withContext(Dispatchers.IO) { database.getExcludedSongIds().toHashSet() }
+            val initialStatus = radioQueue.getInitialStatus().filterExcluded(excludedSongIds)
 
             if (initialStatus.title != null) {
                 queueTitle = initialStatus.title
@@ -1566,10 +1580,11 @@ class MusicService :
                         YouTube
                             .next(WatchEndpoint(playlistId = it.endpoint.playlistId))
                             .onSuccess {
+                                val excludedSongIds = withContext(Dispatchers.IO) { database.getExcludedSongIds().toHashSet() }
                                 automixItems.value =
                                     it.items.map { song ->
                                         song.toMediaItem()
-                                    }
+                                    }.filterExcluded(excludedSongIds)
                             }
                     }
             }
@@ -2259,8 +2274,11 @@ class MusicService :
         if (shouldExtendQueue) {
             if (currentQueue.hasNextPage()) {
                 scope.launch(SilentHandler) {
+                    val excludedSongIds = withContext(Dispatchers.IO) { database.getExcludedSongIds().toHashSet() }
                     val mediaItems =
-                        currentQueue.nextPage().filterExplicit(dataStore.get(HideExplicitKey, false))
+                        currentQueue.nextPage()
+                            .filterExplicit(dataStore.get(HideExplicitKey, false))
+                            .filterExcluded(excludedSongIds)
                     if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
                         player.addMediaItems(mediaItems)
                     } else if (mediaItems.isEmpty()) {
@@ -3146,6 +3164,27 @@ class MusicService :
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
+
+    override fun startForegroundService(service: Intent?): ComponentName? {
+        return try {
+            super.startForegroundService(service)
+        } catch (e: Exception) {
+            // Android 12+ (API 31+) / Android 14+ / Android 15 (API 35) throws
+            // ForegroundServiceStartNotAllowedException when startForegroundService() is called from background.
+            // Catching here prevents uncaught fatal crash during async MediaNotificationManager transitions.
+            Timber.e(e, "ForegroundServiceStartNotAllowedException caught and suppressed in startForegroundService")
+            null
+        }
+    }
+
+    override fun startService(service: Intent?): ComponentName? {
+        return try {
+            super.startService(service)
+        } catch (e: Exception) {
+            Timber.e(e, "Exception caught and suppressed in startService")
+            null
+        }
+    }
 
     inner class MusicBinder : Binder() {
         val service: MusicService

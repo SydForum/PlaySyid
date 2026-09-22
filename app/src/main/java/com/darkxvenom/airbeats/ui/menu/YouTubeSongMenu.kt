@@ -89,6 +89,7 @@ fun YouTubeSongMenu(
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val librarySong by database.song(song.id).collectAsState(initial = null)
+    val isExcluded by database.isRecommendationExcluded(song.id).collectAsState(initial = false)
     val download by LocalDownloadUtil.current.getDownload(song.id).collectAsState(initial = null)
     val coroutineScope = rememberCoroutineScope()
     val artists =
@@ -387,6 +388,31 @@ fun YouTubeSongMenu(
                 }
             context.startActivity(Intent.createChooser(intent, null))
             onDismiss()
+        }
+        GridMenuItem(
+            icon = R.drawable.thumb_down,
+            title = if (isExcluded) R.string.allow_recommendations else R.string.dont_recommend_again,
+        ) {
+            val wasExcluded = isExcluded
+            coroutineScope.launch(Dispatchers.IO) {
+                if (wasExcluded) {
+                    database.removeRecommendationExclusion(song.id)
+                } else {
+                    database.insert(
+                        com.darkxvenom.airbeats.db.entities.RecommendationExclusionEntity(
+                            songId = song.id,
+                            title = song.title,
+                            artist = song.artists.joinToString { it.name },
+                            thumbnailUrl = song.thumbnail
+                        )
+                    )
+                }
+            }
+            Toast.makeText(
+                context,
+                if (wasExcluded) R.string.recommendation_restored else R.string.dont_recommend_applied,
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 }

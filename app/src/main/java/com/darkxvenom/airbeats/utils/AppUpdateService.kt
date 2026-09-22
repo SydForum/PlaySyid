@@ -313,10 +313,14 @@ class AppUpdateService : Service() {
                 action = ACTION_DOWNLOAD
                 putExtra(EXTRA_DOWNLOAD_URL, downloadUrl)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to start AppUpdateService")
             }
         }
     }

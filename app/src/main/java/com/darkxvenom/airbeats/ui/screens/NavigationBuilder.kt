@@ -410,6 +410,9 @@ fun NavGraphBuilder.navigationBuilder(
     composable("settings/content") {
         ContentSettings(navController, scrollBehavior)
     }
+    composable("settings/content/excluded_songs") {
+        com.darkxvenom.airbeats.ui.screens.settings.ExcludedSongsScreen(navController, scrollBehavior)
+    }
     composable("settings/lyrics") {
         com.darkxvenom.airbeats.ui.screens.settings.LyricsSettings(navController, scrollBehavior)
     }

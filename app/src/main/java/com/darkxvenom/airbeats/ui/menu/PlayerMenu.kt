@@ -156,6 +156,7 @@ fun PlayerMenu(
     val playerConnection = LocalPlayerConnection.current ?: return
     val playerVolume = playerConnection.service.playerVolume.collectAsState()
     val librarySong by database.song(mediaMetadata.id).collectAsState(initial = null)
+    val isExcluded by database.isRecommendationExcluded(mediaMetadata.id).collectAsState(initial = false)
     val coroutineScope = rememberCoroutineScope()
 
 
@@ -634,6 +635,48 @@ fun PlayerMenu(
                             modifier = Modifier.clickable {
                                 onShowDetailsDialog()
                                 onDismiss()
+                            }
+                        )
+                    }
+
+                    item {
+                        androidx.compose.material3.ListItem(
+                            headlineContent = {
+                                Text(
+                                    stringResource(
+                                        if (isExcluded) R.string.allow_recommendations
+                                        else R.string.dont_recommend_again
+                                    )
+                                )
+                            },
+                            leadingContent = {
+                                Icon(
+                                    painterResource(R.drawable.thumb_down),
+                                    contentDescription = null
+                                )
+                            },
+                            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable {
+                                val wasExcluded = isExcluded
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    if (wasExcluded) {
+                                        database.removeRecommendationExclusion(mediaMetadata.id)
+                                    } else {
+                                        database.insert(
+                                            com.darkxvenom.airbeats.db.entities.RecommendationExclusionEntity(
+                                                songId = mediaMetadata.id,
+                                                title = mediaMetadata.title,
+                                                artist = mediaMetadata.artists.joinToString { it.name },
+                                                thumbnailUrl = mediaMetadata.thumbnailUrl
+                                            )
+                                        )
+                                    }
+                                }
+                                Toast.makeText(
+                                    context,
+                                    if (wasExcluded) R.string.recommendation_restored else R.string.dont_recommend_applied,
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         )
                     }
