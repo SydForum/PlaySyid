@@ -387,8 +387,6 @@ fun WaterDropIconButton(
 
 // ==================== ORIGINAL FUNCTIONS ====================
 
-@SuppressLint("ObsoleteSdkInt")
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 fun getAppVersion(context: Context): String {
     return try {
         val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -409,7 +407,6 @@ fun getAppVersion(context: Context): String {
     }
 }
 
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun VersionCard(uriHandler: UriHandler) {
     val context = LocalContext.current
@@ -821,7 +818,6 @@ fun isNewerVersion(remoteVersion: String, currentVersion: String): Boolean {
 }
 
 // ==================== MAIN SETTINGS SCREEN ====================
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(

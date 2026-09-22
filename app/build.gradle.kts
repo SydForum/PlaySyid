@@ -43,7 +43,7 @@ android {
 
     defaultConfig {
         applicationId = "com.darkxvenom.airbeats"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 35
         versionCode = 227
         versionName = "6.1.8"

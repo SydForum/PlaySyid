@@ -420,7 +420,6 @@ class MusicService :
 
     private var consecutivePlaybackErr = 0
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -2389,7 +2388,6 @@ class MusicService :
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onEvents(
         player: Player,
         events: Player.Events,
@@ -3100,7 +3098,6 @@ class MusicService :
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onDestroy() {
         if (dataStore.get(PersistentQueueKey, true)) {
             saveQueueToDisk()
