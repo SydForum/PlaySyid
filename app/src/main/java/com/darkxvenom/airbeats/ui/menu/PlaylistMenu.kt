@@ -457,30 +457,29 @@ fun PlaylistMenu(
             }
         }
 
-            GridMenuItem(
-                icon = R.drawable.save_to_storage,
-                title = R.string.save_playlist_to_storage,
-            ) {
-                val hasPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    true
-                } else {
-                    androidx.core.content.ContextCompat.checkSelfPermission(
-                        context,
-                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                }
+        GridMenuItem(
+            icon = R.drawable.save_to_storage,
+            title = R.string.save_playlist_to_storage,
+        ) {
+            val hasPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                true
+            } else {
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
 
-                if (hasPermission) {
-                    val savingToastMsg = context.getString(R.string.saving_playlist_to_storage, playlist.playlist.name)
-                    val playlistName = playlist.playlist.name
-                    android.widget.Toast.makeText(context, savingToastMsg, android.widget.Toast.LENGTH_SHORT).show()
-                    com.darkxvenom.airbeats.utils.SaveToStorageUtil.savePlaylistToMusicFolderAsync(
-                        context = context,
-                        playlistName = playlistName,
-                        mediaList = songs.map { it.toMediaMetadata() }
-                    )
-                    onDismiss()
-                }
+            if (hasPermission) {
+                val savingToastMsg = context.getString(R.string.saving_playlist_to_storage, playlist.playlist.name)
+                val playlistName = playlist.playlist.name
+                android.widget.Toast.makeText(context, savingToastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                com.darkxvenom.airbeats.utils.SaveToStorageUtil.savePlaylistToMusicFolderAsync(
+                    context = context,
+                    playlistName = playlistName,
+                    mediaList = songs.map { it.toMediaMetadata() }
+                )
+                onDismiss()
             }
         }
 
