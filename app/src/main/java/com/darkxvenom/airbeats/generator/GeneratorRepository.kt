@@ -2,7 +2,7 @@ package com.darkxvenom.airbeats.generator
 
 import android.content.Context
 import com.darkxvenom.airbeats.ai.AiRecommendationHelper
-import com.darkxvenom.airbeats.db.InternalDatabase
+import com.darkxvenom.airbeats.db.MusicDatabase
 import com.darkxvenom.airbeats.db.entities.PlaylistEntity
 import com.darkxvenom.airbeats.db.entities.PlaylistSongMap
 import com.darkxvenom.airbeats.db.entities.Song
@@ -39,8 +39,8 @@ val GENRE_QUICK_CHIPS = listOf(
 @Singleton
 class GeneratorRepository @Inject constructor(
     @ApplicationContext private val context: Context,
+    val database: MusicDatabase,
 ) {
-    private val database = InternalDatabase.newInstance(context)
 
     /**
      * Deduplicate tracks and cap artist concentration to max 3 tracks per artist.
@@ -281,11 +281,11 @@ class GeneratorRepository @Inject constructor(
             isEditable = true,
         )
 
-        database.query {
-            insert(playlist)
+        database.runInTransaction {
+            database.insert(playlist)
             tracks.forEachIndexed { index, mediaMetadata ->
-                insert(mediaMetadata)
-                insert(
+                database.insert(mediaMetadata)
+                database.insert(
                     PlaylistSongMap(
                         playlistId = playlist.id,
                         songId = mediaMetadata.id,

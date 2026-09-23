@@ -24,6 +24,8 @@ object DatabaseSanitizer {
                 db.execSQL("UPDATE album SET title = 'Unknown Album' WHERE title IS NULL OR title = ''")
                 db.execSQL("UPDATE album SET thumbnailUrl = '' WHERE thumbnailUrl IS NULL")
                 db.execSQL("UPDATE playlist SET name = 'Unknown Playlist' WHERE name IS NULL OR name = ''")
+                db.execSQL("UPDATE playlist SET browseId = NULL WHERE browseId = 'null' OR browseId = '' OR browseId LIKE 'Success(%'")
+                db.execSQL("UPDATE playlist SET bookmarkedAt = datetime('now') WHERE bookmarkedAt IS NULL")
 
                 // Clean up invalid foreign key mappings with null or empty keys
                 db.execSQL("DELETE FROM song_artist_map WHERE songId IS NULL OR songId = '' OR artistId IS NULL OR artistId = ''")

@@ -63,6 +63,8 @@ class MusicDatabase(
             }
         }
 
+    fun runInTransaction(block: () -> Unit) = delegate.runInTransaction(block)
+
     override fun checkpoint() {
         try {
             openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)".toSQLiteQuery()).use { cursor ->

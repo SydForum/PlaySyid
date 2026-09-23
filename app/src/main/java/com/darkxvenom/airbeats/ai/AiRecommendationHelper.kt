@@ -38,9 +38,10 @@ object AiRecommendationHelper {
 
     suspend fun generateRecommendations(
         context: Context,
+        database: com.darkxvenom.airbeats.db.MusicDatabase? = null,
         onLog: (suspend (String) -> Unit)? = null
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val database = InternalDatabase.newInstance(context)
+        val database = database ?: InternalDatabase.newInstance(context)
 
         onLog?.invoke("Analyzing your listening history...")
         // 1. Gather User Taste

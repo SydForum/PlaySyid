@@ -39,6 +39,7 @@ fun RefreshAiRecommendationDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val database = com.darkxvenom.airbeats.LocalDatabase.current
     val coroutineScope = rememberCoroutineScope()
 
     var isGenerating by remember { mutableStateOf(true) }
@@ -50,6 +51,7 @@ fun RefreshAiRecommendationDialog(
         coroutineScope.launch {
             val result = AiRecommendationHelper.generateRecommendations(
                 context = context,
+                database = database,
                 onLog = { log ->
                     withContext(Dispatchers.Main) {
                         generationLog = log
