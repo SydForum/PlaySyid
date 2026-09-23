@@ -126,42 +126,10 @@ fun NavGraphBuilder.navigationBuilder(
         }
     }
     composable(Screens.Search.route) {
-        val (navBarStyle, _) = rememberEnumPreference(
-            com.darkxvenom.airbeats.constants.NavBarStyleKey,
-            defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC
-        )
-        val (homeScreenStyle, _) = rememberEnumPreference(
-            HomeScreenStyleKey,
-            defaultValue = HomeScreenStyle.CLASSIC
-        )
-        
-        val useApple = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE || (navBarStyle != com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY && homeScreenStyle == HomeScreenStyle.APPLE)
-
-        if (homeScreenStyle == HomeScreenStyle.MATERIAL || navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.MATERIAL) {
-            com.darkxvenom.airbeats.ui.screens.material.MaterialSearchScreen(navController = navController)
-        } else if (useApple) {
-            com.darkxvenom.airbeats.ui.screens.apple.AppleSearchScreen(navController = navController)
-        } else {
-            SpotifySearchScreen(navController = navController)
-        }
+        com.darkxvenom.airbeats.ui.screens.material.MaterialSearchScreen(navController = navController)
     }
     composable("search/") {
-        val (navBarStyle, _) = rememberEnumPreference(
-            com.darkxvenom.airbeats.constants.NavBarStyleKey,
-            defaultValue = com.darkxvenom.airbeats.constants.NavBarStyle.NEW_CLASSIC
-        )
-        val (homeScreenStyle, _) = rememberEnumPreference(
-            HomeScreenStyleKey,
-            defaultValue = HomeScreenStyle.CLASSIC
-        )
-        
-        val useApple = navBarStyle == com.darkxvenom.airbeats.constants.NavBarStyle.APPLE || (navBarStyle != com.darkxvenom.airbeats.constants.NavBarStyle.SPOTIFY && homeScreenStyle == HomeScreenStyle.APPLE)
-
-        if (useApple) {
-            com.darkxvenom.airbeats.ui.screens.apple.AppleSearchScreen(navController = navController)
-        } else {
-            SpotifySearchScreen(navController = navController)
-        }
+        com.darkxvenom.airbeats.ui.screens.material.MaterialSearchScreen(navController = navController)
     }
     composable("history") {
         HistoryScreen(navController)

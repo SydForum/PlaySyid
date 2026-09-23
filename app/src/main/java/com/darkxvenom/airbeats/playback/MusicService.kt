@@ -2509,14 +2509,17 @@ class MusicService :
 
         player.currentMediaItem?.mediaId?.let { mediaId ->
             songUrlCache.remove(mediaId)
-            tryOrNull { playerCache.removeResource(mediaId) }
         }
 
         val isConnectionError = (error.cause?.cause is PlaybackException) &&
                 (error.cause?.cause as PlaybackException).errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
 
         if (!isNetworkConnected.value || isConnectionError) {
-            waitOnNetworkError()
+            if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
+                skipOnError()
+            } else {
+                waitOnNetworkError()
+            }
             return
         }
 
@@ -2579,14 +2582,18 @@ class MusicService :
             val mediaId = dataSpec.key ?: error("No media id")
 
             val checkLength = if (dataSpec.length > 0) dataSpec.length else 1L
-            // If the song is downloaded in downloadCache, it is fully on disk and never needs network
-            if (downloadCache.isCached(mediaId, dataSpec.position, checkLength)) {
+            val isDownloaded = downloadCache.isCached(mediaId, dataSpec.position, checkLength)
+            val isPlayerCached = playerCache.isCached(mediaId, dataSpec.position, checkLength)
+
+            // If the song is cached in either downloadCache or playerCache, serve immediately from cache
+            if (isDownloaded || isPlayerCached) {
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
                 return@Factory dataSpec
             }
 
-            // If offline, allow playing whatever chunks are available in playerCache
-            if (!isNetworkConnected.value && playerCache.isCached(mediaId, dataSpec.position, checkLength)) {
+            // If offline, and we have any cached data for this mediaId in either cache, allow playing it
+            // directly without falling through to failing remote networks
+            if (!isNetworkConnected.value && (downloadCache.keys.contains(mediaId) || playerCache.keys.contains(mediaId))) {
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
                 return@Factory dataSpec
             }
@@ -2718,7 +2725,6 @@ class MusicService :
                             }.getOrNull()
                         }
                         if (jsStreamUrl != null) {
-                            tryOrNull { playerCache.removeResource(mediaId) }
                             Timber.tag("MusicService").d("JioSaavn Priority: Serving 320k for '${mediaMetadata.title}'")
                             database.query {
                                 upsert(
@@ -2839,7 +2845,6 @@ class MusicService :
                                 )
                             }
                             if (jsStreamUrl != null) {
-                                tryOrNull { playerCache.removeResource(mediaId) }
                                 database.query {
                                     upsert(
                                         FormatEntity(

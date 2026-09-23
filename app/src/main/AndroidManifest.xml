@@ -111,6 +111,14 @@
                 android:resource="@xml/widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".utils.SaveToStorageCancelReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.darkxvenom.airbeats.action.CANCEL_SAVE_TO_STORAGE" />
+            </intent-filter>
+        </receiver>
+
         <uses-library
             android:name="org.apache.http.legacy"
             android:required="false" />
