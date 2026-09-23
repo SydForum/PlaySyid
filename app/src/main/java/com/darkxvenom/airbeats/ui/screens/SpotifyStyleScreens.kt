@@ -100,6 +100,9 @@ import com.darkxvenom.airbeats.viewmodels.MoodAndGenresViewModel
 import java.net.URLEncoder
 import com.darkxvenom.airbeats.ui.screens.settings.DarkMode
 import com.darkxvenom.airbeats.constants.DarkModeKey
+import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
+import com.darkxvenom.airbeats.constants.MaterialHomeSection
+import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
 import com.darkxvenom.airbeats.utils.rememberEnumPreference
 
 @Composable
@@ -181,6 +184,8 @@ fun SpotifyHomeScreen(
     }
 
     val hazeState = androidx.compose.runtime.remember { dev.chrisbanes.haze.HazeState() }
+    val hiddenSections by com.darkxvenom.airbeats.utils.rememberPreference(HiddenHomeSectionsKey, defaultValue = emptySet())
+    fun isSectionVisible(section: MaterialHomeSection): Boolean = section.id !in hiddenSections
 
     Box(Modifier.fillMaxSize()) {
         Box(
@@ -212,55 +217,78 @@ fun SpotifyHomeScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
 
-                quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
-                    item {
-                        NavigationTitle(title = "Quick picks")
-                        SpotifyLocalRow(picks.take(12), playerConnection)
+                if (isSectionVisible(MaterialHomeSection.QUICK_PICKS)) {
+                    quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
+                        item {
+                            NavigationTitle(title = "Quick picks")
+                            SpotifyLocalRow(picks.take(12), playerConnection)
+                        }
                     }
                 }
 
-                keepListening?.filterIsInstance<Song>()?.takeIf { it.isNotEmpty() }?.let { items ->
-                    item {
-                        NavigationTitle(title = "Keep listening")
-                        SpotifyLocalRow(items.take(12), playerConnection)
+                if (isSectionVisible(MaterialHomeSection.JUMP_BACK_IN)) {
+                    keepListening?.filterIsInstance<Song>()?.takeIf { it.isNotEmpty() }?.let { items ->
+                        item {
+                            NavigationTitle(title = "Keep listening")
+                            SpotifyLocalRow(items.take(12), playerConnection)
+                        }
                     }
                 }
 
-                accountPlaylists?.takeIf { it.isNotEmpty() }?.let { playlists ->
-                    item {
-                        NavigationTitle(title = "$accountName's playlists")
-                        SpotifyYtRow(playlists.take(12), navController, playerConnection)
+                if (isSectionVisible(MaterialHomeSection.MIXES)) {
+                    accountPlaylists?.takeIf { it.isNotEmpty() }?.let { playlists ->
+                        item {
+                            NavigationTitle(title = "$accountName's playlists")
+                            SpotifyYtRow(playlists.take(12), navController, playerConnection)
+                        }
                     }
                 }
 
-                forgottenFavorites?.takeIf { it.isNotEmpty() }?.let { favorites ->
-                    item {
-                        NavigationTitle(title = "Forgotten favorites")
-                        SpotifyLocalRow(favorites.take(12), playerConnection)
+                if (isSectionVisible(MaterialHomeSection.HEAVY_ROTATION)) {
+                    forgottenFavorites?.takeIf { it.isNotEmpty() }?.let { favorites ->
+                        item {
+                            NavigationTitle(title = "Forgotten favorites")
+                            SpotifyLocalRow(favorites.take(12), playerConnection)
+                        }
                     }
                 }
 
-                similarRecommendations?.forEach { recommendation ->
-                    item {
-                        NavigationTitle(title = "Similar to ${recommendation.title.title}")
-                        SpotifyYtRow(recommendation.items.take(12), navController, playerConnection)
+                if (isSectionVisible(MaterialHomeSection.BECAUSE_YOU_LISTEN_TO)) {
+                    similarRecommendations?.forEach { recommendation ->
+                        item {
+                            NavigationTitle(title = "Similar to ${recommendation.title.title}")
+                            SpotifyYtRow(recommendation.items.take(12), navController, playerConnection)
+                        }
                     }
                 }
 
                 homePage?.sections?.forEach { section ->
-                    item {
-                        NavigationTitle(
-                            title = section.title,
-                            label = section.label,
-                            onClick = section.endpoint?.let {
-                                {
-                                    navController.navigate(
-                                        "youtube_browse/${it.browseId}?params=${it.params.orEmpty()}",
-                                    )
-                                }
-                            },
-                        )
-                        SpotifyYtRow(section.items.take(12), navController, playerConnection)
+                    val isNewRelease = section.title.contains("New", ignoreCase = true) || section.title.contains("Release", ignoreCase = true)
+                    val isChart = section.title.contains("Chart", ignoreCase = true) || section.title.contains("Top", ignoreCase = true)
+                    val isAlbum = section.title.contains("Album", ignoreCase = true)
+
+                    val shouldRender = when {
+                        isNewRelease -> isSectionVisible(MaterialHomeSection.NEW_RELEASES)
+                        isChart -> isSectionVisible(MaterialHomeSection.CHARTS)
+                        isAlbum -> isSectionVisible(MaterialHomeSection.ALBUMS)
+                        else -> true
+                    }
+
+                    if (shouldRender) {
+                        item {
+                            NavigationTitle(
+                                title = section.title,
+                                label = section.label,
+                                onClick = section.endpoint?.let {
+                                    {
+                                        navController.navigate(
+                                            "youtube_browse/${it.browseId}?params=${it.params.orEmpty()}",
+                                        )
+                                    }
+                                },
+                            )
+                            SpotifyYtRow(section.items.take(12), navController, playerConnection)
+                        }
                     }
                 }
 
@@ -300,48 +328,56 @@ fun SpotifyHomeScreen(
             hazeState = hazeState,
             modifier = Modifier.align(Alignment.TopCenter),
             bottomContent = {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val chipItems = listOf(
-                        "history" to context.getString(R.string.history),
-                        "liked" to context.getString(R.string.liked),
-                        "offline" to context.getString(R.string.offline),
-                        "stats" to context.getString(R.string.stats),
-                        "search" to context.getString(R.string.search)
-                    )
-                    items(chipItems) { (route, label) ->
-                        androidx.compose.material3.ElevatedFilterChip(
-                            selected = false,
-                            onClick = {
-                                when (route) {
-                                    "history" -> navController.navigate("history")
-                                    "liked" -> navController.navigate("auto_playlist/liked")
-                                    "offline" -> navController.navigate("auto_playlist/downloaded")
-                                    "stats" -> navController.navigate("stats")
-                                    "search" -> navController.navigate(Screens.Search.route)
-                                }
-                            },
-                            label = { Text(label, maxLines = 1) },
-                            shape = CircleShape,
-                            colors = androidx.compose.material3.FilterChipDefaults.elevatedFilterChipColors(
-                                containerColor = Color.Transparent,
-                                labelColor = Color.LightGray,
-                            ),
-                            border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = false,
-                                borderColor = Color.Gray.copy(alpha = 0.8f),
-                            ),
+                if (isSectionVisible(MaterialHomeSection.QUICK_TILES)) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val chipItems = listOf(
+                            "history" to context.getString(R.string.history),
+                            "liked" to context.getString(R.string.liked),
+                            "offline" to context.getString(R.string.offline),
+                            "stats" to context.getString(R.string.stats),
+                            "search" to context.getString(R.string.search)
                         )
+                        items(chipItems) { (route, label) ->
+                            androidx.compose.material3.ElevatedFilterChip(
+                                selected = false,
+                                onClick = {
+                                    when (route) {
+                                        "history" -> navController.navigate("history")
+                                        "liked" -> navController.navigate("auto_playlist/liked")
+                                        "offline" -> navController.navigate("auto_playlist/downloaded")
+                                        "stats" -> navController.navigate("stats")
+                                        "search" -> navController.navigate(Screens.Search.route)
+                                    }
+                                },
+                                label = { Text(label, maxLines = 1) },
+                                shape = CircleShape,
+                                colors = androidx.compose.material3.FilterChipDefaults.elevatedFilterChipColors(
+                                    containerColor = Color.Transparent,
+                                    labelColor = Color.LightGray,
+                                ),
+                                border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = false,
+                                    borderColor = Color.Gray.copy(alpha = 0.8f),
+                                ),
+                            )
+                        }
                     }
                 }
             }
         ) {
             SpotifyHeaderActions(navController)
         }
+
+        // Floating 3-dot FAB
+        HomeFloatingActions(
+            navController = navController,
+            lazyListState = lazyListState
+        )
     }
 }
 

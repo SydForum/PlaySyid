@@ -255,8 +255,13 @@ val QueueEditLockKey = booleanPreferencesKey("queueEditLock")
 val LyricFontSizeKey = intPreferencesKey("lyricFontSize")
 val fullScreenLyricsKey = booleanPreferencesKey("fullScreenLyrics")
 val AnimateLyricsKey = booleanPreferencesKey("animate_lyrics")
-val EnableNewLyricsScreenKey = booleanPreferencesKey("enable_new_lyrics_screen")
 val LyricsScreenStyleKey = stringPreferencesKey("lyrics_screen_style")
+val EnableNewLyricsScreenKey = booleanPreferencesKey("enable_new_lyrics_screen")
+
+val EnableSwipeBackGestureKey = booleanPreferencesKey("enableSwipeBackGesture")
+val EnableTabSwipeGestureKey = booleanPreferencesKey("enableTabSwipeGesture")
+val EnableMiniPlayerSwipeKey = booleanPreferencesKey("enableMiniPlayerSwipe")
+val EnablePlayerDoubleTapSeekKey = booleanPreferencesKey("enablePlayerDoubleTapSeek")
 
 
 val PlayPauseButtonShapeKey = stringPreferencesKey("playPauseButtonShape")

@@ -126,6 +126,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import com.darkxvenom.airbeats.ui.component.CircleIconButton
+import com.darkxvenom.airbeats.ui.component.SwipeBackContainer
+import com.darkxvenom.airbeats.ui.component.tabSwipeGesture
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -1603,6 +1605,31 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
 
+                                    val enableSwipeBackGesture by rememberPreference(com.darkxvenom.airbeats.constants.EnableSwipeBackGestureKey, defaultValue = true)
+                                    val enableTabSwipeGesture by rememberPreference(com.darkxvenom.airbeats.constants.EnableTabSwipeGestureKey, defaultValue = true)
+                                    val currentDestRoute = navBackStackEntry?.destination?.route
+                                    val isRootScreen = currentDestRoute in topLevelScreens
+                                    val canSwipeBack = !isRootScreen && navController.previousBackStackEntry != null
+
+                                    SwipeBackContainer(
+                                        enabled = enableSwipeBackGesture,
+                                        canSwipeBack = canSwipeBack,
+                                        onBack = { navController.popBackStack() },
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .tabSwipeGesture(
+                                                enabled = enableTabSwipeGesture && isRootScreen,
+                                                currentRoute = currentDestRoute,
+                                                onNavigateToRoute = { targetRoute: String ->
+                                                    val screen = navigationItems.firstOrNull { it.route == targetRoute }
+                                                    if (screen != null) {
+                                                        navigateToScreen(navController, screen)
+                                                    } else {
+                                                        navController.navigate(targetRoute)
+                                                    }
+                                                }
+                                            )
+                                    ) {
                                     NavHost(
                                         navController = navController,
                                         startDestination = if (isNameSet == false) "onboarding" else when (tabOpenedFromShortcut ?: defaultOpenTab) {
@@ -1692,6 +1719,7 @@ class MainActivity : ComponentActivity() {
                                             playerBottomSheetState = playerBottomSheetState,
                                             onSearchClick = { onActiveChange(true) }
                                         )
+                                    }
                                     }
                                     }
                                 }

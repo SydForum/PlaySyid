@@ -95,6 +95,9 @@ import com.darkxvenom.airbeats.ui.screens.library.LibraryArtistsScreen
 import com.darkxvenom.airbeats.ui.screens.library.LibraryPlaylistsScreen
 import com.darkxvenom.airbeats.ui.screens.library.LibrarySongsScreen
 import com.darkxvenom.airbeats.ui.screens.library.LocalSongsScreen
+import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
+import com.darkxvenom.airbeats.constants.MaterialHomeSection
+import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
 import com.darkxvenom.airbeats.ui.screens.settings.DarkMode
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
 import com.darkxvenom.airbeats.utils.rememberEnumPreference
@@ -317,6 +320,7 @@ fun AppleScaffold(
     onRefresh: (() -> Unit)? = null,
     onNewReleaseClick: (() -> Unit)? = { navController.navigate("new_release") },
     onDeveloperNewsClick: (() -> Unit)? = { navController.navigate("settings/developer_news") },
+    floatingActionButton: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit
 ) {
     val lazyListState = rememberLazyListState()
@@ -376,6 +380,8 @@ fun AppleScaffold(
             onNewReleaseClick = onNewReleaseClick,
             onDeveloperNewsClick = onDeveloperNewsClick
         )
+
+        floatingActionButton?.invoke(this)
     }
 }
 
@@ -522,13 +528,21 @@ fun AppleHomeScreen(
         (forgottenFavorites == null || forgottenFavorites?.isEmpty() == true) &&
         similarRecommendations.isNullOrEmpty() &&
         homePage?.sections.isNullOrEmpty()
+
+    val hiddenSections by com.darkxvenom.airbeats.utils.rememberPreference(HiddenHomeSectionsKey, defaultValue = emptySet())
+    fun isSectionVisible(section: MaterialHomeSection): Boolean = section.id !in hiddenSections
     
     AppleScaffold(
         title = "Listen Now",
         navController = navController,
         profileUrl = url,
         isRefreshing = isRefreshing,
-        onRefresh = viewModel::refresh
+        onRefresh = viewModel::refresh,
+        floatingActionButton = {
+            HomeFloatingActions(
+                navController = navController
+            )
+        }
     ) {
         if (isLoading && isContentEmpty) {
             item(key = "apple_home_center_loading") {
@@ -543,38 +557,59 @@ fun AppleHomeScreen(
             }
         }
 
-        quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
-            item {
-                AppleSectionTitle("Made for You")
-                AppleLocalRow(picks.take(12), playerConnection)
+        if (isSectionVisible(MaterialHomeSection.QUICK_PICKS)) {
+            quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
+                item {
+                    AppleSectionTitle("Made for You")
+                    AppleLocalRow(picks.take(12), playerConnection)
+                }
             }
         }
 
-        accountPlaylists?.takeIf { it.isNotEmpty() }?.let { playlists ->
-            item {
-                AppleSectionTitle("Your Playlists")
-                AppleYtRow(playlists.take(12), navController, playerConnection)
+        if (isSectionVisible(MaterialHomeSection.MIXES)) {
+            accountPlaylists?.takeIf { it.isNotEmpty() }?.let { playlists ->
+                item {
+                    AppleSectionTitle("Your Playlists")
+                    AppleYtRow(playlists.take(12), navController, playerConnection)
+                }
             }
         }
 
-        forgottenFavorites?.takeIf { it.isNotEmpty() }?.let { favorites ->
-            item {
-                AppleSectionTitle("Forgotten Favorites")
-                AppleLocalRow(favorites.take(12), playerConnection)
+        if (isSectionVisible(MaterialHomeSection.HEAVY_ROTATION)) {
+            forgottenFavorites?.takeIf { it.isNotEmpty() }?.let { favorites ->
+                item {
+                    AppleSectionTitle("Forgotten Favorites")
+                    AppleLocalRow(favorites.take(12), playerConnection)
+                }
             }
         }
 
-        similarRecommendations?.forEach { recommendation ->
-            item {
-                AppleSectionTitle("Similar to ${recommendation.title.title}")
-                AppleYtRow(recommendation.items.take(12), navController, playerConnection)
+        if (isSectionVisible(MaterialHomeSection.BECAUSE_YOU_LISTEN_TO)) {
+            similarRecommendations?.forEach { recommendation ->
+                item {
+                    AppleSectionTitle("Similar to ${recommendation.title.title}")
+                    AppleYtRow(recommendation.items.take(12), navController, playerConnection)
+                }
             }
         }
 
         homePage?.sections?.forEach { section ->
-            item {
-                AppleSectionTitle(section.title)
-                AppleYtRow(section.items.take(12), navController, playerConnection)
+            val isNewRelease = section.title.contains("New", ignoreCase = true) || section.title.contains("Release", ignoreCase = true)
+            val isChart = section.title.contains("Chart", ignoreCase = true) || section.title.contains("Top", ignoreCase = true)
+            val isAlbum = section.title.contains("Album", ignoreCase = true)
+
+            val shouldRender = when {
+                isNewRelease -> isSectionVisible(MaterialHomeSection.NEW_RELEASES)
+                isChart -> isSectionVisible(MaterialHomeSection.CHARTS)
+                isAlbum -> isSectionVisible(MaterialHomeSection.ALBUMS)
+                else -> true
+            }
+
+            if (shouldRender) {
+                item {
+                    AppleSectionTitle(section.title)
+                    AppleYtRow(section.items.take(12), navController, playerConnection)
+                }
             }
         }
 

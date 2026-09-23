@@ -42,6 +42,15 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
     private val _chartVideos = MutableStateFlow<List<ChartTrack>?>(null)
     val chartVideos = _chartVideos.asStateFlow()
 
+    private val _jioSaavnTopSongs = MutableStateFlow<List<SongItem>?>(null)
+    val jioSaavnTopSongs = _jioSaavnTopSongs.asStateFlow()
+
+    private val _youtubeChartsPage = MutableStateFlow<com.darkxvenom.airbeats.innertube.pages.ChartsPage?>(null)
+    val youtubeChartsPage = _youtubeChartsPage.asStateFlow()
+
+    private val _newReleases = MutableStateFlow<List<AlbumItem>?>(null)
+    val newReleases = _newReleases.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
@@ -113,6 +122,39 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
                             }
                         } catch (e: Exception) {
                             Timber.tag("ChartsViewModel").e(e, "Failed to fetch top videos for %s", resolvedCode)
+                        }
+                    }
+
+                    launch {
+                        try {
+                            val jioTrending = com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.getTrendingSongs().getOrNull()
+                            if (!jioTrending.isNullOrEmpty()) {
+                                _jioSaavnTopSongs.value = jioTrending
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ChartsViewModel").e(e, "Failed to fetch JioSaavn trending songs")
+                        }
+                    }
+
+                    launch {
+                        try {
+                            val ytCharts = YouTube.getChartsPage().getOrNull()
+                            if (ytCharts != null) {
+                                _youtubeChartsPage.value = ytCharts
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ChartsViewModel").e(e, "Failed to fetch YouTube charts")
+                        }
+                    }
+
+                    launch {
+                        try {
+                            val explore = YouTube.explore().getOrNull()
+                            if (explore != null && explore.newReleaseAlbums.isNotEmpty()) {
+                                _newReleases.value = explore.newReleaseAlbums
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("ChartsViewModel").e(e, "Failed to fetch new releases")
                         }
                     }
                 }

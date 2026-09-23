@@ -570,10 +570,10 @@ fun AppearanceSettings(
                                 }
                             },
                         )},
-                        *(if (homeScreenStyle == HomeScreenStyle.MATERIAL) arrayOf<@Composable () -> Unit>({
+                        *(if (homeScreenStyle != HomeScreenStyle.PLAYFUL) arrayOf<@Composable () -> Unit>({
                             PreferenceEntry(
                                 title = { Text("Home Sections") },
-                                description = "Customize visible sections on the Material Home screen",
+                                description = "Customize visible sections on your Home screen",
                                 icon = { Icon(Icons.Filled.Dashboard, null) },
                                 onClick = { navController.navigate("settings/home_sections") }
                             )

@@ -1008,6 +1008,16 @@ fun SettingsScreen(
                                 onClick = { navController.navigate("settings/player") }
                             ),
                             SettingsCategoryItem(
+                                icon = painterResource(R.drawable.swipe),
+                                title = {
+                                    Text(
+                                        "Gestures",
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = { navController.navigate("settings/gestures") }
+                            ),
+                            SettingsCategoryItem(
                                 icon = painterResource(R.drawable.graphic_eq),
                                 title = {
                                     Text(

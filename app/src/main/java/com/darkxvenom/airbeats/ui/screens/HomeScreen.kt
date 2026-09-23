@@ -250,6 +250,9 @@ fun HomeScreen(
         label = "HomeScreenBlurAlpha"
     )
 
+    val hiddenSections by rememberPreference(com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey, defaultValue = emptySet())
+    fun isSectionVisible(section: com.darkxvenom.airbeats.constants.MaterialHomeSection): Boolean = section.id !in hiddenSections
+
     val localGridItem: @Composable (LocalItem) -> Unit = {
         when (it) {
             is Song -> SongGridItem(
@@ -454,51 +457,54 @@ fun HomeScreen(
                     )
                 }
 
-                item(key = "home_chips") {
-                    val isFrosted = isFrostedGlassUiEnabled()
-                    if (isFrosted) {
-                        GlassHomeTagsRow(
-                            navController = navController,
-                            isLoggedIn = isLoggedIn,
-                            modifier = Modifier
-                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
-                                .animateItem()
-                        )
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
-                                .fillMaxWidth()
-                                .animateItem()
-                        ) {
-                            ChipsRow(
-                                chips = listOfNotNull(
-                                    Pair("history", stringResource(R.string.history)),
-                                    Pair("stats", stringResource(R.string.stats)),
-                                    Pair("liked", stringResource(R.string.liked)),
-                                    Pair("downloads", stringResource(R.string.offline)),
-                                    if (isLoggedIn) Pair(
-                                        "account",
-                                        stringResource(R.string.account)
-                                    ) else null
-                                ),
-                                currentValue = "",
-                                onValueUpdate = { value ->
-                                    when (value) {
-                                        "history" -> navController.navigate("history")
-                                        "stats" -> navController.navigate("stats")
-                                        "liked" -> navController.navigate("auto_playlist/liked")
-                                        "downloads" -> navController.navigate("auto_playlist/downloaded")
-                                        "account" -> if (isLoggedIn) navController.navigate("account")
-                                    }
-                                },
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.QUICK_TILES)) {
+                    item(key = "home_chips") {
+                        val isFrosted = isFrostedGlassUiEnabled()
+                        if (isFrosted) {
+                            GlassHomeTagsRow(
+                                navController = navController,
+                                isLoggedIn = isLoggedIn,
+                                modifier = Modifier
+                                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
+                                    .animateItem()
                             )
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
+                                    .fillMaxWidth()
+                                    .animateItem()
+                            ) {
+                                ChipsRow(
+                                    chips = listOfNotNull(
+                                        Pair("history", stringResource(R.string.history)),
+                                        Pair("stats", stringResource(R.string.stats)),
+                                        Pair("liked", stringResource(R.string.liked)),
+                                        Pair("downloads", stringResource(R.string.offline)),
+                                        if (isLoggedIn) Pair(
+                                            "account",
+                                            stringResource(R.string.account)
+                                        ) else null
+                                    ),
+                                    currentValue = "",
+                                    onValueUpdate = { value ->
+                                        when (value) {
+                                            "history" -> navController.navigate("history")
+                                            "stats" -> navController.navigate("stats")
+                                            "liked" -> navController.navigate("auto_playlist/liked")
+                                            "downloads" -> navController.navigate("auto_playlist/downloaded")
+                                            "account" -> if (isLoggedIn) navController.navigate("account")
+                                        }
+                                    },
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                                )
+                            }
                         }
                     }
                 }
 
-                quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
+                if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.QUICK_PICKS)) {
+                    quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
                     item(key = "quick_picks_title") {
                         NavigationTitle(
                             title = stringResource(R.string.quick_picks),
@@ -620,10 +626,12 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
 
-                aiRecommendedPlaylist?.let { (playlist, songs) ->
-                    if (songs.isNotEmpty()) {
-                        item(key = "ai_recommended_title") {
+            if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.FRESH_FINDS)) {
+                    aiRecommendedPlaylist?.let { (playlist, songs) ->
+                        if (songs.isNotEmpty()) {
+                            item(key = "ai_recommended_title") {
                             NavigationTitle(
                                 title = stringResource(R.string.recommended_by_ai),
                                 label = playlist.playlist.lastUpdateTime?.let {
@@ -654,7 +662,9 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
 
+            if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.JUMP_BACK_IN)) {
                 keepListening?.takeIf { it.isNotEmpty() }?.let { keepListening ->
                     item {
                         NavigationTitle(
@@ -682,7 +692,9 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
 
+            if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.MIXES)) {
                 accountPlaylists?.takeIf { it.isNotEmpty() }?.let { accountPlaylists ->
                     item {
                         NavigationTitle(
@@ -737,7 +749,9 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
 
+            if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.BECAUSE_YOU_LISTEN_TO)) {
                 similarRecommendations?.forEach { recommendation ->
                     item(key = "similar_title_${recommendation.title.id}") {
                         NavigationTitle(
@@ -783,90 +797,106 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
 
                 homePage?.sections?.forEach { section ->
-                    item(key = "yt_home_title_${section.title}_${section.endpoint}") {
-                        NavigationTitle(
-                            title = section.title,
-                            label = section.label,
-                            thumbnail = section.thumbnail?.let { thumbnailUrl ->
-                                {
-                                    val shape =
-                                        if (section.endpoint?.isArtistEndpoint == true) CircleShape else RoundedCornerShape(
-                                            ThumbnailCornerRadius
-                                        )
-                                    AsyncImage(
-                                        model = thumbnailUrl.highQualityThumbnail(),
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .size(ListThumbnailSize)
-                                            .clip(shape)
-                                    )
-                                }
-                            },
-                            modifier = Modifier.animateItem()
-                        )
+                    val isNewRelease = section.title.contains("New", ignoreCase = true) || section.title.contains("Release", ignoreCase = true)
+                    val isChart = section.title.contains("Chart", ignoreCase = true) || section.title.contains("Top", ignoreCase = true)
+                    val isAlbum = section.title.contains("Album", ignoreCase = true)
+
+                    val shouldRender = when {
+                        isNewRelease -> isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.NEW_RELEASES)
+                        isChart -> isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.CHARTS)
+                        isAlbum -> isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.ALBUMS)
+                        else -> true
                     }
 
-                    item(key = "yt_home_row_${section.title}_${section.endpoint}") {
-                        LazyRow(
-                            contentPadding = WindowInsets.systemBars
-                                .only(WindowInsetsSides.Horizontal)
-                                .asPaddingValues(),
-                            modifier = Modifier.animateItem()
-                        ) {
-                            items(section.items, key = { item -> item.id }) { item ->
-                                ytGridItem(item)
+                    if (shouldRender) {
+                        item(key = "yt_home_title_${section.title}_${section.endpoint}") {
+                            NavigationTitle(
+                                title = section.title,
+                                label = section.label,
+                                thumbnail = section.thumbnail?.let { thumbnailUrl ->
+                                    {
+                                        val shape =
+                                            if (section.endpoint?.isArtistEndpoint == true) CircleShape else RoundedCornerShape(
+                                                ThumbnailCornerRadius
+                                            )
+                                        AsyncImage(
+                                            model = thumbnailUrl.highQualityThumbnail(),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(ListThumbnailSize)
+                                                .clip(shape)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+
+                        item(key = "yt_home_row_${section.title}_${section.endpoint}") {
+                            LazyRow(
+                                contentPadding = WindowInsets.systemBars
+                                    .only(WindowInsetsSides.Horizontal)
+                                    .asPaddingValues(),
+                                modifier = Modifier.animateItem()
+                            ) {
+                                items(section.items, key = { item -> item.id }) { item ->
+                                    ytGridItem(item)
+                                }
                             }
                         }
                     }
                 }
 
-                explorePage?.newReleaseAlbums?.let { newReleaseAlbums ->
-                    item {
-                        NavigationTitle(
-                            title = stringResource(R.string.new_release_albums),
-                            onClick = {
-                                navController.navigate("new_release")
-                            },
-                            modifier = Modifier.animateItem()
-                        )
-                    }
+                if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.NEW_RELEASES)) {
+                    explorePage?.newReleaseAlbums?.let { newReleaseAlbums ->
+                        item {
+                            NavigationTitle(
+                                title = stringResource(R.string.new_release_albums),
+                                onClick = {
+                                    navController.navigate("new_release")
+                                },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
 
-                    item {
-                        LazyRow(
-                            contentPadding = WindowInsets.systemBars
-                                .only(WindowInsetsSides.Horizontal)
-                                .asPaddingValues(),
-                            modifier = Modifier.animateItem()
-                        ) {
-                            items(
-                                items = newReleaseAlbums,
-                                key = { it.id }
-                            ) { album ->
-                                YouTubeGridItem(
-                                    item = album,
-                                    isActive = mediaMetadata?.album?.id == album.id,
-                                    isPlaying = isPlaying,
-                                    coroutineScope = scope,
-                                    modifier = Modifier
-                                        .combinedClickable(
-                                            onClick = {
-                                                navController.navigate("album/${album.id}")
-                                            },
-                                            onLongClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                menuState.show {
-                                                    YouTubeAlbumMenu(
-                                                        albumItem = album,
-                                                        navController = navController,
-                                                        onDismiss = menuState::dismiss
-                                                    )
+                        item {
+                            LazyRow(
+                                contentPadding = WindowInsets.systemBars
+                                    .only(WindowInsetsSides.Horizontal)
+                                    .asPaddingValues(),
+                                modifier = Modifier.animateItem()
+                            ) {
+                                items(
+                                    items = newReleaseAlbums,
+                                    key = { it.id }
+                                ) { album ->
+                                    YouTubeGridItem(
+                                        item = album,
+                                        isActive = mediaMetadata?.album?.id == album.id,
+                                        isPlaying = isPlaying,
+                                        coroutineScope = scope,
+                                        modifier = Modifier
+                                            .combinedClickable(
+                                                onClick = {
+                                                    navController.navigate("album/${album.id}")
+                                                },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    menuState.show {
+                                                        YouTubeAlbumMenu(
+                                                            albumItem = album,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                    }
                                                 }
-                                            }
-                                        )
-                                        .animateItem()
-                                )
+                                            )
+                                            .animateItem()
+                                    )
+                                }
                             }
                         }
                     }
@@ -886,64 +916,66 @@ fun HomeScreen(
                     }
                 }
 
-                forgottenFavorites?.takeIf { it.isNotEmpty() }?.let { forgottenFavorites ->
-                    item {
-                        NavigationTitle(
-                            title = stringResource(R.string.forgotten_favorites),
-                            modifier = Modifier.animateItem()
-                        )
-                    }
+                if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.HEAVY_ROTATION)) {
+                    forgottenFavorites?.takeIf { it.isNotEmpty() }?.let { forgottenFavorites ->
+                        item {
+                            NavigationTitle(
+                                title = stringResource(R.string.forgotten_favorites),
+                                modifier = Modifier.animateItem()
+                            )
+                        }
 
-                    item {
-                        // take min in case list size is less than 4
-                        val rows = min(4, forgottenFavorites.size)
-                        LazyHorizontalGrid(
-                            state = forgottenFavoritesLazyGridState,
-                            rows = GridCells.Fixed(rows),
-                            flingBehavior = rememberSnapFlingBehavior(
-                                forgottenFavoritesSnapLayoutInfoProvider
-                            ),
-                            contentPadding = WindowInsets.systemBars
-                                .only(WindowInsetsSides.Horizontal)
-                                .asPaddingValues(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(ListItemHeight * rows)
-                                .animateItem()
-                        ) {
-                            items(
-                                items = forgottenFavorites,
-                                key = { it.id }
-                            ) { originalSong ->
-                                val currentSong = originalSong
+                        item {
+                            // take min in case list size is less than 4
+                            val rows = min(4, forgottenFavorites.size)
+                            LazyHorizontalGrid(
+                                state = forgottenFavoritesLazyGridState,
+                                rows = GridCells.Fixed(rows),
+                                flingBehavior = rememberSnapFlingBehavior(
+                                    forgottenFavoritesSnapLayoutInfoProvider
+                                ),
+                                contentPadding = WindowInsets.systemBars
+                                    .only(WindowInsetsSides.Horizontal)
+                                    .asPaddingValues(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(ListItemHeight * rows)
+                                    .animateItem()
+                            ) {
+                                items(
+                                    items = forgottenFavorites,
+                                    key = { it.id }
+                                ) { originalSong ->
+                                    val currentSong = originalSong
 
-                                SongListItem(
-                                    song = currentSong,
-                                    showInLibraryIcon = true,
-                                    isActive = currentSong.id == mediaMetadata?.id,
-                                    isPlaying = isPlaying,
-                                    modifier = Modifier
-                                        .width(horizontalLazyGridItemWidth)
-                                        .combinedClickable(
-                                            onClick = {
-                                                if (currentSong.id == mediaMetadata?.id) {
-                                                    playerConnection.player.togglePlayPause()
-                                                } else {
-                                                    playerConnection.playQueue(YouTubeQueue.radio(currentSong.toMediaMetadata()))
+                                    SongListItem(
+                                        song = currentSong,
+                                        showInLibraryIcon = true,
+                                        isActive = currentSong.id == mediaMetadata?.id,
+                                        isPlaying = isPlaying,
+                                        modifier = Modifier
+                                            .width(horizontalLazyGridItemWidth)
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (currentSong.id == mediaMetadata?.id) {
+                                                        playerConnection.player.togglePlayPause()
+                                                    } else {
+                                                        playerConnection.playQueue(YouTubeQueue.radio(currentSong.toMediaMetadata()))
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    menuState.show {
+                                                        SongMenu(
+                                                            originalSong = currentSong,
+                                                            navController = navController,
+                                                            onDismiss = menuState::dismiss
+                                                        )
+                                                    }
                                                 }
-                                            },
-                                            onLongClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                menuState.show {
-                                                    SongMenu(
-                                                        originalSong = currentSong,
-                                                        navController = navController,
-                                                        onDismiss = menuState::dismiss
-                                                    )
-                                                }
-                                            }
-                                        )
-                                )
+                                            )
+                                    )
+                                }
                             }
                         }
                     }
@@ -1042,6 +1074,21 @@ fun HomeScreen(
                         onClick = {
                             fabMenuExpanded = false
                             navController.navigate(com.darkxvenom.airbeats.ui.screens.musicrecognition.MusicRecognitionRoute)
+                        }
+                    )
+
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { androidx.compose.material3.Text("AirBeats Charts") },
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.trending_up),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        onClick = {
+                            fabMenuExpanded = false
+                            navController.navigate("charts")
                         }
                     )
                 }

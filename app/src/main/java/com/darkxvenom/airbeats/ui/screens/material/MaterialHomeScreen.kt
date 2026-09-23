@@ -103,6 +103,7 @@ import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
 import com.darkxvenom.airbeats.constants.MaterialHomeSection
+import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
 import com.darkxvenom.airbeats.constants.SongSortType
 import com.darkxvenom.airbeats.db.entities.Song
 import com.darkxvenom.airbeats.innertube.YouTube
@@ -826,6 +827,12 @@ fun MaterialHomeScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .onSizeChanged { headerHeightPx = it.height }
+        )
+
+        // Floating 3-dot FAB
+        HomeFloatingActions(
+            navController = navController,
+            lazyListState = listState
         )
     }
 }

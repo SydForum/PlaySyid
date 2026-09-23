@@ -1066,6 +1066,7 @@
     <string name="create_playlist_option">Create playlist</string>
     <string name="import_playlist_option">Import playlist</string>
     <string name="download_canceled">Download canceled</string>
+    <string name="charts">Charts</string>
 </resources>
 
 

@@ -434,6 +434,18 @@ fun NavGraphBuilder.navigationBuilder(
             onBack = { navController.popBackStack() }
         )
     }
+    composable("settings/gestures") {
+        com.darkxvenom.airbeats.ui.screens.settings.GesturesSettingsScreen(
+            navController = navController,
+            scrollBehavior = scrollBehavior
+        )
+    }
+    composable("charts") {
+        com.darkxvenom.airbeats.ui.screens.charts.ChartsScreen(
+            navController = navController,
+            scrollBehavior = scrollBehavior
+        )
+    }
     composable("login") {
             LoginScreen(navController)
         }
