@@ -403,34 +403,40 @@ fun Lyrics(
         isAutoScrollEnabled = true
     }
 
+    LaunchedEffect(currentSongId) {
+        currentSongId?.let { LyricsTranslationHelper.onSongChanged(it) }
+    }
+
     // ── AI Lyrics Translation Sync ──
-    LaunchedEffect(lines, currentSongId, targetLanguage, translationVersion) {
+    LaunchedEffect(lines, currentSongId, targetLanguage, translationVersion, autoTranslate) {
         val songId = currentSongId ?: return@LaunchedEffect
         if (lines.isEmpty()) return@LaunchedEffect
 
-        val hasLoaded = LyricsTranslationHelper.loadTranslationsFromCache(
-            lyrics = lines,
-            context = context,
-            songId = songId,
-            targetLanguageCode = targetLanguage
-        )
+        if (autoTranslate) {
+            val hasLoaded = LyricsTranslationHelper.loadTranslationsFromCache(
+                lyrics = lines,
+                context = context,
+                songId = songId,
+                targetLanguageCode = targetLanguage
+            )
 
-        if (!hasLoaded && autoTranslate && !LyricsTranslationHelper.isTranslating()) {
-            val key = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey
-            if (key.isNotBlank()) {
-                LyricsTranslationHelper.translateLyrics(
-                    lyrics = lines,
-                    targetLanguageCode = targetLanguage,
-                    apiKey = key,
-                    baseUrl = openRouterBaseUrl,
-                    model = openRouterModel,
-                    mode = translateMode,
-                    customPrompt = customPrompt.takeIf { it.isNotBlank() },
-                    provider = aiProvider,
-                    context = context,
-                    songId = songId,
-                    scope = scope
-                )
+            if (!hasLoaded && !LyricsTranslationHelper.isTranslating()) {
+                val key = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey
+                if (key.isNotBlank()) {
+                    LyricsTranslationHelper.translateLyrics(
+                        lyrics = lines,
+                        targetLanguageCode = targetLanguage,
+                        apiKey = key,
+                        baseUrl = openRouterBaseUrl,
+                        model = openRouterModel,
+                        mode = translateMode,
+                        customPrompt = customPrompt.takeIf { it.isNotBlank() },
+                        provider = aiProvider,
+                        context = context,
+                        songId = songId,
+                        scope = scope
+                    )
+                }
             }
         }
     }

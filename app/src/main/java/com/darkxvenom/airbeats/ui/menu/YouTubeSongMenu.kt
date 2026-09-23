@@ -390,7 +390,7 @@ fun YouTubeSongMenu(
             onDismiss()
         }
         GridMenuItem(
-            icon = R.drawable.thumb_down,
+            icon = R.drawable.block,
             title = if (isExcluded) R.string.allow_recommendations else R.string.dont_recommend_again,
         ) {
             val wasExcluded = isExcluded

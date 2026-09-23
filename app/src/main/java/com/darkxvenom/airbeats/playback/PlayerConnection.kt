@@ -73,9 +73,17 @@ class PlayerConnection(
     private val _playWhenReady = MutableStateFlow(player.playWhenReady)
     val playWhenReady: StateFlow<Boolean> = _playWhenReady.asStateFlow()
 
+    // Google Cast states exposed from MusicService
+    val isCasting = service.isCasting
+    val castDeviceName = service.castDeviceName
+
     // Estado combinado de reproducción
-    val isPlaying = combine(playbackState, playWhenReady) { playbackState, playWhenReady ->
-        playWhenReady && (playbackState == STATE_READY || playbackState == Player.STATE_BUFFERING)
+    val isPlaying = combine(playbackState, playWhenReady, service.isCasting, service.isCastPlaying) { playbackState, playWhenReady, isCasting, isCastPlaying ->
+        if (isCasting) {
+            isCastPlaying
+        } else {
+            playWhenReady && (playbackState == STATE_READY || playbackState == Player.STATE_BUFFERING)
+        }
     }.stateIn(
         scope,
         SharingStarted.Lazily,
@@ -313,9 +321,10 @@ class PlayerConnection(
 
     private fun updateProgressStates() {
         try {
-            val currentPos = player.currentPosition
-            val totalDuration = player.duration
-            val buffered = player.bufferedPosition
+            val isCasting = service.isCasting.value
+            val currentPos = if (isCasting) service.castPositionMs.value else player.currentPosition
+            val totalDuration = if (isCasting && service.castDurationMs.value > 0) service.castDurationMs.value else player.duration
+            val buffered = if (isCasting) totalDuration else player.bufferedPosition
 
             // Solo actualizar si hay cambios significativos
             if (kotlin.math.abs(currentPos - lastPosition) > 500L ||
@@ -459,6 +468,10 @@ class PlayerConnection(
 
     fun togglePlayPause() {
         try {
+            if (service.isCasting.value) {
+                service.toggleCastPlayPause()
+                return
+            }
             val newPlayWhenReady = !player.playWhenReady
             Log.d(TAG, "Toggling play/pause to: $newPlayWhenReady")
             player.playWhenReady = newPlayWhenReady
@@ -510,6 +523,11 @@ class PlayerConnection(
     fun seekTo(positionMs: Long) {
         try {
             Log.d(TAG, "Seeking to position: ${positionMs}ms")
+            if (service.isCasting.value) {
+                service.seekCastTo(positionMs)
+                _currentPosition.value = positionMs
+                return
+            }
             player.seekTo(positionMs.coerceIn(0, player.duration))
         } catch (e: Exception) {
             Log.e(TAG, "Error seeking to position", e)

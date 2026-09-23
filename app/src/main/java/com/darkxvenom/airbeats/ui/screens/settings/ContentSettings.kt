@@ -158,7 +158,7 @@ fun ContentSettings(
                     PreferenceEntry(
                         title = { Text(stringResource(R.string.excluded_songs)) },
                         description = stringResource(R.string.excluded_songs_desc, excludedCount),
-                        icon = { Icon(painterResource(R.drawable.thumb_down), null) },
+                        icon = { Icon(painterResource(R.drawable.block), null) },
                         onClick = { navController.navigate("settings/content/excluded_songs") },
                     )
                 }

@@ -30,6 +30,9 @@ object LyricsTranslationHelper {
     private val _hasActiveTranslations = MutableStateFlow(false)
     val hasActiveTranslations: StateFlow<Boolean> = _hasActiveTranslations.asStateFlow()
 
+    private val _activeSongId = MutableStateFlow<String?>(null)
+    val activeSongId: StateFlow<String?> = _activeSongId.asStateFlow()
+
     private val _currentLanguageCode = MutableStateFlow("hi-Latn")
     val currentLanguageCode: StateFlow<String> = _currentLanguageCode.asStateFlow()
 
@@ -90,10 +93,22 @@ object LyricsTranslationHelper {
         _status.value = TranslationStatus.Idle
     }
 
+    fun onSongChanged(newSongId: String) {
+        if (_activeSongId.value != newSongId) {
+            cancelTranslation()
+            _activeSongId.value = newSongId
+            _hasActiveTranslations.value = false
+            _status.value = TranslationStatus.Idle
+            activeLyricsList?.forEach { it.translatedTextFlow.value = null }
+            _translationVersion.value += 1
+        }
+    }
+
     fun clearTranslations(lyrics: List<LyricsEntry>? = null, context: Context? = null, songId: String? = null) {
         cancelTranslation()
         val targetLyrics = lyrics ?: activeLyricsList
         targetLyrics?.forEach { it.translatedTextFlow.value = null }
+        _activeSongId.value = null
         _hasActiveTranslations.value = false
         _status.value = TranslationStatus.Idle
 
@@ -119,7 +134,10 @@ object LyricsTranslationHelper {
         val nonEmptyEntries = lyrics.mapIndexedNotNull { index, entry ->
             if (entry.text.isNotBlank()) index to entry else null
         }
-        if (nonEmptyEntries.isEmpty()) return false
+        if (nonEmptyEntries.isEmpty()) {
+            _hasActiveTranslations.value = false
+            return false
+        }
 
         val fullText = nonEmptyEntries.joinToString("\n") { it.second.text }
         val memKey = getCacheKey(fullText, targetLanguageCode)
@@ -130,7 +148,9 @@ object LyricsTranslationHelper {
             nonEmptyEntries.forEachIndexed { idx, (originalIndex, _) ->
                 lyrics[originalIndex].translatedTextFlow.value = cachedMem.getOrNull(idx)
             }
+            _activeSongId.value = songId
             _hasActiveTranslations.value = true
+            _translationVersion.value += 1
             return true
         }
 
@@ -148,12 +168,15 @@ object LyricsTranslationHelper {
                     nonEmptyEntries.forEachIndexed { idx, (originalIndex, _) ->
                         lyrics[originalIndex].translatedTextFlow.value = list.getOrNull(idx)
                     }
+                    _activeSongId.value = songId
                     _hasActiveTranslations.value = true
+                    _translationVersion.value += 1
                     return true
                 }
             }
         }
 
+        _hasActiveTranslations.value = false
         return false
     }
 
@@ -240,11 +263,13 @@ object LyricsTranslationHelper {
                         }
                     }
 
+                    _activeSongId.value = songId
                     _hasActiveTranslations.value = true
                     _status.value = TranslationStatus.Success
                     _translationVersion.value += 1
                 }.onFailure { error ->
                     Timber.e(error, "Lyrics translation failed")
+                    _hasActiveTranslations.value = false
                     _status.value = TranslationStatus.Error(error.message ?: "Translation error occurred.")
                 }
             }

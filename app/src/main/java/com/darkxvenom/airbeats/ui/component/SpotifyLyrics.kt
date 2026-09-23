@@ -69,6 +69,7 @@ import androidx.compose.runtime.DisposableEffect
 import com.darkxvenom.airbeats.LocalDatabase
 import com.darkxvenom.airbeats.LocalPlayerConnection
 import com.darkxvenom.airbeats.R
+import com.darkxvenom.airbeats.constants.AutoTranslateKey
 import com.darkxvenom.airbeats.constants.ReplaceOriginalLyricsWithTranslationKey
 import com.darkxvenom.airbeats.constants.TranslateLanguageKey
 import com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper
@@ -136,7 +137,12 @@ fun SpotifyLyrics(
     }
     val replaceOriginalLyrics by rememberPreference(ReplaceOriginalLyricsWithTranslationKey, false)
     val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
+    val autoTranslate by rememberPreference(AutoTranslateKey, false)
     val targetLanguage by rememberPreference(TranslateLanguageKey, "hi-Latn")
+
+    LaunchedEffect(mediaMetadata?.id) {
+        mediaMetadata?.id?.let { LyricsTranslationHelper.onSongChanged(it) }
+    }
 
     DisposableEffect(lines) {
         LyricsTranslationHelper.registerLyrics(lines)
@@ -145,15 +151,17 @@ fun SpotifyLyrics(
         }
     }
 
-    LaunchedEffect(lines, mediaMetadata?.id, targetLanguage, translationVersion) {
+    LaunchedEffect(lines, mediaMetadata?.id, targetLanguage, translationVersion, autoTranslate) {
         val songId = mediaMetadata?.id ?: return@LaunchedEffect
         if (lines.isEmpty()) return@LaunchedEffect
-        LyricsTranslationHelper.loadTranslationsFromCache(
-            lyrics = lines,
-            context = context,
-            songId = songId,
-            targetLanguageCode = targetLanguage
-        )
+        if (autoTranslate) {
+            LyricsTranslationHelper.loadTranslationsFromCache(
+                lyrics = lines,
+                context = context,
+                songId = songId,
+                targetLanguageCode = targetLanguage
+            )
+        }
     }
 
     val activeLineIndex = remember(lines, position) {

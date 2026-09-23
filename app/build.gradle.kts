@@ -217,6 +217,11 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.8.0")
     implementation(libs.squigglyslider)
 
+    // Google Cast & local streaming proxy
+    implementation("com.google.android.gms:play-services-cast-framework:22.3.1")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+
     implementation(libs.room.runtime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.blurry)

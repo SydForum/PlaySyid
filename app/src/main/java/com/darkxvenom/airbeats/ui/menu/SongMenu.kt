@@ -673,7 +673,7 @@ fun SongMenu(
                 },
                 leadingContent = {
                     Icon(
-                        painter = painterResource(R.drawable.thumb_down),
+                        painter = painterResource(R.drawable.block),
                         contentDescription = null,
                     )
                 },

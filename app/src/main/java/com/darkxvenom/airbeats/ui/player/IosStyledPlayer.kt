@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.SpeakerGroup
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.runtime.collectAsState
 import com.darkxvenom.airbeats.LocalPlayerConnection
+import com.darkxvenom.airbeats.ui.component.PlayerCastMenuRow
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material3.Switch
@@ -684,8 +685,13 @@ private fun V8DeviceSelector(
     val fallbackDevices = remember { getAvailableDevices(context) }
     val displayDevices = if (availableAudioDevices.isNotEmpty()) availableAudioDevices else fallbackDevices
     val activeDevice = preferredAudioDevice ?: remember(displayDevices) { getActiveDevice(displayDevices) }
+    val isCasting by (playerConnection?.service?.isCasting?.collectAsState() ?: remember { mutableStateOf(false) })
     val isBluetooth = activeDevice?.isBluetoothOutput() == true
-    val deviceIcon = if (isBluetooth) R.drawable.ic_bluetooth else R.drawable.airplay
+    val deviceIcon = when {
+        isCasting -> R.drawable.ic_cast_connected
+        isBluetooth -> R.drawable.ic_bluetooth
+        else -> R.drawable.airplay
+    }
 
     val hasBtPerm = remember(context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -708,14 +714,14 @@ private fun V8DeviceSelector(
             }
         },
         shape = CircleShape,
-        color = if (isBluetooth) textBackgroundColor.copy(alpha = 0.15f) else Color.Transparent,
+        color = if (isCasting || isBluetooth) textBackgroundColor.copy(alpha = 0.15f) else Color.Transparent,
         modifier = modifier.size(36.dp),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Icon(
                 painter = painterResource(deviceIcon),
                 contentDescription = "Playback Device",
-                tint = textBackgroundColor.copy(alpha = if (isBluetooth) 1f else 0.7f),
+                tint = textBackgroundColor.copy(alpha = if (isCasting || isBluetooth) 1f else 0.7f),
                 modifier = Modifier.size(22.dp),
             )
         }
@@ -883,6 +889,12 @@ internal fun DeviceSelectionBottomSheet(
                         }
                     }
                 }
+
+                // Google Cast / Chromecast Streaming
+                PlayerCastMenuRow(
+                    onDismiss = onDismiss,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
 
                 // 1. Automatic (System Default) Option
                 val isAutoSelected = preferredDevice == null

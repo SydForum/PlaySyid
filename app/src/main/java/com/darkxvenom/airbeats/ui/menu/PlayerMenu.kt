@@ -91,6 +91,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.mediarouter.app.MediaRouteButton
+import com.google.android.gms.cast.framework.CastButtonFactory
+import android.view.ContextThemeWrapper
 import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.ui.component.LocalBackdrop
 import com.darkxvenom.airbeats.ui.component.drawBackdropCustomShape
@@ -530,6 +535,49 @@ fun PlayerMenu(
                     }
 
                     item {
+                        val isCasting by (playerConnection.service.isCasting.collectAsState())
+                        val castDeviceName by (playerConnection.service.castDeviceName.collectAsState())
+                        val mediaRouteButtonRef = remember { mutableStateOf<MediaRouteButton?>(null) }
+
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    val themeContext = ContextThemeWrapper(ctx, androidx.appcompat.R.style.Theme_AppCompat_NoActionBar)
+                                    MediaRouteButton(themeContext).apply {
+                                        try {
+                                            CastButtonFactory.setUpMediaRouteButton(ctx, this)
+                                        } catch (e: Exception) {
+                                            timber.log.Timber.w(e, "CastButtonFactory setup failed")
+                                        }
+                                        mediaRouteButtonRef.value = this
+                                    }
+                                },
+                                modifier = Modifier.size(1.dp).alpha(0f)
+                            )
+
+                            androidx.compose.material3.ListItem(
+                                headlineContent = {
+                                    Text(if (isCasting && !castDeviceName.isNullOrBlank()) "Casting to $castDeviceName" else "Google Cast / Chromecast")
+                                },
+                                supportingContent = {
+                                    Text(if (isCasting) "Tap to manage or disconnect" else "Stream audio to Chromecast or Smart TV")
+                                },
+                                leadingContent = {
+                                    Icon(
+                                        painter = painterResource(if (isCasting) R.drawable.ic_cast_connected else R.drawable.ic_cast),
+                                        contentDescription = "Cast",
+                                        tint = if (isCasting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                                modifier = Modifier.clickable {
+                                    mediaRouteButtonRef.value?.performClick()
+                                }
+                            )
+                        }
+                    }
+
+                    item {
                         androidx.compose.material3.ListItem(
                             headlineContent = { Text(stringResource(R.string.sleep_timer)) },
                             leadingContent = { Icon(painterResource(R.drawable.schedule), contentDescription = null) },
@@ -651,7 +699,7 @@ fun PlayerMenu(
                             },
                             leadingContent = {
                                 Icon(
-                                    painterResource(R.drawable.thumb_down),
+                                    painterResource(R.drawable.block),
                                     contentDescription = null
                                 )
                             },

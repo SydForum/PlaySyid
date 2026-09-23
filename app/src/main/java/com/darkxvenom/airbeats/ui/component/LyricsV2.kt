@@ -280,35 +280,41 @@ fun LyricsV2(
         }
     }
 
+    LaunchedEffect(mediaMetadata?.id) {
+        mediaMetadata?.id?.let { LyricsTranslationHelper.onSongChanged(it) }
+    }
+
     // ── AI Lyrics Translation Sync ──
-    LaunchedEffect(entriesWithWords, mediaMetadata?.id, targetLanguage, translationVersion) {
+    LaunchedEffect(entriesWithWords, mediaMetadata?.id, targetLanguage, translationVersion, autoTranslate) {
         val songId = mediaMetadata?.id ?: return@LaunchedEffect
         if (entriesWithWords.isEmpty()) return@LaunchedEffect
 
-        val hasLoaded = LyricsTranslationHelper.loadTranslationsFromCache(
-            lyrics = entriesWithWords,
-            context = context,
-            songId = songId,
-            targetLanguageCode = targetLanguage
-        )
+        if (autoTranslate) {
+            val hasLoaded = LyricsTranslationHelper.loadTranslationsFromCache(
+                lyrics = entriesWithWords,
+                context = context,
+                songId = songId,
+                targetLanguageCode = targetLanguage
+            )
 
-        // Auto-translate if enabled and not already translated or translating
-        if (!hasLoaded && autoTranslate && !LyricsTranslationHelper.isTranslating()) {
-            val key = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey
-            if (key.isNotBlank()) {
-                LyricsTranslationHelper.translateLyrics(
-                    lyrics = entriesWithWords,
-                    targetLanguageCode = targetLanguage,
-                    apiKey = key,
-                    baseUrl = openRouterBaseUrl,
-                    model = openRouterModel,
-                    mode = translateMode,
-                    customPrompt = customPrompt.takeIf { it.isNotBlank() },
-                    provider = aiProvider,
-                    context = context,
-                    songId = songId,
-                    scope = scope
-                )
+            // Auto-translate if enabled and not already translated or translating
+            if (!hasLoaded && !LyricsTranslationHelper.isTranslating()) {
+                val key = if (aiProvider == "DeepL") deeplApiKey else openRouterApiKey
+                if (key.isNotBlank()) {
+                    LyricsTranslationHelper.translateLyrics(
+                        lyrics = entriesWithWords,
+                        targetLanguageCode = targetLanguage,
+                        apiKey = key,
+                        baseUrl = openRouterBaseUrl,
+                        model = openRouterModel,
+                        mode = translateMode,
+                        customPrompt = customPrompt.takeIf { it.isNotBlank() },
+                        provider = aiProvider,
+                        context = context,
+                        songId = songId,
+                        scope = scope
+                    )
+                }
             }
         }
     }

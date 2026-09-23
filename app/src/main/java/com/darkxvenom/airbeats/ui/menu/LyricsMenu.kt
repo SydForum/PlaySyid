@@ -119,6 +119,7 @@ fun LyricsMenu(
 
     val translationStatus by LyricsTranslationHelper.status.collectAsState()
     val hasTranslations by LyricsTranslationHelper.hasActiveTranslations.collectAsState()
+    val activeSongId by LyricsTranslationHelper.activeSongId.collectAsState()
 
     var showEditDialog by rememberSaveable { mutableStateOf(false) }
     var showSearchDialog by rememberSaveable { mutableStateOf(false) }
@@ -838,6 +839,7 @@ fun LyricsMenu(
         val isCached = remember(selectedTargetLanguage, mediaMetadata.id) {
             LyricsTranslationHelper.hasCachedTranslation(context, mediaMetadata.id, selectedTargetLanguage)
         }
+        val isCurrentSongTranslated = hasTranslations && (activeSongId == mediaMetadata.id)
 
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -859,7 +861,7 @@ fun LyricsMenu(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            painter = painterResource(if (hasTranslations || isCached) R.drawable.auto_awesome else R.drawable.lyrics),
+                            painter = painterResource(if (isCurrentSongTranslated) R.drawable.auto_awesome else R.drawable.lyrics),
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
@@ -891,14 +893,14 @@ fun LyricsMenu(
                         )
                         Spacer(Modifier.width(8.dp))
                         Surface(
-                            color = if (hasTranslations || isCached) MaterialTheme.colorScheme.primaryContainer else if (isSynced) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            color = if (isCurrentSongTranslated) MaterialTheme.colorScheme.primaryContainer else if (isSynced) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
-                                text = if (hasTranslations || isCached) "Translated" else if (isSynced) "Synced" else "Plain",
+                                text = if (isCurrentSongTranslated) "Translated" else if (isSynced) "Synced" else "Plain",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (hasTranslations || isCached) MaterialTheme.colorScheme.onPrimaryContainer else if (isSynced) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (isCurrentSongTranslated) MaterialTheme.colorScheme.onPrimaryContainer else if (isSynced) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -908,7 +910,7 @@ fun LyricsMenu(
         }
 
         // Active Translation Banner with Quick Clear
-        if (hasTranslations || isCached) {
+        if (isCurrentSongTranslated) {
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(14.dp),
@@ -975,10 +977,10 @@ fun LyricsMenu(
         ) {
             EnhancedMenuActionCard(
                 title = stringResource(R.string.Translate),
-                subtitle = if (hasTranslations || isCached) "Retranslate" else "AI Translation",
+                subtitle = if (isCurrentSongTranslated) "Retranslate" else "AI Translation",
                 icon = R.drawable.translate,
                 isPrimary = true,
-                badge = if (hasTranslations || isCached) "Active" else "AI",
+                badge = if (isCurrentSongTranslated) "Active" else "AI",
                 modifier = Modifier.weight(1f),
                 onClick = { showTranslateDialog = true }
             )

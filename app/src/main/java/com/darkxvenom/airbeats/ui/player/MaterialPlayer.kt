@@ -106,6 +106,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import coil.compose.AsyncImage
 import com.darkxvenom.airbeats.R
+import com.darkxvenom.airbeats.constants.AutoTranslateKey
 import com.darkxvenom.airbeats.constants.DefaultPlayPauseButtonShape
 import com.darkxvenom.airbeats.constants.EqualizerPresetKey
 import com.darkxvenom.airbeats.constants.PlayPauseButtonShapeKey
@@ -265,9 +266,14 @@ fun MaterialPlayer(
 
 
     // Translated synchronized lyrics
+    val autoTranslate by rememberPreference(AutoTranslateKey, false)
     val targetLanguage by rememberPreference(TranslateLanguageKey, "hi-Latn")
     val currentTranslationLang by LyricsTranslationHelper.currentLanguageCode.collectAsState()
     val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
+
+    LaunchedEffect(mediaMetadata?.id) {
+        mediaMetadata?.id?.let { LyricsTranslationHelper.onSongChanged(it) }
+    }
 
     val parsedLyrics = remember(currentLyrics?.lyrics) {
         val raw = LyricsTranslationHelper.parseLyricsToEntries(currentLyrics?.lyrics)
@@ -316,38 +322,40 @@ fun MaterialPlayer(
         }
     }
 
-    LaunchedEffect(parsedLyrics, mediaMetadata?.id, targetLanguage, currentTranslationLang, translationVersion) {
+    LaunchedEffect(parsedLyrics, mediaMetadata?.id, targetLanguage, currentTranslationLang, translationVersion, autoTranslate) {
         val songId = mediaMetadata?.id ?: return@LaunchedEffect
         if (parsedLyrics.isEmpty()) return@LaunchedEffect
 
-        val activeLang = currentTranslationLang.ifBlank { targetLanguage }
-        var loaded = LyricsTranslationHelper.loadTranslationsFromCache(
-            lyrics = parsedLyrics,
-            context = context,
-            songId = songId,
-            targetLanguageCode = activeLang
-        )
-        if (!loaded && activeLang != targetLanguage) {
-            loaded = LyricsTranslationHelper.loadTranslationsFromCache(
+        if (autoTranslate) {
+            val activeLang = currentTranslationLang.ifBlank { targetLanguage }
+            var loaded = LyricsTranslationHelper.loadTranslationsFromCache(
                 lyrics = parsedLyrics,
                 context = context,
                 songId = songId,
-                targetLanguageCode = targetLanguage
+                targetLanguageCode = activeLang
             )
-        }
-        if (!loaded) {
-            val dir = File(context.filesDir, "lyrics_translations")
-            val safeSongId = songId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-            val cachedFile = dir.listFiles { _, name -> name.startsWith("${safeSongId}_") && name.endsWith(".json") }?.firstOrNull()
-            if (cachedFile != null) {
-                val foundLang = cachedFile.name.removePrefix("${safeSongId}_").removeSuffix(".json")
-                if (foundLang.isNotBlank()) {
-                    LyricsTranslationHelper.loadTranslationsFromCache(
-                        lyrics = parsedLyrics,
-                        context = context,
-                        songId = songId,
-                        targetLanguageCode = foundLang
-                    )
+            if (!loaded && activeLang != targetLanguage) {
+                loaded = LyricsTranslationHelper.loadTranslationsFromCache(
+                    lyrics = parsedLyrics,
+                    context = context,
+                    songId = songId,
+                    targetLanguageCode = targetLanguage
+                )
+            }
+            if (!loaded) {
+                val dir = File(context.filesDir, "lyrics_translations")
+                val safeSongId = songId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                val cachedFile = dir.listFiles { _, name -> name.startsWith("${safeSongId}_") && name.endsWith(".json") }?.firstOrNull()
+                if (cachedFile != null) {
+                    val foundLang = cachedFile.name.removePrefix("${safeSongId}_").removeSuffix(".json")
+                    if (foundLang.isNotBlank()) {
+                        LyricsTranslationHelper.loadTranslationsFromCache(
+                            lyrics = parsedLyrics,
+                            context = context,
+                            songId = songId,
+                            targetLanguageCode = foundLang
+                        )
+                    }
                 }
             }
         }

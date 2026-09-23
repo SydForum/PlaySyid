@@ -19,6 +19,7 @@ import android.os.Binder
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
@@ -63,6 +64,10 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionToken
+import com.darkxvenom.airbeats.playback.cast.CastPlayback
+import com.darkxvenom.airbeats.playback.cast.CastPlaybackListener
+import com.darkxvenom.airbeats.playback.cast.ResolvedCastStream
+import com.google.android.gms.cast.framework.CastContext
 import com.darkxvenom.airbeats.innertube.YouTube
 import com.darkxvenom.airbeats.innertube.models.SongItem
 import com.darkxvenom.airbeats.innertube.models.WatchEndpoint
@@ -354,6 +359,8 @@ class MusicService :
     )
     private val songUrlCache = java.util.concurrent.ConcurrentHashMap<String, CachedSongUrl>()
     private val spotifyMatchCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val jioSaavnAttemptedSongIds = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+    private val jioSaavnFailedSongs = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
 
     lateinit var sleepTimer: SleepTimer
 
@@ -421,6 +428,14 @@ class MusicService :
     private var infiniteQueueLoadJob: Job? = null
 
     private var consecutivePlaybackErr = 0
+
+    // Google Cast / Chromecast audio streaming state
+    private var castPlayback: CastPlayback? = null
+    val isCasting = MutableStateFlow(false)
+    val isCastPlaying = MutableStateFlow(false)
+    val castDeviceName = MutableStateFlow<String?>(null)
+    val castPositionMs = MutableStateFlow(0L)
+    val castDurationMs = MutableStateFlow(0L)
 
     override fun onCreate() {
         super.onCreate()
@@ -941,6 +956,8 @@ class MusicService :
                 }
             }
         }
+
+        initializeCast()
     }
 
 
@@ -2250,6 +2267,16 @@ class MusicService :
         mediaItem: MediaItem?,
         reason: Int,
     ) {
+        if (isCasting.value) {
+            player.pause()
+            val metadata = mediaItem?.metadata ?: player.currentMetadata
+            if (metadata != null) {
+                castPlayback?.load(metadata, positionMs = 0L, autoplay = true)
+            }
+        }
+        mediaItem?.mediaId?.let { id ->
+            com.darkxvenom.airbeats.lyrics.LyricsTranslationHelper.onSongChanged(id)
+        }
         crossfadeAudio?.onMediaItemTransition(mediaItem, reason)
         lastPlaybackSpeed = -1.0f // forzar actualización de canción
 
@@ -2418,9 +2445,13 @@ class MusicService :
             val isBufferingOrReady =
                 player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_READY
             if (isBufferingOrReady && player.playWhenReady) {
-                val focusGranted = requestAudioFocus()
-                if (focusGranted) {
-                    openAudioEffectSession()
+                if (isCasting.value) {
+                    player.pause()
+                } else {
+                    val focusGranted = requestAudioFocus()
+                    if (focusGranted) {
+                        openAudioEffectSession()
+                    }
                 }
             } else {
                 closeAudioEffectSession()
@@ -2508,6 +2539,33 @@ class MusicService :
         Log.e(TAG, "Player error: ${error.errorCodeName}, message: ${error.message}", error)
 
         player.currentMediaItem?.mediaId?.let { mediaId ->
+            if (jioSaavnAttemptedSongIds.remove(mediaId)) {
+                Log.w(TAG, "JioSaavn stream failed for track $mediaId. Retrying immediately with native stream...")
+                jioSaavnFailedSongs.add(mediaId)
+                songUrlCache.remove(mediaId)
+                database.query {
+                    runCatching {
+                        upsert(
+                            FormatEntity(
+                                id = mediaId,
+                                itag = 0,
+                                mimeType = "",
+                                codecs = "",
+                                bitrate = 0,
+                                sampleRate = 0,
+                                contentLength = 0L,
+                                loudnessDb = null,
+                                playbackUrl = ""
+                            )
+                        )
+                    }
+                }
+                scope.launch(Dispatchers.Main) {
+                    player.prepare()
+                    player.play()
+                }
+                return
+            }
             songUrlCache.remove(mediaId)
         }
 
@@ -2582,18 +2640,14 @@ class MusicService :
             val mediaId = dataSpec.key ?: error("No media id")
 
             val checkLength = if (dataSpec.length > 0) dataSpec.length else 1L
-            val isDownloaded = downloadCache.isCached(mediaId, dataSpec.position, checkLength)
-            val isPlayerCached = playerCache.isCached(mediaId, dataSpec.position, checkLength)
+            val isCached = downloadCache.isCached(mediaId, dataSpec.position, checkLength) ||
+                    downloadCache.isCached(mediaId, dataSpec.position, 1L) ||
+                    playerCache.isCached(mediaId, dataSpec.position, checkLength) ||
+                    playerCache.isCached(mediaId, dataSpec.position, 1L) ||
+                    (tryOrNull { playerCache.getCachedBytes(mediaId, 0L, Long.MAX_VALUE) } ?: 0L) > 0L ||
+                    (tryOrNull { downloadCache.getCachedBytes(mediaId, 0L, Long.MAX_VALUE) } ?: 0L) > 0L
 
-            // If the song is cached in either downloadCache or playerCache, serve immediately from cache
-            if (isDownloaded || isPlayerCached) {
-                scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                return@Factory dataSpec
-            }
-
-            // If offline, and we have any cached data for this mediaId in either cache, allow playing it
-            // directly without falling through to failing remote networks
-            if (!isNetworkConnected.value && (downloadCache.keys.contains(mediaId) || playerCache.keys.contains(mediaId))) {
+            if (isCached) {
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
                 return@Factory dataSpec
             }
@@ -2706,7 +2760,7 @@ class MusicService :
             }
 
             // When JioSaavn integration is enabled, prioritize JioSaavn 320kbps streams first
-            if (enableJioSaavn && !mediaId.startsWith("JS:") && !mediaId.startsWith("local:")) {
+            if (enableJioSaavn && !mediaId.startsWith("JS:") && !mediaId.startsWith("local:") && !jioSaavnFailedSongs.contains(mediaId)) {
                 try {
                     val mediaMetadata = kotlinx.coroutines.runBlocking(Dispatchers.Main) {
                         player.mediaItems.find { it.mediaId == mediaId }?.metadata
@@ -2725,29 +2779,44 @@ class MusicService :
                             }.getOrNull()
                         }
                         if (jsStreamUrl != null) {
-                            Timber.tag("MusicService").d("JioSaavn Priority: Serving 320k for '${mediaMetadata.title}'")
-                            database.query {
-                                upsert(
-                                    FormatEntity(
-                                        id = mediaId,
-                                        itag = 141,
-                                        mimeType = "audio/mp4",
-                                        codecs = "mp4a.40.2",
-                                        bitrate = 320000,
-                                        sampleRate = 44100,
-                                        contentLength = 0L,
-                                        loudnessDb = null,
-                                        playbackUrl = jsStreamUrl
+                            val isValidJsUrl = runCatching {
+                                val headReq = okhttp3.Request.Builder()
+                                    .url(jsStreamUrl)
+                                    .head()
+                                    .build()
+                                mediaOkHttpClient.newCall(headReq).execute().use { resp ->
+                                    resp.isSuccessful
+                                }
+                            }.getOrDefault(false)
+
+                            if (isValidJsUrl) {
+                                jioSaavnAttemptedSongIds.add(mediaId)
+                                Timber.tag("MusicService").d("JioSaavn Priority: Serving verified 320k for '${mediaMetadata.title}'")
+                                database.query {
+                                    upsert(
+                                        FormatEntity(
+                                            id = mediaId,
+                                            itag = 141,
+                                            mimeType = "audio/mp4",
+                                            codecs = "mp4a.40.2",
+                                            bitrate = 320000,
+                                            sampleRate = 44100,
+                                            contentLength = 0L,
+                                            loudnessDb = null,
+                                            playbackUrl = jsStreamUrl
+                                        )
                                     )
+                                }
+                                songUrlCache[mediaId] = CachedSongUrl(
+                                    url = jsStreamUrl,
+                                    expiresAt = System.currentTimeMillis() + 3600000L,
+                                    contentLength = null,
                                 )
+                                scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+                                return@Factory dataSpec.withStreamUrl(jsStreamUrl, null)
+                            } else {
+                                Timber.tag("MusicService").w("JioSaavn stream URL validation failed for '$mediaId'. Falling back directly to YouTube.")
                             }
-                            songUrlCache[mediaId] = CachedSongUrl(
-                                url = jsStreamUrl,
-                                expiresAt = System.currentTimeMillis() + 3600000L,
-                                contentLength = null,
-                            )
-                            scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                            return@Factory dataSpec.withStreamUrl(jsStreamUrl, null)
                         }
                     }
                 } catch (e: Exception) {
@@ -2845,6 +2914,7 @@ class MusicService :
                                 )
                             }
                             if (jsStreamUrl != null) {
+                                jioSaavnAttemptedSongIds.add(mediaId)
                                 database.query {
                                     upsert(
                                         FormatEntity(
@@ -3156,7 +3226,225 @@ class MusicService :
         if (instance == this) {
             instance = null
         }
+        runCatching {
+            castPlayback?.release()
+            castPlayback = null
+        }
         super.onDestroy()
+    }
+
+    private fun initializeCast() {
+        try {
+            val castContext = CastContext.getSharedInstance(this)
+            castPlayback = CastPlayback(
+                context = this,
+                listener = object : CastPlaybackListener {
+                    override suspend fun resolveCastStream(mediaId: String): ResolvedCastStream? {
+                        return this@MusicService.resolveAudioStreamForCast(mediaId)
+                    }
+
+                    override fun onCastSessionStarted(deviceName: String) {
+                        isCasting.value = true
+                        isCastPlaying.value = true
+                        castDeviceName.value = deviceName
+                        player.pause()
+                        currentMediaMetadata.value?.let { track ->
+                            val pos = player.currentPosition.coerceAtLeast(0L)
+                            castPlayback?.load(track, pos, autoplay = true)
+                        }
+                    }
+
+                    override fun onCastSessionEnded() {
+                        val wasCasting = isCasting.value
+                        val lastCastPosition = castPositionMs.value
+                        isCasting.value = false
+                        isCastPlaying.value = false
+                        castDeviceName.value = null
+                        castPositionMs.value = 0L
+                        castDurationMs.value = 0L
+                        if (wasCasting && player.currentMediaItem != null) {
+                            player.seekTo(lastCastPosition)
+                        }
+                    }
+
+                    override fun onCastTrackEnded() {
+                        scope.launch(Dispatchers.Main) {
+                            if (player.hasNextMediaItem()) {
+                                player.seekToNextMediaItem()
+                            }
+                        }
+                    }
+
+                    override fun onCastStateUpdated(
+                        isPlaying: Boolean,
+                        isBuffering: Boolean,
+                        positionMs: Long,
+                        durationMs: Long,
+                    ) {
+                        isCastPlaying.value = isPlaying
+                        castPositionMs.value = positionMs
+                        if (durationMs > 0) {
+                            castDurationMs.value = durationMs
+                        }
+                    }
+
+                    override fun onCastError(message: String) {
+                        Timber.e("Cast error: $message")
+                        Toast.makeText(this@MusicService, message, Toast.LENGTH_SHORT).show()
+                    }
+                },
+                scope = scope,
+                castContext = castContext,
+            ).apply {
+                initialize()
+            }
+        } catch (e: Throwable) {
+            Timber.w(e, "Chromecast CastContext initialization skipped or unavailable")
+        }
+    }
+
+    suspend fun resolveAudioStreamForCast(mediaId: String): ResolvedCastStream? {
+        val localUri = withContext(Dispatchers.Main) {
+            player.mediaItems.find { it.mediaId == mediaId }?.localConfiguration?.uri
+        }
+        if (localUri != null && (localUri.scheme == "content" || localUri.scheme == "file")) {
+            return ResolvedCastStream(
+                url = localUri.toString(),
+                mimeType = "audio/mp4"
+            )
+        }
+        if (mediaId.startsWith("content://") || mediaId.startsWith("file://")) {
+            return ResolvedCastStream(
+                url = mediaId,
+                mimeType = "audio/mp4"
+            )
+        }
+
+        songUrlCache[mediaId]?.takeIf { it.expiresAt > System.currentTimeMillis() }?.let { cached ->
+            return ResolvedCastStream(
+                url = cached.url,
+                mimeType = "audio/mp4"
+            )
+        }
+
+        var actualMediaId = mediaId
+
+        if (mediaId.startsWith("JS:")) {
+            try {
+                val streamUrl = withContext(Dispatchers.IO) {
+                    com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.getStreamUrl(mediaId)
+                }
+                if (streamUrl != null) {
+                    return ResolvedCastStream(url = streamUrl, mimeType = "audio/mp4")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Cast: JioSaavn stream fetching error for $mediaId")
+            }
+        }
+
+        if (mediaId.startsWith("sp:")) {
+            val matchedId = spotifyMatchCache[mediaId]
+            if (matchedId != null) {
+                actualMediaId = matchedId
+            } else {
+                val mediaMetadata = withContext(Dispatchers.Main) {
+                    player.mediaItems.find { it.mediaId == mediaId }?.metadata ?: currentMediaMetadata.value
+                }
+                if (mediaMetadata != null) {
+                    val artistName = mediaMetadata.artists.firstOrNull()?.name ?: ""
+                    val query = "${mediaMetadata.title} $artistName"
+                    val searchResult = withContext(Dispatchers.IO) {
+                        YouTube.search(query, com.darkxvenom.airbeats.innertube.YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                    }
+                    val songItem = searchResult?.items?.firstOrNull() as? SongItem
+                    if (songItem != null) {
+                        actualMediaId = songItem.id
+                        spotifyMatchCache[mediaId] = actualMediaId
+                    }
+                }
+            }
+        }
+
+        val enableJioSaavn = dataStore.data.map { preferences ->
+            preferences[EnableJioSaavnKey] ?: true
+        }.first()
+
+        if (enableJioSaavn && !actualMediaId.startsWith("JS:") && !actualMediaId.startsWith("local:")) {
+            try {
+                val mediaMetadata = withContext(Dispatchers.Main) {
+                    player.mediaItems.find { it.mediaId == mediaId }?.metadata ?: currentMediaMetadata.value
+                }
+                if (mediaMetadata != null && mediaMetadata.title.isNotBlank()) {
+                    val artistName = mediaMetadata.artists.firstOrNull()?.name ?: ""
+                    val jsStreamUrl = withContext(Dispatchers.IO) {
+                        runCatching {
+                            kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                                com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.findMatchAndStreamUrl(
+                                    mediaMetadata.title,
+                                    artistName,
+                                    mediaMetadata.duration
+                                )
+                            }
+                        }.getOrNull()
+                    }
+                    if (jsStreamUrl != null) {
+                        return ResolvedCastStream(url = jsStreamUrl, mimeType = "audio/mp4")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Cast: JioSaavn priority resolution failed")
+            }
+        }
+
+        try {
+            val playbackData = withContext(Dispatchers.IO) {
+                YTPlayerUtils.playerResponseForPlayback(
+                    actualMediaId,
+                    audioQuality = audioQuality,
+                    connectivityManager = connectivityManager
+                )
+            }.getOrNull()
+
+            if (playbackData != null) {
+                val clientParam = android.net.Uri.parse(playbackData.streamUrl).getQueryParameter("c")?.trim().orEmpty()
+                val userAgent = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveUserAgent(clientParam)
+                val originReferer = com.darkxvenom.airbeats.utils.StreamClientUtils.resolveOriginReferer(clientParam)
+                val headers = mutableMapOf<String, String>("User-Agent" to userAgent)
+                originReferer.origin?.let { headers["Origin"] = it }
+                originReferer.referer?.let { headers["Referer"] = it }
+
+                return ResolvedCastStream(
+                    url = playbackData.streamUrl,
+                    mimeType = playbackData.format.mimeType.split(";")[0],
+                    requestHeaders = headers
+                )
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Cast: YouTube playback resolution failed")
+        }
+
+        return null
+    }
+
+    fun toggleCastPlayPause() {
+        castPlayback?.let {
+            if (isCastPlaying.value) {
+                it.pause()
+                isCastPlaying.value = false
+            } else {
+                it.play()
+                isCastPlaying.value = true
+            }
+        }
+    }
+
+    fun seekCastTo(positionMs: Long) {
+        castPlayback?.seek(positionMs)
+        castPositionMs.value = positionMs
+    }
+
+    fun disconnectCast() {
+        castPlayback?.disconnect()
     }
 
     override fun onBind(intent: Intent?) = super.onBind(intent) ?: binder
