@@ -105,6 +105,7 @@ fun PlaylistMenu(
         androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
         ) { uri ->
+            onDismiss()
             if (uri != null) {
                 com.darkxvenom.airbeats.utils.SaveToStorageUtil.applicationScope.launch(Dispatchers.IO) {
                     val songEntities: List<Song> = when {
@@ -458,7 +459,6 @@ fun PlaylistMenu(
             ) {
                 val safeName = playlist.playlist.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "playlist" }
                 exportPlaylistLauncher.launch("$safeName.txt")
-                onDismiss()
             }
         }
 

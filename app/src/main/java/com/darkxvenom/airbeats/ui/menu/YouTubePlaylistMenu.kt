@@ -57,6 +57,7 @@ import com.darkxvenom.airbeats.R
 import com.darkxvenom.airbeats.constants.ListThumbnailSize
 import com.darkxvenom.airbeats.constants.ThumbnailCornerRadius
 import com.darkxvenom.airbeats.db.entities.PlaylistEntity
+import com.darkxvenom.airbeats.db.entities.PlaylistSong
 import com.darkxvenom.airbeats.db.entities.PlaylistSongMap
 import com.darkxvenom.airbeats.extensions.toMediaItem
 import com.darkxvenom.airbeats.models.MediaMetadata
@@ -74,6 +75,7 @@ import com.darkxvenom.airbeats.utils.joinByBullet
 import com.darkxvenom.airbeats.utils.makeTimeString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -112,14 +114,34 @@ fun YouTubePlaylistMenu(
         androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
         ) { uri ->
+            onDismiss()
             if (uri != null) {
                 val playlistTitle = playlist.title
                 val safeSongs = songs
                 val playlistId = playlist.id
+                val currentDbPlaylist = dbPlaylist
                 com.darkxvenom.airbeats.utils.SaveToStorageUtil.applicationScope.launch(Dispatchers.IO) {
-                    val songsToExport = safeSongs.ifEmpty {
-                        YouTube.playlist(playlistId).completedPlaylistPage().getOrNull()?.songs.orEmpty()
-                    }.map { it.toMediaMetadata() }
+                    val songsToExport: List<MediaMetadata> = if (safeSongs.isNotEmpty()) {
+                        safeSongs.map { it.toMediaMetadata() }
+                    } else if (currentDbPlaylist != null) {
+                        val localSongs = database.playlistSongs(currentDbPlaylist.id).first().map(PlaylistSong::song)
+                        if (localSongs.isNotEmpty()) {
+                            localSongs.map { song ->
+                                MediaMetadata(
+                                    id = song.id,
+                                    title = song.title,
+                                    artists = song.artists.map { MediaMetadata.Artist(id = it.id, name = it.name) },
+                                    duration = song.duration,
+                                    thumbnailUrl = song.thumbnailUrl,
+                                    album = song.album?.let { MediaMetadata.Album(id = it.id, title = it.title) }
+                                )
+                            }
+                        } else {
+                            YouTube.playlist(playlistId).completedPlaylistPage().getOrNull()?.songs.orEmpty().map { it.toMediaMetadata() }
+                        }
+                    } else {
+                        YouTube.playlist(playlistId).completedPlaylistPage().getOrNull()?.songs.orEmpty().map { it.toMediaMetadata() }
+                    }
 
                     val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.exportPlaylistToUri(
                         context = context,
@@ -529,7 +551,6 @@ fun YouTubePlaylistMenu(
         ) {
             val safeName = playlist.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "playlist" }
             exportPlaylistLauncher.launch("$safeName.txt")
-            onDismiss()
         }
 
         if (playlist.isEditable) {
