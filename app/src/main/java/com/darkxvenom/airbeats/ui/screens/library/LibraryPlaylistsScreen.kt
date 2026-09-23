@@ -244,7 +244,7 @@ fun LibraryPlaylistsScreen(
                             val (name, count) = result.getOrThrow()
                             android.widget.Toast.makeText(
                                 context,
-                                context.getString(R.string.playlist_imported, name, count),
+                                context.getString(R.string.playlist_imported_success, name, count),
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                         } else {
