@@ -34,6 +34,8 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import com.darkxvenom.airbeats.innertube.YouTube
+import com.darkxvenom.airbeats.innertube.models.SongItem
+import com.darkxvenom.airbeats.innertube.utils.completedPlaylistPage
 import com.darkxvenom.airbeats.LocalDatabase
 import com.darkxvenom.airbeats.LocalDownloadUtil
 import com.darkxvenom.airbeats.LocalPlayerConnection
@@ -126,10 +128,13 @@ fun PlaylistMenu(
                                 album = song.album?.let { MediaMetadata.Album(id = it.id, title = it.title) }
                             )
                         }
-                    } else if (currentPlaylist.playlist.browseId != null) {
-                        YouTube.playlist(currentPlaylist.playlist.browseId).completedPlaylistPage().getOrNull()?.songs.orEmpty().map { it.toMediaMetadata() }
                     } else {
-                        emptyList()
+                        val browseId = currentPlaylist.playlist.browseId
+                        if (browseId != null) {
+                            YouTube.playlist(browseId).completedPlaylistPage().getOrNull()?.songs.orEmpty().map { it.toMediaMetadata() }
+                        } else {
+                            emptyList()
+                        }
                     }
 
                     val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.exportPlaylistToUri(
