@@ -93,6 +93,29 @@ fun PlaylistMenu(
         mutableIntStateOf(Download.STATE_STOPPED)
     }
 
+    val exportPlaylistLauncher =
+        androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
+        ) { uri ->
+            if (uri != null) {
+                coroutineScope.launch(Dispatchers.IO) {
+                    val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.exportPlaylistToUri(
+                        context = context,
+                        uri = uri,
+                        playlistName = playlist.playlist.name,
+                        songs = songs
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (result.isSuccess) {
+                            android.widget.Toast.makeText(context, R.string.playlist_exported, android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, result.exceptionOrNull()?.message ?: "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+
     val editable: Boolean = playlist.playlist.isEditable == true
 
     LaunchedEffect(songs) {
@@ -391,6 +414,15 @@ fun PlaylistMenu(
         }
 
         if (songs.isNotEmpty()) {
+            GridMenuItem(
+                icon = R.drawable.download,
+                title = R.string.export_playlist,
+            ) {
+                onDismiss()
+                val safeName = playlist.playlist.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "playlist" }
+                exportPlaylistLauncher.launch("$safeName.txt")
+            }
+
             GridMenuItem(
                 icon = R.drawable.save_to_storage,
                 title = R.string.save_playlist_to_storage,

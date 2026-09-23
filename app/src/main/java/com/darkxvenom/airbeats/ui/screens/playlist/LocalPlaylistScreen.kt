@@ -227,6 +227,29 @@ fun LocalPlaylistScreen(
     var downloadState by remember { mutableStateOf(Download.STATE_STOPPED) }
     var showQualityDialog by remember { mutableStateOf(false) }
 
+    val exportPlaylistLauncher =
+        androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
+        ) { uri ->
+            if (uri != null && playlist != null) {
+                coroutineScope.launch(Dispatchers.IO) {
+                    val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.exportPlaylistToUri(
+                        context = context,
+                        uri = uri,
+                        playlistName = playlist!!.playlist.name,
+                        songs = songs.map { it.song }
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (result.isSuccess) {
+                            android.widget.Toast.makeText(context, R.string.playlist_exported, android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, result.exceptionOrNull()?.message ?: "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+
     val editable: Boolean = playlist?.playlist?.isEditable == true
 
     LaunchedEffect(songs) {
@@ -959,6 +982,28 @@ fun LocalPlaylistScreen(
                                             )
                                         }
                                     }
+
+                                    Surface(
+                                        onClick = {
+                                            val safeName = playlist.playlist.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "playlist" }
+                                            exportPlaylistLauncher.launch("$safeName.txt")
+                                        },
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.download),
+                                                contentDescription = stringResource(R.string.export_playlist),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(24.dp))
@@ -1407,6 +1452,19 @@ fun LocalPlaylistScreen(
                         )
                     }
                 } else if (!isSearching) {
+                    IconButton(
+                        onClick = {
+                            val safeName = playlist?.playlist?.name?.replace(Regex("[\\\\/:*?\"<>|]"), "_")?.trim()?.ifEmpty { "playlist" } ?: "playlist"
+                            exportPlaylistLauncher.launch("$safeName.txt")
+                        },
+                        onLongClick = {}
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.download),
+                            contentDescription = stringResource(R.string.export_playlist)
+                        )
+                    }
+
                     IconButton(
                         onClick = { isSearching = true },
                         onLongClick = {}

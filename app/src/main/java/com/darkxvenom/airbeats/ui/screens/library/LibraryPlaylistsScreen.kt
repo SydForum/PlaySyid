@@ -223,7 +223,123 @@ fun LibraryPlaylistsScreen(
         }
     }
 
+    val context = LocalContext.current
+    val database = com.darkxvenom.airbeats.LocalDatabase.current
+    var showActionChooser by rememberSaveable { mutableStateOf(false) }
     var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
+
+    val importPlaylistLauncher =
+        androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            if (uri != null) {
+                coroutineScope.launch(Dispatchers.IO) {
+                    val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.importPlaylistFromUri(
+                        context = context,
+                        uri = uri,
+                        database = database
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (result.isSuccess) {
+                            val (name, count) = result.getOrThrow()
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(R.string.playlist_imported, name, count),
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "${context.getString(R.string.import_playlist_failed)}: ${result.exceptionOrNull()?.message}",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            }
+        }
+
+    if (showActionChooser) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showActionChooser = false },
+            icon = {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Filled.Add,
+                    contentDescription = null
+                )
+            },
+            title = {
+                Text(text = stringResource(R.string.playlists))
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        onClick = {
+                            showActionChooser = false
+                            showCreatePlaylistDialog = true
+                        },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.add),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                text = stringResource(R.string.create_playlist_option),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = {
+                            showActionChooser = false
+                            importPlaylistLauncher.launch(arrayOf("text/*", "application/json", "*/*"))
+                        },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.download),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                text = stringResource(R.string.import_playlist_option),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showActionChooser = false }) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
 
     if (showCreatePlaylistDialog) {
         CreatePlaylistDialog(
@@ -357,7 +473,7 @@ fun LibraryPlaylistsScreen(
                 navController.navigate("generator")
             },
             onCreatePlaylist = {
-                showCreatePlaylistDialog = true
+                showActionChooser = true
             },
         )
     }

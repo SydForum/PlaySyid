@@ -1057,5 +1057,15 @@
     <string name="clear_all_exclusions">Restore All</string>
     <string name="all_exclusions_cleared">All excluded songs restored</string>
     <string name="recommendations">Recommendations</string>
+
+    <!-- Playlist Export / Import -->
+    <string name="export_playlist">Export playlist</string>
+    <string name="playlist_exported">Playlist exported successfully</string>
+    <string name="playlist_imported">Playlist imported: %1$s (%2$d songs)</string>
+    <string name="import_playlist_failed">Failed to import playlist</string>
+    <string name="create_playlist_option">Create playlist</string>
+    <string name="import_playlist_option">Import playlist</string>
+    <string name="download_canceled">Download canceled</string>
 </resources>
+
 

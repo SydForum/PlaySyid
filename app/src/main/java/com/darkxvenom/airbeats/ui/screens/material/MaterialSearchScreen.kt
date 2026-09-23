@@ -74,10 +74,34 @@ import com.darkxvenom.airbeats.constants.PauseSearchHistoryKey
 import com.darkxvenom.airbeats.db.entities.SearchHistory
 import com.darkxvenom.airbeats.viewmodels.OnlineSearchSuggestionViewModel
 import java.net.URLEncoder
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 
-private val SEARCH_GENRES = listOf(
-    "Pop", "Rock", "Hip-Hop", "Lo-Fi", "Electronic", "Indie",
-    "R&B", "Bollywood", "Jazz", "Metal", "Acoustic", "Chill"
+data class GenreCategory(
+    val title: String,
+    val color: Color,
+    val imageUrl: String
+)
+
+private val GENRE_CATEGORIES = listOf(
+    GenreCategory("Chill", Color(0xFF5A758D), "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Community", Color(0xFF8F7523), "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Energize", Color(0xFFA89547), "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Feel good", Color(0xFF5B8E60), "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Focus", Color(0xFF6B7A7A), "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Gaming", Color(0xFF383E44), "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Party", Color(0xFF74528E), "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Romance", Color(0xFF9E422D), "https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Sad", Color(0xFF535D5C), "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Sleep", Color(0xFF4C3A7A), "https://images.unsplash.com/photo-1511295742362-92c96b124e52?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Workout", Color(0xFFA35728), "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("African", Color(0xFF10722C), "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Arabic", Color(0xFF984617), "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Bengali", Color(0xFF837E43), "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Pop", Color(0xFFAD3869), "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Rock", Color(0xFF8F2929), "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Hip-Hop", Color(0xFFBA5A20), "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=200&q=80"),
+    GenreCategory("Bollywood", Color(0xFF8B2F57), "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=200&q=80")
 )
 
 /**
@@ -112,7 +136,7 @@ fun MaterialSearchScreen(
         defaultValue = false
     )
     val plainBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.background
-    var selectedTab by remember { mutableStateOf(com.darkxvenom.airbeats.ui.component.SearchTab.BROWSE_ALL) }
+    var selectedTab by remember { mutableStateOf(com.darkxvenom.airbeats.ui.component.SearchTab.RECENT_SEARCHES) }
     val chartsViewModel: com.darkxvenom.airbeats.viewmodels.ChartsViewModel = hiltViewModel()
     var showRegionSheet by remember { mutableStateOf(false) }
     var regionCode by com.darkxvenom.airbeats.utils.rememberPreference(
@@ -156,29 +180,21 @@ fun MaterialSearchScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onBackground
                                 )
-                                Spacer(Modifier.height(10.dp))
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                            }
+                            items(GENRE_CATEGORIES.chunked(2)) { pair ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    SEARCH_GENRES.forEach { genre ->
-                                        FilterChip(
-                                            selected = false,
-                                            onClick = { onPerformSearch(genre) },
-                                            label = {
-                                                Text(
-                                                    text = genre,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize = 13.sp
-                                                )
-                                            },
-                                            shape = CircleShape,
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                labelColor = MaterialTheme.colorScheme.onSurface,
-                                            ),
+                                    pair.forEach { category ->
+                                        GenreCard(
+                                            category = category,
+                                            onClick = { onPerformSearch(category.title) },
+                                            modifier = Modifier.weight(1f)
                                         )
+                                    }
+                                    if (pair.size == 1) {
+                                        Spacer(Modifier.weight(1f))
                                     }
                                 }
                             }
@@ -343,6 +359,58 @@ fun MaterialSearchScreen(
                 },
                 onDismiss = { showRegionSheet = false }
             )
+        }
+    }
+}
+
+@Composable
+private fun GenreCard(
+    category: GenreCategory,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = category.color),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(76.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = category.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = category.imageUrl,
+                    contentDescription = category.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }

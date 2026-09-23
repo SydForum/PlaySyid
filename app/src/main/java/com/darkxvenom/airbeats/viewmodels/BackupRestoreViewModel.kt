@@ -705,16 +705,63 @@ class BackupRestoreViewModel @Inject constructor(
                             }
                         }
 
-                        // Backup restored_cache_ids.json if present
-                        val restoredFile = context.filesDir.resolve("restored_cache_ids.json")
-                        if (restoredFile.exists() && restoredFile.isFile) {
+                        // Determine actual cached song IDs from exoplayer_internal.db and restored_cache_ids.json
+                        val actualCachedIds = mutableSetOf<String>()
+                        val exoDbPath = context.getDatabasePath("exoplayer_internal.db")
+                        if (exoDbPath.exists() && exoDbPath.isFile) {
                             tryOrNull {
-                                zipOut.putNextEntry(ZipEntry("restored_cache_ids.json"))
-                                restoredFile.inputStream().buffered().use { it.copyTo(zipOut) }
+                                SQLiteDatabase.openDatabase(exoDbPath.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                                    val indexTables = mutableListOf<String>()
+                                    db.rawQuery(
+                                        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'ExoPlayerCacheIndex%'",
+                                        null
+                                    ).use { c ->
+                                        while (c.moveToNext()) {
+                                            indexTables.add(c.getString(0))
+                                        }
+                                    }
+                                    for (tbl in indexTables) {
+                                        tryOrNull {
+                                            db.rawQuery("SELECT `key` FROM `$tbl`", null).use { c ->
+                                                val keyIdx = c.getColumnIndex("key")
+                                                if (keyIdx != -1) {
+                                                    while (c.moveToNext()) {
+                                                        val k = c.getString(keyIdx)
+                                                        if (!k.isNullOrBlank()) {
+                                                            actualCachedIds.add(k)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
-                        // 4. Backup cached song metadata and formats
+                        // Also include any verified IDs from restored_cache_ids.json
+                        val restoredFile = context.filesDir.resolve("restored_cache_ids.json")
+                        if (restoredFile.exists() && restoredFile.isFile) {
+                            tryOrNull {
+                                val arr = JSONArray(restoredFile.readText())
+                                for (i in 0 until arr.length()) {
+                                    val rId = arr.getString(i)
+                                    if (!rId.isNullOrBlank()) {
+                                        actualCachedIds.add(rId)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Backup restored_cache_ids.json containing ONLY actual cached songs
+                        if (actualCachedIds.isNotEmpty()) {
+                            tryOrNull {
+                                zipOut.putNextEntry(ZipEntry("restored_cache_ids.json"))
+                                zipOut.write(JSONArray(actualCachedIds.toList()).toString().toByteArray(Charsets.UTF_8))
+                            }
+                        }
+
+                        // 4. Backup ONLY cached song metadata and formats (do NOT backup full playback history)
                         tryOrNull {
                             val formatsMap = mutableMapOf<String, FormatEntity>()
                             tryOrNull {
@@ -732,17 +779,19 @@ class BackupRestoreViewModel @Inject constructor(
                                     val urlCol = cursor.getColumnIndex("playbackUrl")
                                     while (cursor.moveToNext()) {
                                         val sId = cursor.getString(idCol)
-                                        formatsMap[sId] = FormatEntity(
-                                            id = sId,
-                                            itag = cursor.getInt(itagCol),
-                                            mimeType = cursor.getString(mimeCol),
-                                            codecs = cursor.getString(codecsCol),
-                                            bitrate = cursor.getInt(bitrateCol),
-                                            sampleRate = if (!cursor.isNull(sampleCol)) cursor.getInt(sampleCol) else null,
-                                            contentLength = cursor.getLong(lenCol),
-                                            loudnessDb = if (!cursor.isNull(loudCol)) cursor.getDouble(loudCol) else null,
-                                            playbackUrl = if (!cursor.isNull(urlCol)) cursor.getString(urlCol) else null
-                                        )
+                                        if (sId in actualCachedIds) {
+                                            formatsMap[sId] = FormatEntity(
+                                                id = sId,
+                                                itag = cursor.getInt(itagCol),
+                                                mimeType = cursor.getString(mimeCol),
+                                                codecs = cursor.getString(codecsCol),
+                                                bitrate = cursor.getInt(bitrateCol),
+                                                sampleRate = if (!cursor.isNull(sampleCol)) cursor.getInt(sampleCol) else null,
+                                                contentLength = cursor.getLong(lenCol),
+                                                loudnessDb = if (!cursor.isNull(loudCol)) cursor.getDouble(loudCol) else null,
+                                                playbackUrl = if (!cursor.isNull(urlCol)) cursor.getString(urlCol) else null
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -757,14 +806,17 @@ class BackupRestoreViewModel @Inject constructor(
                                     val durCol = cursor.getColumnIndex("duration")
                                     val thumbCol = cursor.getColumnIndex("thumbnailUrl")
                                     while (cursor.moveToNext()) {
-                                        songsList.add(
-                                            SongEntity(
-                                                id = cursor.getString(idCol),
-                                                title = cursor.getString(titleCol),
-                                                duration = cursor.getInt(durCol),
-                                                thumbnailUrl = if (!cursor.isNull(thumbCol)) cursor.getString(thumbCol) else null
+                                        val sId = cursor.getString(idCol)
+                                        if (sId in actualCachedIds) {
+                                            songsList.add(
+                                                SongEntity(
+                                                    id = sId,
+                                                    title = cursor.getString(titleCol),
+                                                    duration = cursor.getInt(durCol),
+                                                    thumbnailUrl = if (!cursor.isNull(thumbCol)) cursor.getString(thumbCol) else null
+                                                )
                                             )
-                                        )
+                                        }
                                     }
                                 }
                             }
@@ -778,8 +830,10 @@ class BackupRestoreViewModel @Inject constructor(
                                     val nameCol = cursor.getColumnIndex("name")
                                     while (cursor.moveToNext()) {
                                         val sId = cursor.getString(songIdCol)
-                                        val name = cursor.getString(nameCol)
-                                        artistMap.getOrPut(sId) { mutableListOf() }.add(name)
+                                        if (sId in actualCachedIds) {
+                                            val name = cursor.getString(nameCol)
+                                            artistMap.getOrPut(sId) { mutableListOf() }.add(name)
+                                        }
                                     }
                                 }
                             }

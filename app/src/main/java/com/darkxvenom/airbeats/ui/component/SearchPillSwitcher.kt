@@ -31,9 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 enum class SearchTab(val title: String) {
-    BROWSE_ALL("Browse all"),
+    RECENT_SEARCHES("Recent Searches"),
     AIRBEATS_CHARTS("AirBeats Charts"),
-    RECENT_SEARCHES("Recent Searches")
+    BROWSE_ALL("Browse all")
 }
 
 @Composable
