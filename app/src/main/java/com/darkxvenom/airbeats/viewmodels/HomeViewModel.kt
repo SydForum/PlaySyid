@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -66,39 +67,58 @@ class HomeViewModel @Inject constructor(
     val recentActivity = MutableStateFlow<List<YTItem>?>(null)
     val recentPlaylistsDb = MutableStateFlow<List<Playlist>?>(null)
 
-    val aiRecommendedPlaylist = database.playlistsByNameAsc()
-        .map { playlists -> playlists.find { it.playlist.name == "Recommended by AI" } }
-        .flatMapLatest { playlist ->
-            if (playlist != null && playlist.songCount > 0) {
-                database.playlistSongs(playlist.playlist.id).map { playlistSongs ->
-                    playlist to playlistSongs.map { it.song }
+    val aiRecommendedPlaylist = combine(
+        database.playlistsByNameAsc()
+            .map { playlists -> playlists.find { it.playlist.name == "Recommended by AI" } }
+            .flatMapLatest { playlist ->
+                if (playlist != null && playlist.songCount > 0) {
+                    database.playlistSongs(playlist.playlist.id).map { playlistSongs ->
+                        playlist to playlistSongs.map { it.song }
+                    }
+                } else {
+                    flowOf<Pair<Playlist, List<Song>>?>(null)
                 }
-            } else {
-                flowOf(null)
-            }
+            },
+        database.observeExcludedSongIds()
+    ) { aiPlaylistData, excludedIds ->
+        val excludedSet = excludedIds.toHashSet()
+        if (aiPlaylistData == null) null
+        else {
+            val (playlist, songs) = aiPlaylistData
+            val filteredSongs = songs.filter { it.id !in excludedSet }
+            playlist to filteredSongs
         }
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    val heroPlaylist = database.playlists(com.darkxvenom.airbeats.constants.PlaylistSortType.LAST_UPDATED, descending = true)
-        .flatMapLatest { playlists ->
-            val topPlaylist = playlists.firstOrNull { it.songCount > 0 }
-            if (topPlaylist != null) {
-                database.playlistSongs(topPlaylist.playlist.id).map { playlistSongs ->
-                    val songs = playlistSongs.map { it.song }
-                    HeroPlaylistData(
-                        title = topPlaylist.playlist.name,
-                        subtitle = "Based on your last listening habits and artists...",
-                        tag = "TOP PLAYLIST",
-                        thumbnailUrl = topPlaylist.thumbnails.firstOrNull() ?: songs.firstOrNull()?.thumbnailUrl,
-                        songs = songs,
-                        playlistId = topPlaylist.playlist.id,
-                    )
+    val heroPlaylist = combine(
+        database.playlists(com.darkxvenom.airbeats.constants.PlaylistSortType.LAST_UPDATED, descending = true)
+            .flatMapLatest { playlists ->
+                val topPlaylist = playlists.firstOrNull { it.songCount > 0 }
+                if (topPlaylist != null) {
+                    database.playlistSongs(topPlaylist.playlist.id).map { playlistSongs ->
+                        val songs = playlistSongs.map { it.song }
+                        HeroPlaylistData(
+                            title = topPlaylist.playlist.name,
+                            subtitle = "Based on your last listening habits and artists...",
+                            tag = "TOP PLAYLIST",
+                            thumbnailUrl = topPlaylist.thumbnails.firstOrNull() ?: songs.firstOrNull()?.thumbnailUrl,
+                            songs = songs,
+                            playlistId = topPlaylist.playlist.id,
+                        )
+                    }
+                } else {
+                    flowOf<HeroPlaylistData?>(null)
                 }
-            } else {
-                flowOf(null)
-            }
+            },
+        database.observeExcludedSongIds()
+    ) { heroData, excludedIds ->
+        val excludedSet = excludedIds.toHashSet()
+        if (heroData == null) null
+        else {
+            val filteredSongs = heroData.songs.filter { it.id !in excludedSet }
+            heroData.copy(songs = filteredSongs)
         }
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
 
     val allLocalItems = MutableStateFlow<List<LocalItem>>(emptyList())
@@ -122,14 +142,57 @@ class HomeViewModel @Inject constructor(
         )
     }
 
+    private fun filterHomeContent(excludedSet: Set<String>) {
+        if (excludedSet.isEmpty()) return
+
+        quickPicks.value = quickPicks.value?.filter { it.id !in excludedSet }?.takeIf { it.isNotEmpty() }
+        forgottenFavorites.value = forgottenFavorites.value?.filter { it.id !in excludedSet }?.takeIf { it.isNotEmpty() }
+        keepListening.value = keepListening.value?.filter { item ->
+            when (item) {
+                is Song -> item.id !in excludedSet
+                else -> true
+            }
+        }?.takeIf { it.isNotEmpty() }
+
+        similarRecommendations.value = similarRecommendations.value?.mapNotNull { rec ->
+            val filteredItems = rec.items.filter { it.id !in excludedSet }
+            if (filteredItems.isNotEmpty() && (rec.title !is Song || rec.title.id !in excludedSet)) {
+                rec.copy(items = filteredItems)
+            } else {
+                null
+            }
+        }?.takeIf { it.isNotEmpty() }
+
+        homePage.value = homePage.value?.let { page ->
+            val filteredSections = page.sections.mapNotNull { section ->
+                val filteredItems = section.items.filter { it.id !in excludedSet }
+                if (filteredItems.isNotEmpty()) {
+                    section.copy(items = filteredItems)
+                } else {
+                    null
+                }
+            }
+            page.copy(sections = filteredSections)
+        }
+
+        explorePage.value = explorePage.value?.let { page ->
+            page.copy(newReleaseAlbums = page.newReleaseAlbums.filter { it.id !in excludedSet })
+        }
+
+        allLocalItems.value = (quickPicks.value.orEmpty() + forgottenFavorites.value.orEmpty() + keepListening.value.orEmpty()).filter { it is Song || it is Album }
+        allYtItems.value = similarRecommendations.value?.flatMap { it.items }.orEmpty() + homePage.value?.sections?.flatMap { it.items }.orEmpty() + explorePage.value?.newReleaseAlbums.orEmpty()
+    }
+
     private suspend fun load() {
         isLoading.value = true
 
+        val excludedSongIds = runCatching { database.getExcludedSongIds().toHashSet() }.getOrDefault(emptySet())
         val musicProvider = context.dataStore.get(com.darkxvenom.airbeats.constants.MusicProviderKey, "YT")
         val isJioSaavn = musicProvider == "JIOSAAVN"
 
         if (isJioSaavn) {
             com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.getTrendingSongs().onSuccess { songs ->
+                val filteredSongs = songs.filter { it.id !in excludedSongIds }
                 homePage.value = HomePage(
                     chips = null,
                     sections = listOf(
@@ -138,12 +201,12 @@ class HomeViewModel @Inject constructor(
                             label = "JioSaavn",
                             thumbnail = null,
                             endpoint = null,
-                            items = songs
+                            items = filteredSongs
                         )
                     )
                 )
                 if (quickPicks.value.isNullOrEmpty()) {
-                    quickPicks.value = songs.filterIsInstance<SongItem>().map(::mapToSong).take(20)
+                    quickPicks.value = filteredSongs.filterIsInstance<SongItem>().map(::mapToSong).take(20)
                 }
             }.onFailure {
                 reportException(it)
@@ -155,11 +218,11 @@ class HomeViewModel @Inject constructor(
             // 1. Quick Picks snapshot
             launch(Dispatchers.IO) {
                 if (isJioSaavn) return@launch
-                val qpList = runCatching { database.quickPicks().first() }.getOrDefault(emptyList()).filter { !it.id.startsWith("JS:") }
+                val qpList = runCatching { database.quickPicks().first() }.getOrDefault(emptyList()).filter { !it.id.startsWith("JS:") && it.id !in excludedSongIds }
                 val rawPicks = if (qpList.isNotEmpty()) {
                     qpList
                 } else {
-                    runCatching { database.recentSongs(limit = 60).first() }.getOrDefault(emptyList()).filter { !it.id.startsWith("JS:") }
+                    runCatching { database.recentSongs(limit = 60).first() }.getOrDefault(emptyList()).filter { !it.id.startsWith("JS:") && it.id !in excludedSongIds }
                 }
                 quickPicks.value = rawPicks.distinctBy { it.id }.shuffled(homeRandom).take(20).takeIf { it.isNotEmpty() }
             }
@@ -167,7 +230,7 @@ class HomeViewModel @Inject constructor(
             // 2. Keep Listening snapshot
             launch(Dispatchers.IO) {
                 val songs = runCatching { database.recentSongs(limit = 50, offset = 0).first() }.getOrDefault(emptyList())
-                    .filter { if (isJioSaavn) it.id.startsWith("JS:") else !it.id.startsWith("JS:") }
+                    .filter { (if (isJioSaavn) it.id.startsWith("JS:") else !it.id.startsWith("JS:")) && it.id !in excludedSongIds }
                     .distinctBy { it.id }.shuffled(homeRandom).take(10)
                 val albums = runCatching { database.recentAlbums(limit = 50, offset = 0).first() }.getOrDefault(emptyList())
                     .filter { it.album.thumbnailUrl != null && (if (isJioSaavn) it.id.startsWith("JS:") else !it.id.startsWith("JS:")) }
@@ -181,7 +244,7 @@ class HomeViewModel @Inject constructor(
             // 3. Forgotten Favorites snapshot
             launch(Dispatchers.IO) {
                 val favs = runCatching { database.forgottenFavorites().first() }.getOrDefault(emptyList())
-                    .filter { if (isJioSaavn) it.id.startsWith("JS:") else !it.id.startsWith("JS:") }
+                    .filter { (if (isJioSaavn) it.id.startsWith("JS:") else !it.id.startsWith("JS:")) && it.id !in excludedSongIds }
                     .distinctBy { it.id }.shuffled(homeRandom).take(20)
                 forgottenFavorites.value = favs.takeIf { it.isNotEmpty() }
             }
@@ -204,12 +267,14 @@ class HomeViewModel @Inject constructor(
                             items += page.sections.getOrNull(page.sections.size - 2)?.items.orEmpty()
                             items += page.sections.lastOrNull()?.items.orEmpty()
                         }
-                        SimilarRecommendation(title = it, items = items.distinctBy { it.id }.shuffled(homeRandom).take(8)).takeIf { it.items.isNotEmpty() }
+                        SimilarRecommendation(title = it, items = items.filter { item -> item.id !in excludedSongIds }.distinctBy { it.id }.shuffled(homeRandom).take(8)).takeIf { it.items.isNotEmpty() }
                     }
-                    val songRecs = runCatching { database.recentSongs(limit = 10).first() }.getOrDefault(emptyList()).filter { !it.id.startsWith("JS:") }.shuffled(homeRandom).take(2).mapNotNull { song ->
+                    val songRecs = runCatching { database.recentSongs(limit = 10).first() }.getOrDefault(emptyList()).filter { !it.id.startsWith("JS:") && it.id !in excludedSongIds }.shuffled(homeRandom).take(2).mapNotNull { song ->
                         val endpoint = YouTube.next(WatchEndpoint(videoId = song.id)).getOrNull()?.relatedEndpoint ?: return@mapNotNull null
                         val page = YouTube.related(endpoint).getOrNull() ?: return@mapNotNull null
-                        SimilarRecommendation(title = song, items = (page.songs.shuffled(homeRandom).take(8) + page.albums.shuffled(homeRandom).take(4) + page.artists.shuffled(homeRandom).take(4) + page.playlists.shuffled(homeRandom).take(4)).distinctBy { it.id }.shuffled(homeRandom).take(10))
+                        val rawItems = (page.songs.shuffled(homeRandom).take(8) + page.albums.shuffled(homeRandom).take(4) + page.artists.shuffled(homeRandom).take(4) + page.playlists.shuffled(homeRandom).take(4))
+                        val filteredItems = rawItems.filter { it.id !in excludedSongIds }.distinctBy { it.id }.shuffled(homeRandom).take(10)
+                        SimilarRecommendation(title = song, items = filteredItems).takeIf { it.items.isNotEmpty() }
                     }
                     similarRecommendations.value = (artistRecs + songRecs).shuffled(homeRandom).takeIf { it.isNotEmpty() }
                 }
@@ -218,22 +283,26 @@ class HomeViewModel @Inject constructor(
                     val enableJioSaavn = context.dataStore.get(com.darkxvenom.airbeats.constants.EnableJioSaavnKey, true)
                     val jioSection = if (enableJioSaavn) {
                         com.darkxvenom.airbeats.jiosaavn.JioSaavnApi.getTrendingSongs().getOrNull()?.let { songs ->
-                            HomePage.Section(
-                                title = "Trending on JioSaavn (320k)",
-                                label = "JioSaavn",
-                                thumbnail = null,
-                                endpoint = null,
-                                items = songs
-                            )
+                            val filteredSongs = songs.filter { it.id !in excludedSongIds }
+                            if (filteredSongs.isNotEmpty()) {
+                                HomePage.Section(
+                                    title = "Trending on JioSaavn (320k)",
+                                    label = "JioSaavn",
+                                    thumbnail = null,
+                                    endpoint = null,
+                                    items = filteredSongs
+                                )
+                            } else null
                         }
                     } else null
 
                     YouTube.home().onSuccess { page ->
-                        homePage.value = if (jioSection != null) {
-                            page.copy(sections = listOf(jioSection) + page.sections)
-                        } else {
-                            page
+                        val filteredSections = page.sections.mapNotNull { sec ->
+                            val filteredItems = sec.items.filter { it.id !in excludedSongIds }
+                            if (filteredItems.isNotEmpty()) sec.copy(items = filteredItems) else null
                         }
+                        val allSections = listOfNotNull(jioSection) + filteredSections
+                        homePage.value = page.copy(sections = allSections)
                     }.onFailure {
                         if (jioSection != null) {
                             homePage.value = HomePage(chips = null, sections = listOf(jioSection))
@@ -243,7 +312,9 @@ class HomeViewModel @Inject constructor(
                 }
 
                 launch(Dispatchers.IO) {
-                    YouTube.explore().onSuccess { explorePage.value = it }.onFailure { reportException(it) }
+                    YouTube.explore().onSuccess { page ->
+                        explorePage.value = page.copy(newReleaseAlbums = page.newReleaseAlbums.filter { item -> item.id !in excludedSongIds })
+                    }.onFailure { reportException(it) }
                 }
             }
         }
@@ -286,6 +357,12 @@ class HomeViewModel @Inject constructor(
     }
 
     init {
+        viewModelScope.launch(Dispatchers.IO) {
+            database.observeExcludedSongIds().collect { excludedIds ->
+                val excludedSet = excludedIds.toHashSet()
+                filterHomeContent(excludedSet)
+            }
+        }
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             load()
         }

@@ -89,6 +89,7 @@ import com.darkxvenom.airbeats.ui.component.SongListItem
 import com.darkxvenom.airbeats.ui.component.TextFieldDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SongMenu(
@@ -691,7 +692,13 @@ fun SongMenu(
                                     thumbnailUrl = song.song.thumbnailUrl
                                 )
                             )
+                            withContext(Dispatchers.Main) {
+                                playerConnection.removeSongFromQueue(song.id)
+                            }
                         }
+                    }
+                    if (!wasExcluded) {
+                        onDismiss()
                     }
                     Toast.makeText(
                         context,

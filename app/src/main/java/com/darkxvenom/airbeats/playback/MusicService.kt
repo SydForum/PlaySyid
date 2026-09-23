@@ -1337,9 +1337,13 @@ class MusicService :
             val excludedSongIds = withContext(Dispatchers.IO) { database.getExcludedSongIds().toHashSet() }
             val initialStatus =
                 withContext(Dispatchers.IO) {
-                    queue.getInitialStatus()
+                    val status = queue.getInitialStatus()
                         .filterExplicit(dataStore.get(HideExplicitKey, false))
-                        .filterExcluded(excludedSongIds)
+                    if (queue is com.darkxvenom.airbeats.playback.queues.ListQueue) {
+                        status
+                    } else {
+                        status.filterExcluded(excludedSongIds)
+                    }
                 }
             if (queue.preloadItem != null && player.playbackState == STATE_IDLE) return@launch
             if (initialStatus.title != null) {
@@ -1706,6 +1710,32 @@ class MusicService :
     fun addToQueue(items: List<MediaItem>) {
         player.addMediaItems(items)
         player.prepare()
+    }
+
+    fun removeSongFromQueue(songId: String) {
+        val count = player.mediaItemCount
+        if (count == 0) return
+
+        val currentIndex = player.currentMediaItemIndex
+        val isCurrentPlaying = (currentIndex in 0 until count) && player.getMediaItemAt(currentIndex).mediaId == songId
+
+        for (i in count - 1 downTo 0) {
+            if (player.getMediaItemAt(i).mediaId == songId) {
+                player.removeMediaItem(i)
+            }
+        }
+
+        automixItems.value = automixItems.value.filter { it.mediaId != songId }
+
+        if (isCurrentPlaying) {
+            if (player.mediaItemCount > 0) {
+                player.prepare()
+                player.play()
+            } else {
+                player.stop()
+                player.clearMediaItems()
+            }
+        }
     }
 
     private fun toggleLibrary() {

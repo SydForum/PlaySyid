@@ -139,6 +139,7 @@ import com.darkxvenom.airbeats.utils.makeTimeString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import kotlin.math.abs
 import kotlin.math.log2
@@ -718,7 +719,13 @@ fun PlayerMenu(
                                                 thumbnailUrl = mediaMetadata.thumbnailUrl
                                             )
                                         )
+                                        withContext(Dispatchers.Main) {
+                                            playerConnection.removeSongFromQueue(mediaMetadata.id)
+                                        }
                                     }
+                                }
+                                if (!wasExcluded) {
+                                    onDismiss()
                                 }
                                 Toast.makeText(
                                     context,

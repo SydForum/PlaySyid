@@ -386,6 +386,15 @@ class PlayerConnection(
         }
     }
 
+    fun removeSongFromQueue(songId: String) {
+        try {
+            service.removeSongFromQueue(songId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing song from queue: $songId", e)
+            reportException(e)
+        }
+    }
+
     fun toggleLike() {
         try {
             Timber.tag(TAG).d("Toggling like for current track. Current state: ${_isLiked.value}")

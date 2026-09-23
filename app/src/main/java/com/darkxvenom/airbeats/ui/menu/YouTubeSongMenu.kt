@@ -74,6 +74,7 @@ import com.darkxvenom.airbeats.utils.joinByBullet
 import com.darkxvenom.airbeats.utils.makeTimeString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 
 @SuppressLint("MutableCollectionMutableState")
@@ -406,7 +407,13 @@ fun YouTubeSongMenu(
                             thumbnailUrl = song.thumbnail
                         )
                     )
+                    withContext(Dispatchers.Main) {
+                        playerConnection.removeSongFromQueue(song.id)
+                    }
                 }
+            }
+            if (!wasExcluded) {
+                onDismiss()
             }
             Toast.makeText(
                 context,
