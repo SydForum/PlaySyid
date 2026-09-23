@@ -982,28 +982,6 @@ fun LocalPlaylistScreen(
                                             )
                                         }
                                     }
-
-                                    Surface(
-                                        onClick = {
-                                            val safeName = playlist.playlist.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "playlist" }
-                                            exportPlaylistLauncher.launch("$safeName.txt")
-                                        },
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        modifier = Modifier.size(48.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.download),
-                                                contentDescription = stringResource(R.string.export_playlist),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(24.dp))
@@ -1460,7 +1438,7 @@ fun LocalPlaylistScreen(
                         onLongClick = {}
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.download),
+                            painter = painterResource(R.drawable.export),
                             contentDescription = stringResource(R.string.export_playlist)
                         )
                     }

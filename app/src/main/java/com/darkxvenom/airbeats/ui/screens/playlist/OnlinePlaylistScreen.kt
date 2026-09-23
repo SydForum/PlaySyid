@@ -223,6 +223,36 @@ fun OnlinePlaylistScreen(
     var downloadState by remember { mutableStateOf(Download.STATE_STOPPED) }
     var showQualityDialog by remember { mutableStateOf(false) }
 
+    val exportPlaylistLauncher =
+        androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
+        ) { uri ->
+            if (uri != null && playlist != null) {
+                val playlistTitle = playlist!!.title
+                val safeSongs = songs
+                val playlistId = playlist!!.id
+                com.darkxvenom.airbeats.utils.SaveToStorageUtil.applicationScope.launch(Dispatchers.IO) {
+                    val songsToExport = safeSongs.ifEmpty {
+                        YouTube.playlist(playlistId).completedPlaylistPage().getOrNull()?.songs.orEmpty()
+                    }.map { it.toMediaMetadata() }
+
+                    val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.exportPlaylistToUri(
+                        context = context,
+                        uri = uri,
+                        playlistName = playlistTitle,
+                        mediaList = songsToExport
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (result.isSuccess) {
+                            android.widget.Toast.makeText(context, R.string.playlist_exported, android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, result.exceptionOrNull()?.message ?: "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+
     LaunchedEffect(songs) {
         if (songs.isEmpty()) return@LaunchedEffect
         downloadUtil.downloads.collect { downloads ->
@@ -1195,6 +1225,19 @@ fun OnlinePlaylistScreen(
                         )
                     }
                 } else if (!isSearching) {
+                    IconButton(
+                        onClick = {
+                            val safeName = playlist?.title?.replace(Regex("[\\\\/:*?\"<>|]"), "_")?.trim()?.ifEmpty { "playlist" } ?: "playlist"
+                            exportPlaylistLauncher.launch("$safeName.txt")
+                        },
+                        onLongClick = {}
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.export),
+                            contentDescription = stringResource(R.string.export_playlist)
+                        )
+                    }
+
                     IconButton(
                         onClick = { isSearching = true },
                         onLongClick = {}

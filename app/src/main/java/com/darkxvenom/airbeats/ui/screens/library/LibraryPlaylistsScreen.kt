@@ -320,7 +320,7 @@ fun LibraryPlaylistsScreen(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.download),
+                                painter = painterResource(R.drawable.save_to_storage),
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.tertiary

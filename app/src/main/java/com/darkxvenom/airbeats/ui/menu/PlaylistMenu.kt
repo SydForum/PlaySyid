@@ -48,12 +48,16 @@ import com.darkxvenom.airbeats.playback.queues.ListQueue
 import com.darkxvenom.airbeats.playback.queues.YouTubeQueue
 import com.darkxvenom.airbeats.ui.component.DefaultDialog
 import com.darkxvenom.airbeats.ui.component.DownloadGridMenu
+import com.darkxvenom.airbeats.constants.SongSortType
+import com.darkxvenom.airbeats.db.entities.PlaylistEntity
+import com.darkxvenom.airbeats.models.MediaMetadata
 import com.darkxvenom.airbeats.ui.component.GridMenu
 import com.darkxvenom.airbeats.ui.component.GridMenuItem
 import com.darkxvenom.airbeats.ui.component.PlaylistListItem
 import com.darkxvenom.airbeats.ui.component.TextFieldDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -93,17 +97,46 @@ fun PlaylistMenu(
         mutableIntStateOf(Download.STATE_STOPPED)
     }
 
+    val currentPlaylist = playlist
+    val currentSongs by androidx.compose.runtime.rememberUpdatedState(songs)
     val exportPlaylistLauncher =
         androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
         ) { uri ->
             if (uri != null) {
-                coroutineScope.launch(Dispatchers.IO) {
+                com.darkxvenom.airbeats.utils.SaveToStorageUtil.applicationScope.launch(Dispatchers.IO) {
+                    val songEntities: List<Song> = when {
+                        currentSongs.isNotEmpty() -> currentSongs
+                        currentPlaylist.id == PlaylistEntity.LIKED_PLAYLIST_ID -> {
+                            database.likedSongs(SongSortType.CREATE_DATE, true).first()
+                        }
+                        else -> {
+                            database.playlistSongs(currentPlaylist.id).first().map(PlaylistSong::song)
+                        }
+                    }
+
+                    val mediaToExport = if (songEntities.isNotEmpty()) {
+                        songEntities.map { song ->
+                            MediaMetadata(
+                                id = song.id,
+                                title = song.title,
+                                artists = song.artists.map { MediaMetadata.Artist(id = it.id, name = it.name) },
+                                duration = song.duration,
+                                thumbnailUrl = song.thumbnailUrl,
+                                album = song.album?.let { MediaMetadata.Album(id = it.id, title = it.title) }
+                            )
+                        }
+                    } else if (currentPlaylist.playlist.browseId != null) {
+                        YouTube.playlist(currentPlaylist.playlist.browseId).completedPlaylistPage().getOrNull()?.songs.orEmpty().map { it.toMediaMetadata() }
+                    } else {
+                        emptyList()
+                    }
+
                     val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.exportPlaylistToUri(
                         context = context,
                         uri = uri,
-                        playlistName = playlist.playlist.name,
-                        songs = songs
+                        playlistName = currentPlaylist.playlist.name,
+                        mediaList = mediaToExport
                     )
                     withContext(Dispatchers.Main) {
                         if (result.isSuccess) {
@@ -413,15 +446,16 @@ fun PlaylistMenu(
             )
         }
 
-        if (songs.isNotEmpty()) {
+        if (songs.isNotEmpty() || playlist.songCount > 0 || playlist.playlist.browseId != null) {
             GridMenuItem(
-                icon = R.drawable.download,
+                icon = R.drawable.export,
                 title = R.string.export_playlist,
             ) {
-                onDismiss()
                 val safeName = playlist.playlist.name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "playlist" }
                 exportPlaylistLauncher.launch("$safeName.txt")
+                onDismiss()
             }
+        }
 
             GridMenuItem(
                 icon = R.drawable.save_to_storage,

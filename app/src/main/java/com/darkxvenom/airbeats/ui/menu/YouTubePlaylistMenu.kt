@@ -108,6 +108,36 @@ fun YouTubePlaylistMenu(
         mutableStateOf(mutableListOf<MediaMetadata>())
     }
 
+    val exportPlaylistLauncher =
+        androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain")
+        ) { uri ->
+            if (uri != null) {
+                val playlistTitle = playlist.title
+                val safeSongs = songs
+                val playlistId = playlist.id
+                com.darkxvenom.airbeats.utils.SaveToStorageUtil.applicationScope.launch(Dispatchers.IO) {
+                    val songsToExport = safeSongs.ifEmpty {
+                        YouTube.playlist(playlistId).completedPlaylistPage().getOrNull()?.songs.orEmpty()
+                    }.map { it.toMediaMetadata() }
+
+                    val result = com.darkxvenom.airbeats.utils.PlaylistFileHelper.exportPlaylistToUri(
+                        context = context,
+                        uri = uri,
+                        playlistName = playlistTitle,
+                        mediaList = songsToExport
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (result.isSuccess) {
+                            android.widget.Toast.makeText(context, R.string.playlist_exported, android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, result.exceptionOrNull()?.message ?: "Export failed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+
     AddToPlaylistDialog(
         isVisible = showChoosePlaylistDialog,
         onGetSong = { targetPlaylist ->
@@ -446,6 +476,60 @@ fun YouTubePlaylistMenu(
             title = R.string.add_to_playlist,
         ) {
             showChoosePlaylistDialog = true
+        }
+
+        val inLibrary = dbPlaylist?.playlist?.bookmarkedAt != null
+        GridMenuItem(
+            icon = if (inLibrary) R.drawable.favorite else R.drawable.favorite_border,
+            title = if (inLibrary) R.string.remove_from_library else R.string.add_to_library,
+        ) {
+            if (dbPlaylist == null) {
+                val playlistEntity = PlaylistEntity(
+                    id = playlist.id,
+                    name = playlist.title,
+                    browseId = playlist.id,
+                    playEndpointParams = playlist.playEndpoint?.params,
+                    shuffleEndpointParams = playlist.shuffleEndpoint?.params,
+                    radioEndpointParams = playlist.radioEndpoint?.params
+                ).toggleLike()
+                database.transaction {
+                    insert(playlistEntity)
+                }
+                coroutineScope.launch(Dispatchers.IO) {
+                    val songsToInsert = songs.ifEmpty {
+                        YouTube.playlist(playlist.id).completedPlaylistPage()
+                            .getOrNull()?.songs.orEmpty()
+                    }.map { it.toMediaMetadata() }
+
+                    database.transaction {
+                        songsToInsert.forEach(::insert)
+                        songsToInsert.mapIndexed { index, song ->
+                            PlaylistSongMap(
+                                songId = song.id,
+                                playlistId = playlistEntity.id,
+                                position = index
+                            )
+                        }.forEach(::insert)
+                    }
+                }
+                android.widget.Toast.makeText(context, R.string.add_to_library, android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                database.transaction {
+                    update(dbPlaylist!!.playlist.toggleLike())
+                }
+                val msg = if (inLibrary) R.string.remove_from_library else R.string.add_to_library
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+            }
+            onDismiss()
+        }
+
+        GridMenuItem(
+            icon = R.drawable.export,
+            title = R.string.export_playlist,
+        ) {
+            val safeName = playlist.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "playlist" }
+            exportPlaylistLauncher.launch("$safeName.txt")
+            onDismiss()
         }
 
         if (playlist.isEditable) {

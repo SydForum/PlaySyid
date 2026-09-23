@@ -14,15 +14,14 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.util.UUID
 
 object PlaylistFileHelper {
     private const val TAG = "PlaylistFileHelper"
 
     /**
-     * Serializes a playlist and its songs to structured JSON text.
+     * Serializes a playlist and its songs (as MediaMetadata) to structured JSON text.
      */
-    fun exportPlaylistToJson(playlistName: String, songs: List<Song>): String {
+    fun exportPlaylistToJson(playlistName: String, songs: List<MediaMetadata>): String {
         val root = JSONObject().apply {
             put("app", "AirBeats")
             put("version", 1)
@@ -56,8 +55,43 @@ object PlaylistFileHelper {
     }
 
     /**
-     * Writes playlist JSON text directly to an OutputStream.
+     * Overload for Room entity [Song] list.
      */
+    @JvmName("exportSongPlaylistToJson")
+    fun exportPlaylistToJson(playlistName: String, songs: List<Song>): String =
+        exportPlaylistToJson(playlistName, songs.map { song ->
+            MediaMetadata(
+                id = song.id,
+                title = song.title,
+                artists = song.artists.map { MediaMetadata.Artist(id = it.id, name = it.name) },
+                duration = song.duration,
+                thumbnailUrl = song.thumbnailUrl,
+                album = song.album?.let { MediaMetadata.Album(id = it.id, title = it.title) }
+            )
+        })
+
+    /**
+     * Writes playlist JSON text directly to an OutputStream for MediaMetadata list.
+     */
+    fun exportPlaylistToUri(
+        context: Context,
+        uri: Uri,
+        playlistName: String,
+        mediaList: List<MediaMetadata>
+    ): Result<Unit> {
+        return runCatching {
+            val jsonText = exportPlaylistToJson(playlistName, mediaList)
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                outputStream.write(jsonText.toByteArray(Charsets.UTF_8))
+                outputStream.flush()
+            } ?: error("Failed to open output stream for uri: $uri")
+        }
+    }
+
+    /**
+     * Writes playlist JSON text directly to an OutputStream for Song list.
+     */
+    @JvmName("exportSongPlaylistToUri")
     fun exportPlaylistToUri(
         context: Context,
         uri: Uri,
@@ -201,32 +235,30 @@ object PlaylistFileHelper {
         songsList: List<MediaMetadata>,
         database: MusicDatabase
     ): Pair<String, Int> {
+        val playlistId = PlaylistEntity.generatePlaylistId()
         val newPlaylist = PlaylistEntity(
-            id = UUID.randomUUID().toString(),
+            id = playlistId,
             name = playlistName,
+            bookmarkedAt = LocalDateTime.now(),
+            isEditable = true,
             lastUpdateTime = LocalDateTime.now()
         )
 
-        database.query {
-            insert(newPlaylist)
-        }
+        // Insert synchronously so the playlist and songs exist immediately in Room DB
+        database.insert(newPlaylist)
 
         for ((index, media) in songsList.withIndex()) {
-            database.query {
-                insert(media)
-            }
-            database.transaction {
-                insert(
-                    PlaylistSongMap(
-                        songId = media.id,
-                        playlistId = newPlaylist.id,
-                        position = index
-                    )
+            database.insert(media)
+            database.insert(
+                PlaylistSongMap(
+                    songId = media.id,
+                    playlistId = playlistId,
+                    position = index
                 )
-            }
+            )
         }
 
-        Timber.tag(TAG).d("Successfully imported playlist '${newPlaylist.name}' with ${songsList.size} tracks")
+        Timber.tag(TAG).d("Successfully imported playlist '${newPlaylist.name}' with ${songsList.size} tracks into library")
         return newPlaylist.name to songsList.size
     }
 }
