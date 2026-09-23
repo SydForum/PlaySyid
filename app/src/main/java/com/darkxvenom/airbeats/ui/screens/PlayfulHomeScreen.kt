@@ -60,6 +60,10 @@ import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
+import com.darkxvenom.airbeats.constants.MaterialHomeSection
+import com.darkxvenom.airbeats.utils.rememberPreference
+import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -87,6 +91,10 @@ fun PlayfulHomeScreen(
     val scope = rememberCoroutineScope()
     
     var selectedTab by remember { mutableStateOf("history") }
+    val hiddenSections by rememberPreference(HiddenHomeSectionsKey, defaultValue = emptySet())
+    val isSectionVisible: (MaterialHomeSection) -> Boolean = remember(hiddenSections) {
+        { section -> !hiddenSections.contains(section.name) }
+    }
 
     val ytGridItem: @Composable (YTItem) -> Unit = { item ->
         YouTubeGridItem(
@@ -331,106 +339,116 @@ fun PlayfulHomeScreen(
                                 contentPadding = PaddingValues(bottom = 250.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                item {
-                                    // Featured Card (Carousel)
-                                    val featuredItems = quickPicks ?: emptyList()
-                                    val featuredItem = featuredItems.firstOrNull()
+                                if (isSectionVisible(MaterialHomeSection.QUICK_PICKS)) {
+                                    item {
+                                        // Featured Card (Carousel)
+                                        val featuredItems = quickPicks ?: emptyList()
+                                        val featuredItem = featuredItems.firstOrNull()
 
-                                    if (featuredItem != null) {
-                                        Box(
+                                        if (featuredItem != null) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(300.dp)
+                                                    .background(Color.White, RoundedCornerShape(32.dp))
+                                                    .clickable {
+                                                        playerConnection.playQueue(YouTubeQueue.radio(featuredItem.toMediaMetadata()))
+                                                    }
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.Center
+                                                ) {
+                                                    AsyncImage(
+                                                        model = featuredItem.thumbnailUrl?.highQualityThumbnail(),
+                                                        contentDescription = null,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier
+                                                            .size(180.dp)
+                                                            .clip(CircleShape)
+                                                    )
+                                                    Spacer(modifier = Modifier.height(24.dp))
+                                                    Text(
+                                                        text = featuredItem.title,
+                                                        fontSize = 20.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.Black,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            Spacer(modifier = Modifier.height(300.dp))
+                                        }
+                                    }
+
+                                    // Vertical List of Songs with Thumbnails
+                                    items(quickPicks?.drop(1)?.take(10) ?: emptyList()) { song ->
+                                        Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(300.dp)
-                                                .background(Color.White, RoundedCornerShape(32.dp))
                                                 .clickable {
-                                                    playerConnection.playQueue(YouTubeQueue.radio(featuredItem.toMediaMetadata()))
-                                                }
+                                                    playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                                                },
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Column(
-                                                modifier = Modifier.fillMaxSize(),
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                AsyncImage(
-                                                    model = featuredItem.thumbnailUrl?.highQualityThumbnail(),
-                                                    contentDescription = null,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier
-                                                        .size(180.dp)
-                                                        .clip(CircleShape)
-                                                )
-                                                Spacer(modifier = Modifier.height(24.dp))
+                                            AsyncImage(
+                                                model = song.thumbnailUrl?.highQualityThumbnail(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .size(56.dp)
+                                                    .clip(RoundedCornerShape(16.dp))
+                                            )
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = featuredItem.title,
-                                                    fontSize = 20.sp,
-                                                    fontWeight = FontWeight.Bold,
+                                                    text = song.title,
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.SemiBold,
                                                     color = Color.Black,
                                                     maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = song.artists.joinToString { it.name },
+                                                    fontSize = 14.sp,
+                                                    color = Color.Black.copy(alpha = 0.6f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
-                                        }
-                                    } else {
-                                        Spacer(modifier = Modifier.height(300.dp))
-                                    }
-                                }
-
-                                // Vertical List of Songs with Thumbnails
-                                items(quickPicks?.drop(1)?.take(10) ?: emptyList()) { song ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
-                                            },
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        AsyncImage(
-                                            model = song.thumbnailUrl?.highQualityThumbnail(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .size(56.dp)
-                                                .clip(RoundedCornerShape(16.dp))
-                                        )
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = song.title,
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color.Black,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = song.artists.joinToString { it.name },
-                                                fontSize = 14.sp,
-                                                color = Color.Black.copy(alpha = 0.6f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
                                         }
                                     }
                                 }
                                 
                                 // Extra Sections matching Classic Home Screen
                                 homePage?.sections?.forEach { section ->
-                                    item {
-                                        NavigationTitle(
-                                            title = section.title,
-                                            label = section.label,
-                                            modifier = Modifier.padding(top = 16.dp)
-                                        )
+                                    val shouldShow = when {
+                                        section.title.contains("chart", ignoreCase = true) -> isSectionVisible(MaterialHomeSection.CHARTS)
+                                        section.title.contains("release", ignoreCase = true) -> isSectionVisible(MaterialHomeSection.NEW_RELEASES)
+                                        section.title.contains("album", ignoreCase = true) -> isSectionVisible(MaterialHomeSection.ALBUMS)
+                                        else -> true
                                     }
-                                    item {
-                                        LazyRow(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            items(section.items) { item ->
-                                                ytGridItem(item)
+                                    if (shouldShow) {
+                                        item {
+                                            NavigationTitle(
+                                                title = section.title,
+                                                label = section.label,
+                                                modifier = Modifier.padding(top = 16.dp)
+                                            )
+                                        }
+                                        item {
+                                            LazyRow(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                items(section.items) { item ->
+                                                    ytGridItem(item)
+                                                }
                                             }
                                         }
                                     }
@@ -547,6 +565,14 @@ fun PlayfulHomeScreen(
                             }
                         }
                     }
+
+                    HomeFloatingActions(
+                        navController = navController,
+                        lazyListState = playfulListState,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = bottomPadding + 100.dp, end = 20.dp)
+                    )
                     
                     PullToRefreshDefaults.LoadingIndicator(
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = padding.calculateTopPadding()),
