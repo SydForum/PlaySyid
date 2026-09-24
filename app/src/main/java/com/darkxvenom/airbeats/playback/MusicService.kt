@@ -2018,6 +2018,9 @@ class MusicService :
                 settings[AutomixEnabledKey] = enabled
             }
         }
+        if (enabled && automixItems.value.isEmpty()) {
+            player.currentMediaItem?.mediaId?.let { fetchAutomixRecommendations(it) }
+        }
     }
 
     fun setAutomixPerformanceMode(mode: AutomixPerformanceMode) {
@@ -2320,10 +2323,14 @@ class MusicService :
         // Resetear errores consecutivos cuando hay transición exitosa
         consecutivePlaybackErr = 0
 
+        if (automixEnabled.value && automixItems.value.isEmpty()) {
+            mediaItem?.mediaId?.let { fetchAutomixRecommendations(it) }
+        }
+
         // Keep the source queue paged first. When it has no continuation, Infinite queue
         // extends it with a small, de-duplicated related-track tail instead.
         val shouldExtendQueue =
-            dataStore.get(AutoLoadMoreKey, true) &&
+            (dataStore.get(AutoLoadMoreKey, true) || automixEnabled.value) &&
                 reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT &&
                 player.mediaItemCount - player.currentMediaItemIndex <= 3 &&
                 !(dataStore.get(DisableLoadMoreWhenRepeatAllKey, false) && player.repeatMode == REPEAT_MODE_ALL)
@@ -2493,6 +2500,9 @@ class MusicService :
         }
 
         if (events.containsAny(EVENT_TIMELINE_CHANGED, EVENT_POSITION_DISCONTINUITY)) {
+            if (events.contains(EVENT_POSITION_DISCONTINUITY)) {
+                crossfadeAudio?.onPositionDiscontinuity(Player.DISCONTINUITY_REASON_SEEK)
+            }
             if (crossfadeAudio?.isCrossfading() != true) {
                 currentMediaMetadata.value = player.currentMetadata
             }
@@ -2520,6 +2530,15 @@ class MusicService :
                 }
             }
         }
+    }
+
+    override fun onPositionDiscontinuity(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+        reason: Int,
+    ) {
+        super.onPositionDiscontinuity(oldPosition, newPosition, reason)
+        crossfadeAudio?.onPositionDiscontinuity(reason)
     }
 
     override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -2663,23 +2682,29 @@ class MusicService :
         }
 
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
-            if (dataSpec.uri.scheme == "content" || dataSpec.uri.scheme == "file") {
+            val mediaId = dataSpec.key ?: error("No media id")
+            if (dataSpec.uri.scheme == "content") {
                 return@Factory dataSpec
             }
-            
-            val mediaId = dataSpec.key ?: error("No media id")
 
-            val checkLength = if (dataSpec.length > 0) dataSpec.length else 1L
-            val isCached = downloadCache.isCached(mediaId, dataSpec.position, checkLength) ||
-                    downloadCache.isCached(mediaId, dataSpec.position, 1L) ||
-                    playerCache.isCached(mediaId, dataSpec.position, checkLength) ||
-                    playerCache.isCached(mediaId, dataSpec.position, 1L) ||
-                    (tryOrNull { playerCache.getCachedBytes(mediaId, 0L, Long.MAX_VALUE) } ?: 0L) > 0L ||
-                    (tryOrNull { downloadCache.getCachedBytes(mediaId, 0L, Long.MAX_VALUE) } ?: 0L) > 0L
+            if (dataSpec.uri.scheme == "file") {
+                val fileExists = dataSpec.uri.path?.let { path -> java.io.File(path).isFile } == true
+                val isOnlineSong = mediaId.matches(Regex("[A-Za-z0-9_-]{11}")) ||
+                    mediaId.startsWith("JS:") || mediaId.startsWith("sp:")
+                if (fileExists || !isOnlineSong) {
+                    return@Factory dataSpec
+                }
+                Timber.w("Missing local source for online song $mediaId; resolving a fresh stream instead")
+            }
 
-            if (isCached) {
+            // If offline, and we have cached data for this song, return a safe pseudo-HTTP URI
+            // so CacheDataSource serves cached spans, and DefaultDataSource won't route to FileDataSource ENOENT
+            if (!isNetworkConnected.value && (downloadCache.keys.contains(mediaId) || playerCache.keys.contains(mediaId))) {
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                return@Factory dataSpec
+                val contentLength = runBlocking(Dispatchers.IO) {
+                    database.format(mediaId).first()?.contentLength
+                }
+                return@Factory dataSpec.withStreamUrl("https://cached.airbeats.local/$mediaId", contentLength)
             }
 
             songUrlCache[mediaId]?.takeIf { it.expiresAt > System.currentTimeMillis() }?.let {
@@ -2789,6 +2814,29 @@ class MusicService :
                 }.first()
             }
 
+            // Helper for verifying JioSaavn stream URLs quickly via GET byte-range
+            fun verifyJioSaavnUrl(rawUrl: String): String? {
+                fun testUrl(targetUrl: String): Boolean {
+                    return runCatching {
+                        val req = okhttp3.Request.Builder()
+                            .url(targetUrl)
+                            .header("Range", "bytes=0-10")
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                            .build()
+                        mediaOkHttpClient.newCall(req).execute().use { resp ->
+                            resp.isSuccessful || resp.code in 200..206
+                        }
+                    }.getOrDefault(false)
+                }
+
+                if (testUrl(rawUrl)) return rawUrl
+                val fallback160 = if (rawUrl.contains("_320.")) rawUrl.replace("_320.", "_160.") else null
+                if (fallback160 != null && testUrl(fallback160)) return fallback160
+                val fallback96 = if (rawUrl.contains("_320.")) rawUrl.replace("_320.", "_96.") else if (rawUrl.contains("_160.")) rawUrl.replace("_160.", "_96.") else null
+                if (fallback96 != null && testUrl(fallback96)) return fallback96
+                return null
+            }
+
             // When JioSaavn integration is enabled, prioritize JioSaavn 320kbps streams first
             if (enableJioSaavn && !mediaId.startsWith("JS:") && !mediaId.startsWith("local:") && !jioSaavnFailedSongs.contains(mediaId)) {
                 try {
@@ -2809,17 +2857,9 @@ class MusicService :
                             }.getOrNull()
                         }
                         if (jsStreamUrl != null) {
-                            val isValidJsUrl = runCatching {
-                                val headReq = okhttp3.Request.Builder()
-                                    .url(jsStreamUrl)
-                                    .head()
-                                    .build()
-                                mediaOkHttpClient.newCall(headReq).execute().use { resp ->
-                                    resp.isSuccessful
-                                }
-                            }.getOrDefault(false)
+                            val verifiedUrl = verifyJioSaavnUrl(jsStreamUrl)
 
-                            if (isValidJsUrl) {
+                            if (verifiedUrl != null) {
                                 jioSaavnAttemptedSongIds.add(mediaId)
                                 Timber.tag("MusicService").d("JioSaavn Priority: Serving verified 320k for '${mediaMetadata.title}'")
                                 database.query {
@@ -2833,17 +2873,17 @@ class MusicService :
                                             sampleRate = 44100,
                                             contentLength = 0L,
                                             loudnessDb = null,
-                                            playbackUrl = jsStreamUrl
+                                            playbackUrl = verifiedUrl
                                         )
                                     )
                                 }
                                 songUrlCache[mediaId] = CachedSongUrl(
-                                    url = jsStreamUrl,
+                                    url = verifiedUrl,
                                     expiresAt = System.currentTimeMillis() + 3600000L,
                                     contentLength = null,
                                 )
                                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                                return@Factory dataSpec.withStreamUrl(jsStreamUrl, null)
+                                return@Factory dataSpec.withStreamUrl(verifiedUrl, null)
                             } else {
                                 Timber.tag("MusicService").w("JioSaavn stream URL validation failed for '$mediaId'. Falling back directly to YouTube.")
                             }
@@ -2924,13 +2964,13 @@ class MusicService :
             } catch (e: Exception) {
                 Timber.tag(ytLogTag).e(e, "YouTube playback error, trying JioSaavn fallback")
 
-                val enableJioSaavn = runBlocking {
+                val enableJioSaavnFallback = runBlocking {
                     dataStore.data.map { preferences ->
                         preferences[EnableJioSaavnKey] ?: true
                     }.first()
                 }
 
-                if (enableJioSaavn && !mediaId.startsWith("JS:")) {
+                if (enableJioSaavnFallback && !mediaId.startsWith("JS:")) {
                     try {
                         val mediaMetadata = kotlinx.coroutines.runBlocking(Dispatchers.Main) {
                             player.mediaItems.find { it.mediaId == mediaId }?.metadata
@@ -2944,29 +2984,32 @@ class MusicService :
                                 )
                             }
                             if (jsStreamUrl != null) {
-                                jioSaavnAttemptedSongIds.add(mediaId)
-                                database.query {
-                                    upsert(
-                                        FormatEntity(
-                                            id = mediaId,
-                                            itag = 141,
-                                            mimeType = "audio/mp4",
-                                            codecs = "mp4a.40.2",
-                                            bitrate = 320000,
-                                            sampleRate = 44100,
-                                            contentLength = 0L,
-                                            loudnessDb = null,
-                                            playbackUrl = jsStreamUrl
+                                val verifiedUrl = verifyJioSaavnUrl(jsStreamUrl)
+                                if (verifiedUrl != null) {
+                                    jioSaavnAttemptedSongIds.add(mediaId)
+                                    database.query {
+                                        upsert(
+                                            FormatEntity(
+                                                id = mediaId,
+                                                itag = 141,
+                                                mimeType = "audio/mp4",
+                                                codecs = "mp4a.40.2",
+                                                bitrate = 320000,
+                                                sampleRate = 44100,
+                                                contentLength = 0L,
+                                                loudnessDb = null,
+                                                playbackUrl = verifiedUrl
+                                            )
                                         )
+                                    }
+                                    songUrlCache[mediaId] = CachedSongUrl(
+                                        url = verifiedUrl,
+                                        expiresAt = System.currentTimeMillis() + 3600000L,
+                                        contentLength = null,
                                     )
+                                    scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+                                    return@Factory dataSpec.withStreamUrl(verifiedUrl, null)
                                 }
-                                songUrlCache[mediaId] = CachedSongUrl(
-                                    url = jsStreamUrl,
-                                    expiresAt = System.currentTimeMillis() + 3600000L,
-                                    contentLength = null,
-                                )
-                                scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                                return@Factory dataSpec.withStreamUrl(jsStreamUrl, null)
                             }
                         }
                     } catch (jsEx: Exception) {
@@ -3506,6 +3549,49 @@ class MusicService :
         } catch (e: Exception) {
             Timber.e(e, "Exception caught and suppressed in startService")
             null
+        }
+    }
+
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        val requiresForeground = if (isCasting.value) false else startInForegroundRequired
+        try {
+            super.onUpdateNotification(session, requiresForeground)
+        } catch (e: Exception) {
+            Timber.e(e, "Suppressed onUpdateNotification error")
+        }
+    }
+
+    fun fetchAutomixRecommendations(seedId: String) {
+        if (!isNetworkConnected.value || seedId.isBlank()) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val effectiveYtId = if (seedId.startsWith("JS:") || seedId.startsWith("local:")) {
+                    val metadata = player.mediaItems.find { it.mediaId == seedId }?.metadata
+                    val query = "${metadata?.title.orEmpty()} ${metadata?.artists?.firstOrNull()?.name.orEmpty()}".trim()
+                    if (query.isNotBlank()) {
+                        YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()?.items?.firstOrNull()?.id
+                    } else null
+                } else seedId
+
+                if (!effectiveYtId.isNullOrBlank()) {
+                    val nextResult = YouTube.next(WatchEndpoint(videoId = effectiveYtId)).getOrNull()
+                    val candidateSongs = nextResult?.items.orEmpty()
+                    val existingIds = player.mediaItems.map { it.mediaId }.toHashSet()
+                    val excludedSongIds = database.getExcludedSongIds().toHashSet()
+                    val items = candidateSongs
+                        .map { it.toMediaItem() }
+                        .filter { it.mediaId.isNotBlank() && it.mediaId !in excludedSongIds && existingIds.add(it.mediaId) }
+                        .take(15)
+
+                    if (items.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            automixItems.value = items
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to fetch automix recommendations for $seedId")
+            }
         }
     }
 

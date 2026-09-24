@@ -289,6 +289,15 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
             .build()
     }
 
+    override fun startForegroundService(service: android.content.Intent?): android.content.ComponentName? {
+        return try {
+            super.startForegroundService(service)
+        } catch (e: Exception) {
+            Timber.e(e, "ForegroundServiceStartNotAllowedException caught and suppressed in App.startForegroundService")
+            null
+        }
+    }
+
     companion object {
         lateinit var instance: App
             private set
