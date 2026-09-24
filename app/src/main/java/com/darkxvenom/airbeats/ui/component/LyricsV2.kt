@@ -203,11 +203,8 @@ fun LyricsV2(
     val (replaceOriginalLyrics) = rememberPreference(ReplaceOriginalLyricsWithTranslationKey, defaultValue = false)
     val translationVersion by LyricsTranslationHelper.translationVersion.collectAsState()
 
-    // ── Text colour derived from background style ──
-    val textColor = if (playerBackground == PlayerBackgroundStyle.DEFAULT)
-        MaterialTheme.colorScheme.onBackground
-    else
-        Color.White
+    // ── Text colour: pure white in all themes ──
+    val textColor = Color.White
 
     val inactiveAlpha = 0.35f
 
