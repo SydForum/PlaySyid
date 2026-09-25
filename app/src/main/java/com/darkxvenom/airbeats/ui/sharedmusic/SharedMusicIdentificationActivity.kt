@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
@@ -60,9 +61,11 @@ class SharedMusicIdentificationActivity : ComponentActivity() {
         // Bind or reuse existing player connection
         playerConnection = PlayerConnection.instance
         if (playerConnection == null) {
-            runCatching {
-                startService(Intent(this, MusicService::class.java))
-            }.onFailure { Timber.e(it, "Failed to start MusicService") }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                runCatching {
+                    startService(Intent(this, MusicService::class.java))
+                }.onFailure { Timber.e(it, "Failed to start MusicService") }
+            }
             runCatching {
                 bindService(
                     Intent(this, MusicService::class.java),
