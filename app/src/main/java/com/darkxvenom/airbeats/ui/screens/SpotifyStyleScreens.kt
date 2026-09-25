@@ -103,6 +103,11 @@ import com.darkxvenom.airbeats.constants.DarkModeKey
 import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
 import com.darkxvenom.airbeats.constants.MaterialHomeSection
 import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
+import com.darkxvenom.airbeats.ui.component.HomeTasteStrip
+import com.darkxvenom.airbeats.ui.component.UniversalHomeHeroBanner
+import com.darkxvenom.airbeats.ui.component.UniversalArtistSpotlightCard
+import com.darkxvenom.airbeats.ui.component.UniversalTopArtistsRow
+import com.darkxvenom.airbeats.ui.component.HomeThemeStyle
 import com.darkxvenom.airbeats.utils.rememberEnumPreference
 
 @Composable
@@ -199,13 +204,22 @@ fun SpotifyHomeScreen(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                .pullToRefresh(
-                    state = pullRefreshState,
-                    isRefreshing = isRefreshing,
-                    onRefresh = viewModel::refresh,
-                ),
-        ) {
-            LazyColumn(
+                    .pullToRefresh(
+                        state = pullRefreshState,
+                        isRefreshing = isRefreshing,
+                        onRefresh = viewModel::refresh,
+                    )
+            ) {
+                val freshPicks = remember(quickPicks) { quickPicks?.drop(6).orEmpty().take(12) }
+                val artistTriples = remember(quickPicks) {
+                    quickPicks?.mapNotNull { pick ->
+                        pick.artists.firstOrNull()?.let { artist ->
+                            Triple(artist, artist.thumbnailUrl, pick.song.thumbnailUrl)
+                        }
+                    }?.distinctBy { it.first.id }?.take(10).orEmpty()
+                }
+
+                LazyColumn(
                 state = lazyListState,
                 contentPadding = PaddingValues(
                     top = WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 145.dp,
@@ -217,11 +231,49 @@ fun SpotifyHomeScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
 
+                if (isSectionVisible(MaterialHomeSection.HERO)) {
+                    item(key = "spotify_hero") {
+                        UniversalHomeHeroBanner(
+                            title = "Smart Radio",
+                            subtitle = "Endless discovery tuned to your vibes",
+                            onPlayRadio = {
+                                quickPicks?.firstOrNull()?.let { firstTrack ->
+                                    playerConnection.playQueue(YouTubeQueue.radio(firstTrack.toMediaMetadata()))
+                                }
+                            },
+                            style = HomeThemeStyle.SPOTIFY,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                if (isSectionVisible(MaterialHomeSection.TASTE_STRIP)) {
+                    item(key = "spotify_taste_strip") {
+                        HomeTasteStrip(
+                            onTagClick = { tag ->
+                                val encoded = java.net.URLEncoder.encode(tag, "UTF-8")
+                                navController.navigate("search/$encoded")
+                            },
+                            style = HomeThemeStyle.SPOTIFY,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+
                 if (isSectionVisible(MaterialHomeSection.QUICK_PICKS)) {
                     quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
                         item {
                             NavigationTitle(title = "Quick picks")
                             SpotifyLocalRow(picks.take(12), playerConnection)
+                        }
+                    }
+                }
+
+                if (isSectionVisible(MaterialHomeSection.FRESH_FINDS)) {
+                    if (freshPicks.isNotEmpty()) {
+                        item(key = "spotify_fresh_finds") {
+                            NavigationTitle(title = "Fresh Finds", label = "NEW")
+                            SpotifyLocalRow(freshPicks, playerConnection)
                         }
                     }
                 }
@@ -249,6 +301,45 @@ fun SpotifyHomeScreen(
                         item {
                             NavigationTitle(title = "Forgotten favorites")
                             SpotifyLocalRow(favorites.take(12), playerConnection)
+                        }
+                    }
+                }
+
+                if (isSectionVisible(MaterialHomeSection.SPOTLIGHT)) {
+                    quickPicks?.firstOrNull()?.let { pick ->
+                        val artist = pick.artists.firstOrNull()
+                        if (artist != null) {
+                            item(key = "spotify_spotlight") {
+                                UniversalArtistSpotlightCard(
+                                    artistName = artist.name,
+                                    artistId = artist.id,
+                                    thumbnailUrl = artist.thumbnailUrl,
+                                    fallbackThumbnail = pick.song.thumbnailUrl,
+                                    onOpenArtist = {
+                                        artist.id.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                                    },
+                                    onPlayRadio = {
+                                        playerConnection.playQueue(YouTubeQueue.radio(pick.toMediaMetadata()))
+                                    },
+                                    style = HomeThemeStyle.SPOTIFY,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (isSectionVisible(MaterialHomeSection.TOP_ARTISTS)) {
+                    if (artistTriples.isNotEmpty()) {
+                        item(key = "spotify_top_artists") {
+                            NavigationTitle(title = "Your Top Artists")
+                            UniversalTopArtistsRow(
+                                artists = artistTriples,
+                                onArtistClick = { artistId ->
+                                    artistId.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                                },
+                                style = HomeThemeStyle.SPOTIFY
+                            )
                         }
                     }
                 }

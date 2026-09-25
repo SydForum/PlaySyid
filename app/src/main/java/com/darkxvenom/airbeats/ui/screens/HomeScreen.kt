@@ -75,6 +75,11 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import com.darkxvenom.airbeats.ui.component.ChipsRow
 import com.darkxvenom.airbeats.ui.component.TopFadeBlur
 import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
+import com.darkxvenom.airbeats.ui.component.HomeTasteStrip
+import com.darkxvenom.airbeats.ui.component.UniversalHomeHeroBanner
+import com.darkxvenom.airbeats.ui.component.UniversalArtistSpotlightCard
+import com.darkxvenom.airbeats.ui.component.UniversalTopArtistsRow
+import com.darkxvenom.airbeats.ui.component.HomeThemeStyle
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -439,6 +444,17 @@ fun HomeScreen(
                     }
                 )
             }
+            val freshTracks = remember(aiRecommendedPlaylist, quickPicks) {
+                val aiSongs = aiRecommendedPlaylist?.second.orEmpty()
+                if (aiSongs.isNotEmpty()) aiSongs else quickPicks?.drop(6).orEmpty()
+            }
+            val artistTriples = remember(quickPicks) {
+                quickPicks?.mapNotNull { pick ->
+                    pick.artists.firstOrNull()?.let { artist ->
+                        Triple(artist, artist.thumbnailUrl, pick.song.thumbnailUrl)
+                    }
+                }?.distinctBy { it.first.id }?.take(10).orEmpty()
+            }
 
             LazyColumn(
                 state = lazylistState,
@@ -455,6 +471,24 @@ fun HomeScreen(
                         navController = navController,
                         onSearchClick = onSearchClick
                     )
+                }
+
+                if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.HERO)) {
+                    item(key = "classic_hero") {
+                        UniversalHomeHeroBanner(
+                            title = "Welcome back, $accountName",
+                            subtitle = "Continuous radio tuned to your favorites",
+                            onPlayRadio = {
+                                quickPicks?.firstOrNull()?.let { firstTrack ->
+                                    playerConnection.playQueue(YouTubeQueue.radio(firstTrack.toMediaMetadata()))
+                                }
+                            },
+                            style = HomeThemeStyle.CLASSIC,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                .animateItem()
+                        )
+                    }
                 }
 
                 if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.QUICK_TILES)) {
@@ -500,6 +534,18 @@ fun HomeScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.TASTE_STRIP)) {
+                    item(key = "classic_taste_strip") {
+                        HomeTasteStrip(
+                            onTagClick = { tag ->
+                                navController.navigate("search/${java.net.URLEncoder.encode(tag, "UTF-8")}")
+                            },
+                            style = HomeThemeStyle.CLASSIC,
+                            modifier = Modifier.padding(vertical = 4.dp).animateItem()
+                        )
                     }
                 }
 
@@ -629,34 +675,33 @@ fun HomeScreen(
             }
 
             if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.FRESH_FINDS)) {
-                    aiRecommendedPlaylist?.let { (playlist, songs) ->
-                        if (songs.isNotEmpty()) {
-                            item(key = "ai_recommended_title") {
-                            NavigationTitle(
-                                title = stringResource(R.string.recommended_by_ai),
-                                label = playlist.playlist.lastUpdateTime?.let {
-                                    "Updated: " + it.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, h:mm a"))
-                                },
-                                onClick = {
-                                    navController.navigate("local_playlist/${playlist.id}")
-                                },
-                                modifier = Modifier.animateItem()
-                            )
-                        }
+                if (freshTracks.isNotEmpty()) {
+                    val isAi = aiRecommendedPlaylist?.second?.isNotEmpty() == true
+                    item(key = "fresh_finds_title") {
+                        NavigationTitle(
+                            title = if (isAi) stringResource(R.string.recommended_by_ai) else "Fresh Finds",
+                            label = if (isAi) aiRecommendedPlaylist?.first?.playlist?.lastUpdateTime?.let {
+                                "Updated: " + it.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, h:mm a"))
+                            } else "Discover new gems",
+                            onClick = if (isAi) {
+                                { navController.navigate("local_playlist/${aiRecommendedPlaylist?.first?.id}") }
+                            } else null,
+                            modifier = Modifier.animateItem()
+                        )
+                    }
 
-                        item(key = "ai_recommended_list") {
-                            val distinctSongs = remember(songs) { songs.distinctBy { it.id } }
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateItem()
-                            ) {
-                                items(distinctSongs, key = { it.id }) { song ->
-                                    Box(modifier = Modifier.width(140.dp)) {
-                                        localGridItem(song)
-                                    }
+                    item(key = "fresh_finds_list") {
+                        val distinctSongs = remember(freshTracks) { freshTracks.distinctBy { it.id } }
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateItem()
+                        ) {
+                            items(distinctSongs, key = { it.id }) { song ->
+                                Box(modifier = Modifier.width(140.dp)) {
+                                    localGridItem(song)
                                 }
                             }
                         }
@@ -747,6 +792,53 @@ fun HomeScreen(
                                 ytGridItem(item)
                             }
                         }
+                    }
+                }
+            }
+
+            if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.SPOTLIGHT)) {
+                quickPicks?.firstOrNull()?.let { pick ->
+                    val artist = pick.artists.firstOrNull()
+                    if (artist != null) {
+                        item(key = "classic_spotlight") {
+                            UniversalArtistSpotlightCard(
+                                artistName = artist.name,
+                                artistId = artist.id,
+                                thumbnailUrl = artist.thumbnailUrl,
+                                fallbackThumbnail = pick.song.thumbnailUrl,
+                                onOpenArtist = {
+                                    artist.id.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                                },
+                                onPlayRadio = {
+                                    playerConnection.playQueue(YouTubeQueue.radio(pick.toMediaMetadata()))
+                                },
+                                style = HomeThemeStyle.CLASSIC,
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .animateItem()
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isSectionVisible(com.darkxvenom.airbeats.constants.MaterialHomeSection.TOP_ARTISTS)) {
+                if (artistTriples.isNotEmpty()) {
+                    item(key = "classic_top_artists_title") {
+                        NavigationTitle(
+                            title = "Artists For You",
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                    item(key = "classic_top_artists_row") {
+                        UniversalTopArtistsRow(
+                            artists = artistTriples,
+                            onArtistClick = { artistId ->
+                                artistId.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                            },
+                            style = HomeThemeStyle.CLASSIC,
+                            modifier = Modifier.animateItem()
+                        )
                     }
                 }
             }

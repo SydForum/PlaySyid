@@ -108,6 +108,11 @@ import com.darkxvenom.airbeats.playback.queues.ListQueue
 import com.darkxvenom.airbeats.playback.queues.YouTubeAlbumRadio
 import com.darkxvenom.airbeats.playback.queues.YouTubeQueue
 import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
+import com.darkxvenom.airbeats.ui.component.HomeTasteStrip
+import com.darkxvenom.airbeats.ui.component.UniversalArtistSpotlightCard
+import com.darkxvenom.airbeats.ui.component.UniversalTopArtistsRow
+import com.darkxvenom.airbeats.ui.component.UniversalQuickAccessTiles
+import com.darkxvenom.airbeats.ui.component.HomeThemeStyle
 import com.darkxvenom.airbeats.ui.component.LocalMenuState
 import com.darkxvenom.airbeats.ui.component.isFrostedGlassUiEnabled
 import com.darkxvenom.airbeats.ui.menu.AlbumMenu
@@ -219,6 +224,14 @@ fun NewClassicHomeScreen(
         label = "NewClassicBlurAlpha"
     )
 
+    val artistTriples = remember(quickPicks) {
+        quickPicks?.mapNotNull { pick ->
+            pick.artists.firstOrNull()?.let { artist ->
+                Triple(artist, artist.thumbnailUrl, pick.song.thumbnailUrl)
+            }
+        }?.distinctBy { it.first.id }?.take(10).orEmpty()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -265,6 +278,36 @@ fun NewClassicHomeScreen(
                                 }
                             }
                         }
+                    )
+                }
+            }
+
+            if (isSectionVisible(MaterialHomeSection.QUICK_TILES)) {
+                item(key = "new_classic_quick_tiles") {
+                    UniversalQuickAccessTiles(
+                        onLikedClick = { navController.navigate("auto_playlist/liked") },
+                        onMixClick = {
+                            quickPicks?.firstOrNull()?.let {
+                                playerConnection.playQueue(YouTubeQueue.radio(it.toMediaMetadata()))
+                            }
+                        },
+                        onHistoryClick = { navController.navigate("history") },
+                        onStatsClick = { navController.navigate("stats") },
+                        style = HomeThemeStyle.NEW_CLASSIC,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            if (isSectionVisible(MaterialHomeSection.TASTE_STRIP)) {
+                item(key = "new_classic_taste_strip") {
+                    HomeTasteStrip(
+                        onTagClick = { tag ->
+                            val encoded = java.net.URLEncoder.encode(tag, "UTF-8")
+                            navController.navigate("search/$encoded")
+                        },
+                        style = HomeThemeStyle.NEW_CLASSIC,
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
             }
@@ -475,6 +518,52 @@ fun NewClassicHomeScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // Spotlight
+            if (isSectionVisible(MaterialHomeSection.SPOTLIGHT)) {
+                quickPicks?.firstOrNull()?.let { pick ->
+                    val artist = pick.artists.firstOrNull()
+                    if (artist != null) {
+                        item(key = "new_classic_spotlight") {
+                            Spacer(Modifier.height(16.dp))
+                            UniversalArtistSpotlightCard(
+                                artistName = artist.name,
+                                artistId = artist.id,
+                                thumbnailUrl = artist.thumbnailUrl,
+                                fallbackThumbnail = pick.song.thumbnailUrl,
+                                onOpenArtist = {
+                                    artist.id.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                                },
+                                onPlayRadio = {
+                                    playerConnection.playQueue(YouTubeQueue.radio(pick.toMediaMetadata()))
+                                },
+                                style = HomeThemeStyle.NEW_CLASSIC,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Top Artists
+            if (isSectionVisible(MaterialHomeSection.TOP_ARTISTS)) {
+                if (artistTriples.isNotEmpty()) {
+                    item(key = "new_classic_top_artists") {
+                        Spacer(Modifier.height(20.dp))
+                        NewClassicSectionHeader(
+                            title = "Artists For You",
+                            onSeeAllClick = null
+                        )
+                        UniversalTopArtistsRow(
+                            artists = artistTriples,
+                            onArtistClick = { artistId ->
+                                artistId.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                            },
+                            style = HomeThemeStyle.NEW_CLASSIC
+                        )
                     }
                 }
             }
@@ -712,48 +801,52 @@ fun NewClassicHomeScreen(
                 }
             }
 
-            // 8. Recommended by AI
-            if (isSectionVisible(MaterialHomeSection.FRESH_FINDS) && aiRecommendedPlaylist != null && aiRecommendedPlaylist!!.second.isNotEmpty()) {
-                val (playlist, songs) = aiRecommendedPlaylist!!
-                item(key = "section_ai_recommended") {
-                    Spacer(Modifier.height(20.dp))
-                    NewClassicSectionHeader(
-                        title = "Recommended by AI",
-                        onSeeAllClick = {
-                            navController.navigate("local_playlist/${playlist.id}")
-                        }
-                    )
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(songs, key = { it.id }) { song ->
-                            NewClassicSongCard(
-                                title = song.title,
-                                subtitle = song.artists.joinToString { it.name },
-                                thumbnailUrl = song.thumbnailUrl,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    playerConnection.playQueue(
-                                        ListQueue(
-                                            title = "Recommended by AI",
-                                            items = songs.map { it.toMediaItem() },
-                                            startIndex = songs.indexOf(song).coerceAtLeast(0)
+            // 8. Fresh Finds / Recommended by AI
+            if (isSectionVisible(MaterialHomeSection.FRESH_FINDS)) {
+                val hasAi = aiRecommendedPlaylist != null && aiRecommendedPlaylist!!.second.isNotEmpty()
+                val freshSongs = if (hasAi) aiRecommendedPlaylist!!.second else quickPicks.orEmpty().drop(6)
+                val freshTitle = if (hasAi) "Recommended by AI" else "Fresh Finds"
+                if (freshSongs.isNotEmpty()) {
+                    item(key = "section_fresh_finds") {
+                        Spacer(Modifier.height(20.dp))
+                        NewClassicSectionHeader(
+                            title = freshTitle,
+                            onSeeAllClick = if (hasAi) {
+                                { navController.navigate("local_playlist/${aiRecommendedPlaylist!!.first.id}") }
+                            } else null
+                        )
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(freshSongs, key = { it.id }) { song ->
+                                NewClassicSongCard(
+                                    title = song.title,
+                                    subtitle = song.artists.joinToString { it.name },
+                                    thumbnailUrl = song.thumbnailUrl,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        playerConnection.playQueue(
+                                            ListQueue(
+                                                title = freshTitle,
+                                                items = freshSongs.map { it.toMediaItem() },
+                                                startIndex = freshSongs.indexOf(song).coerceAtLeast(0)
+                                            )
                                         )
-                                    )
-                                },
-                                onLongClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    menuState.show {
-                                        SongMenu(
-                                            originalSong = song,
-                                            navController = navController,
-                                            onDismiss = menuState::dismiss
-                                        )
+                                    },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        menuState.show {
+                                            SongMenu(
+                                                originalSong = song,
+                                                navController = navController,
+                                                onDismiss = menuState::dismiss
+                                            )
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }

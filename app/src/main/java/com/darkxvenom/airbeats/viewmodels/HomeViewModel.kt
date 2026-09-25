@@ -303,9 +303,28 @@ class HomeViewModel @Inject constructor(
                         }
                         val allSections = listOfNotNull(jioSection) + filteredSections
                         homePage.value = page.copy(sections = allSections)
+
+                        // Dynamic fallback for fresh installs or empty local history
+                        val onlineSongs = allSections.flatMap { it.items }.filterIsInstance<SongItem>()
+                        if (quickPicks.value.isNullOrEmpty() && onlineSongs.isNotEmpty()) {
+                            quickPicks.value = onlineSongs.map(::mapToSong).distinctBy { it.id }.shuffled(homeRandom).take(20)
+                        }
+                        if (forgottenFavorites.value.isNullOrEmpty() && onlineSongs.size > 10) {
+                            forgottenFavorites.value = onlineSongs.drop(10).map(::mapToSong).distinctBy { it.id }.take(20)
+                        }
+                        if (accountPlaylists.value.isNullOrEmpty()) {
+                            val onlinePlaylists = allSections.flatMap { it.items }.filterIsInstance<PlaylistItem>()
+                            if (onlinePlaylists.isNotEmpty()) {
+                                accountPlaylists.value = onlinePlaylists.distinctBy { it.id }.take(15)
+                            }
+                        }
                     }.onFailure {
                         if (jioSection != null) {
                             homePage.value = HomePage(chips = null, sections = listOf(jioSection))
+                            val onlineSongs = jioSection.items.filterIsInstance<SongItem>()
+                            if (quickPicks.value.isNullOrEmpty() && onlineSongs.isNotEmpty()) {
+                                quickPicks.value = onlineSongs.map(::mapToSong).distinctBy { it.id }.shuffled(homeRandom).take(20)
+                            }
                         }
                         reportException(it)
                     }

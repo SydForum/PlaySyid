@@ -64,6 +64,19 @@ import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
 import com.darkxvenom.airbeats.constants.MaterialHomeSection
 import com.darkxvenom.airbeats.utils.rememberPreference
 import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
+import com.darkxvenom.airbeats.ui.component.HomeTasteStrip
+import com.darkxvenom.airbeats.ui.component.UniversalArtistSpotlightCard
+import com.darkxvenom.airbeats.ui.component.UniversalTopArtistsRow
+import com.darkxvenom.airbeats.ui.component.UniversalQuickAccessTiles
+import com.darkxvenom.airbeats.ui.component.HomeThemeStyle
+import com.darkxvenom.airbeats.LocalDatabase
+import com.darkxvenom.airbeats.db.entities.Song
+import com.darkxvenom.airbeats.db.entities.LocalItem
+import com.darkxvenom.airbeats.db.entities.Album
+import com.darkxvenom.airbeats.db.entities.Artist
+import com.darkxvenom.airbeats.db.entities.Playlist
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -79,6 +92,9 @@ fun PlayfulHomeScreen(
 
     val quickPicks by viewModel.quickPicks.collectAsState()
     val keepListening by viewModel.keepListening.collectAsState()
+    val forgottenFavorites by viewModel.forgottenFavorites.collectAsState()
+    val accountPlaylists by viewModel.accountPlaylists.collectAsState()
+    val similarRecommendations by viewModel.similarRecommendations.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
     val explorePage by viewModel.explorePage.collectAsState()
     
@@ -93,7 +109,7 @@ fun PlayfulHomeScreen(
     var selectedTab by remember { mutableStateOf("history") }
     val hiddenSections by rememberPreference(HiddenHomeSectionsKey, defaultValue = emptySet())
     val isSectionVisible: (MaterialHomeSection) -> Boolean = remember(hiddenSections) {
-        { section -> !hiddenSections.contains(section.name) }
+        { section -> section.id !in hiddenSections }
     }
 
     val ytGridItem: @Composable (YTItem) -> Unit = { item ->
@@ -147,6 +163,89 @@ fun PlayfulHomeScreen(
                     }
                 )
         )
+    }
+
+    val playfulSongCard: @Composable (Song) -> Unit = { song ->
+        Column(
+            modifier = Modifier
+                .width(130.dp)
+                .clickable {
+                    playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                }
+        ) {
+            AsyncImage(
+                model = song.thumbnailUrl?.highQualityThumbnail(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(130.dp)
+                    .clip(RoundedCornerShape(20.dp))
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = song.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.artists.joinToString { it.name },
+                fontSize = 12.sp,
+                color = Color.Black.copy(alpha = 0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+
+    val playfulLocalItemCard: @Composable (LocalItem) -> Unit = { item ->
+        Column(
+            modifier = Modifier
+                .width(130.dp)
+                .clickable {
+                    when (item) {
+                        is Song -> playerConnection.playQueue(YouTubeQueue.radio(item.toMediaMetadata()))
+                        is Album -> navController.navigate("album/${item.id}")
+                        is Artist -> navController.navigate("artist/${item.id}")
+                        is Playlist -> navController.navigate("local_playlist/${item.id}")
+                    }
+                }
+        ) {
+            AsyncImage(
+                model = item.thumbnailUrl?.highQualityThumbnail(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(130.dp)
+                    .clip(RoundedCornerShape(20.dp))
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = item.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            val subtitle = when (item) {
+                is Song -> item.artists.joinToString { it.name }
+                is Album -> item.artists.joinToString { it.name }
+                is Artist -> "Artist"
+                is Playlist -> "Playlist"
+            }
+            if (subtitle.isNotBlank()) {
+                Text(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    color = Color.Black.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 
     MaterialTheme(
@@ -328,6 +427,15 @@ fun PlayfulHomeScreen(
                                 }
                             }
 
+                            val freshFinds = remember(quickPicks) { quickPicks?.drop(8)?.take(8) ?: emptyList() }
+                            val artistTriples = remember(quickPicks) {
+                                quickPicks?.mapNotNull { pick ->
+                                    pick.artists.firstOrNull()?.let { artist ->
+                                        Triple(artist, artist.thumbnailUrl, pick.song.thumbnailUrl)
+                                    }
+                                }?.distinctBy { it.first.id }?.take(10).orEmpty()
+                            }
+
                             // Content Area
                             LazyColumn(
                                 state = playfulListState,
@@ -339,9 +447,9 @@ fun PlayfulHomeScreen(
                                 contentPadding = PaddingValues(bottom = 250.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                if (isSectionVisible(MaterialHomeSection.QUICK_PICKS)) {
+                                if (isSectionVisible(MaterialHomeSection.HERO)) {
                                     item {
-                                        // Featured Card (Carousel)
+                                        // Featured Card (Hero)
                                         val featuredItems = quickPicks ?: emptyList()
                                         val featuredItem = featuredItems.firstOrNull()
 
@@ -365,61 +473,278 @@ fun PlayfulHomeScreen(
                                                         contentDescription = null,
                                                         contentScale = ContentScale.Crop,
                                                         modifier = Modifier
-                                                            .size(180.dp)
+                                                            .size(170.dp)
                                                             .clip(CircleShape)
                                                     )
-                                                    Spacer(modifier = Modifier.height(24.dp))
+                                                    Spacer(modifier = Modifier.height(18.dp))
                                                     Text(
                                                         text = featuredItem.title,
-                                                        fontSize = 20.sp,
+                                                        fontSize = 19.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = Color.Black,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis,
                                                         modifier = Modifier.padding(horizontal = 16.dp)
                                                     )
+                                                    Text(
+                                                        text = featuredItem.artists.joinToString { it.name },
+                                                        fontSize = 14.sp,
+                                                        color = Color.Black.copy(alpha = 0.6f),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                                    )
                                                 }
                                             }
-                                        } else {
-                                            Spacer(modifier = Modifier.height(300.dp))
                                         }
                                     }
+                                }
 
-                                    // Vertical List of Songs with Thumbnails
-                                    items(quickPicks?.drop(1)?.take(10) ?: emptyList()) { song ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
-                                                },
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            AsyncImage(
-                                                model = song.thumbnailUrl?.highQualityThumbnail(),
-                                                contentDescription = null,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .size(56.dp)
-                                                    .clip(RoundedCornerShape(16.dp))
+                                if (isSectionVisible(MaterialHomeSection.QUICK_TILES)) {
+                                    item {
+                                        UniversalQuickAccessTiles(
+                                            onLikedClick = { navController.navigate("auto_playlist/liked") },
+                                            onMixClick = {
+                                                quickPicks?.firstOrNull()?.let {
+                                                    playerConnection.playQueue(YouTubeQueue.radio(it.toMediaMetadata()))
+                                                }
+                                            },
+                                            onHistoryClick = { navController.navigate("history") },
+                                            onStatsClick = { navController.navigate("stats") },
+                                            style = HomeThemeStyle.CLASSIC
+                                        )
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.TASTE_STRIP)) {
+                                    item {
+                                        HomeTasteStrip(
+                                            onTagClick = { tag ->
+                                                navController.navigate("search?query=${java.net.URLEncoder.encode(tag, "UTF-8")}")
+                                            },
+                                            style = HomeThemeStyle.CLASSIC
+                                        )
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.QUICK_PICKS)) {
+                                    val picks = quickPicks?.take(8) ?: emptyList()
+                                    if (picks.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "Quick Picks",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black,
+                                                modifier = Modifier.padding(top = 8.dp)
                                             )
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
+                                        }
+                                        items(picks) { song ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+                                                    },
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                AsyncImage(
+                                                    model = song.thumbnailUrl?.highQualityThumbnail(),
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .size(56.dp)
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                )
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = song.title,
+                                                        fontSize = 16.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color.Black,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Text(
+                                                        text = song.artists.joinToString { it.name },
+                                                        fontSize = 14.sp,
+                                                        color = Color.Black.copy(alpha = 0.6f),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.FRESH_FINDS)) {
+                                    if (freshFinds.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "Fresh Finds",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black,
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                        }
+                                        item {
+                                            LazyRow(
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                items(freshFinds) { song ->
+                                                    playfulSongCard(song)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.JUMP_BACK_IN)) {
+                                    val recents = keepListening ?: emptyList()
+                                    if (recents.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "Jump Back In",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black,
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                        }
+                                        item {
+                                            LazyRow(
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                items(recents) { item ->
+                                                    playfulLocalItemCard(item)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.SPOTLIGHT)) {
+                                    quickPicks?.firstOrNull()?.let { pick ->
+                                        val artist = pick.artists.firstOrNull()
+                                        if (artist != null) {
+                                            item {
+                                                UniversalArtistSpotlightCard(
+                                                    artistName = artist.name,
+                                                    artistId = artist.id,
+                                                    thumbnailUrl = artist.thumbnailUrl,
+                                                    fallbackThumbnail = pick.song.thumbnailUrl,
+                                                    onOpenArtist = {
+                                                        artist.id.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                                                    },
+                                                    onPlayRadio = {
+                                                        playerConnection.playQueue(YouTubeQueue.radio(pick.toMediaMetadata()))
+                                                    },
+                                                    style = HomeThemeStyle.CLASSIC
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.TOP_ARTISTS)) {
+                                    if (artistTriples.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "Top Artists",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black,
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                        }
+                                        item {
+                                            UniversalTopArtistsRow(
+                                                artists = artistTriples,
+                                                onArtistClick = { artistId ->
+                                                    artistId.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                                                },
+                                                style = HomeThemeStyle.CLASSIC
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.HEAVY_ROTATION)) {
+                                    val favs = forgottenFavorites ?: emptyList()
+                                    if (favs.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "Heavy Rotation",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black,
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                        }
+                                        item {
+                                            LazyRow(
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                items(favs) { song ->
+                                                    playfulSongCard(song)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.MIXES)) {
+                                    val playlists = accountPlaylists ?: emptyList()
+                                    if (playlists.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                text = "Your Mixes & Playlists",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black,
+                                                modifier = Modifier.padding(top = 8.dp)
+                                            )
+                                        }
+                                        item {
+                                            LazyRow(
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                items(playlists) { item ->
+                                                    ytGridItem(item)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (isSectionVisible(MaterialHomeSection.BECAUSE_YOU_LISTEN_TO)) {
+                                    similarRecommendations?.forEach { rec ->
+                                        if (rec.items.isNotEmpty()) {
+                                            item {
                                                 Text(
-                                                    text = song.title,
-                                                    fontSize = 16.sp,
-                                                    fontWeight = FontWeight.SemiBold,
+                                                    text = "Similar to ${rec.title.title}",
+                                                    fontSize = 20.sp,
+                                                    fontWeight = FontWeight.Bold,
                                                     color = Color.Black,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
+                                                    modifier = Modifier.padding(top = 8.dp)
                                                 )
-                                                Text(
-                                                    text = song.artists.joinToString { it.name },
-                                                    fontSize = 14.sp,
-                                                    color = Color.Black.copy(alpha = 0.6f),
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
+                                            }
+                                            item {
+                                                LazyRow(
+                                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    items(rec.items) { item ->
+                                                        ytGridItem(item)
+                                                    }
+                                                }
                                             }
                                         }
                                     }

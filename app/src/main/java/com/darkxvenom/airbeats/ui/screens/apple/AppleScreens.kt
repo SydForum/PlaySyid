@@ -98,6 +98,12 @@ import com.darkxvenom.airbeats.ui.screens.library.LocalSongsScreen
 import com.darkxvenom.airbeats.constants.HiddenHomeSectionsKey
 import com.darkxvenom.airbeats.constants.MaterialHomeSection
 import com.darkxvenom.airbeats.ui.component.HomeFloatingActions
+import com.darkxvenom.airbeats.ui.component.HomeTasteStrip
+import com.darkxvenom.airbeats.ui.component.UniversalHomeHeroBanner
+import com.darkxvenom.airbeats.ui.component.UniversalArtistSpotlightCard
+import com.darkxvenom.airbeats.ui.component.UniversalTopArtistsRow
+import com.darkxvenom.airbeats.ui.component.UniversalQuickAccessTiles
+import com.darkxvenom.airbeats.ui.component.HomeThemeStyle
 import com.darkxvenom.airbeats.ui.screens.settings.DarkMode
 import com.darkxvenom.airbeats.ui.utils.highQualityThumbnail
 import com.darkxvenom.airbeats.utils.rememberEnumPreference
@@ -510,6 +516,7 @@ fun AppleHomeScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val quickPicks by viewModel.quickPicks.collectAsState()
     val forgottenFavorites by viewModel.forgottenFavorites.collectAsState()
+    val keepListening by viewModel.keepListening.collectAsState()
     val accountPlaylists by viewModel.accountPlaylists.collectAsState()
     val similarRecommendations by viewModel.similarRecommendations.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
@@ -531,6 +538,15 @@ fun AppleHomeScreen(
 
     val hiddenSections by com.darkxvenom.airbeats.utils.rememberPreference(HiddenHomeSectionsKey, defaultValue = emptySet())
     fun isSectionVisible(section: MaterialHomeSection): Boolean = section.id !in hiddenSections
+
+    val freshPicks = remember(quickPicks) { quickPicks?.drop(6).orEmpty().take(12) }
+    val artistTriples = remember(quickPicks) {
+        quickPicks?.mapNotNull { pick ->
+            pick.artists.firstOrNull()?.let { artist ->
+                Triple(artist, artist.thumbnailUrl, pick.song.thumbnailUrl)
+            }
+        }?.distinctBy { it.first.id }?.take(10).orEmpty()
+    }
     
     AppleScaffold(
         title = "Listen Now",
@@ -557,11 +573,75 @@ fun AppleHomeScreen(
             }
         }
 
+        if (isSectionVisible(MaterialHomeSection.HERO)) {
+            item(key = "apple_hero") {
+                UniversalHomeHeroBanner(
+                    title = "Listen Now",
+                    subtitle = "Curated radio tailored to your musical tastes",
+                    onPlayRadio = {
+                        quickPicks?.firstOrNull()?.let { firstTrack ->
+                            playerConnection.playQueue(YouTubeQueue.radio(firstTrack.toMediaMetadata()))
+                        }
+                    },
+                    style = HomeThemeStyle.APPLE,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+            }
+        }
+
+        if (isSectionVisible(MaterialHomeSection.QUICK_TILES)) {
+            item(key = "apple_quick_tiles") {
+                UniversalQuickAccessTiles(
+                    onLikedClick = { navController.navigate("auto_playlist/liked") },
+                    onMixClick = {
+                        quickPicks?.firstOrNull()?.let {
+                            playerConnection.playQueue(YouTubeQueue.radio(it.toMediaMetadata()))
+                        }
+                    },
+                    onHistoryClick = { navController.navigate("history") },
+                    onStatsClick = { navController.navigate("stats") },
+                    style = HomeThemeStyle.APPLE,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+            }
+        }
+
+        if (isSectionVisible(MaterialHomeSection.TASTE_STRIP)) {
+            item(key = "apple_taste_strip") {
+                HomeTasteStrip(
+                    onTagClick = { tag ->
+                        val encoded = java.net.URLEncoder.encode(tag, "UTF-8")
+                        navController.navigate("search/$encoded")
+                    },
+                    style = HomeThemeStyle.APPLE,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+        }
+
         if (isSectionVisible(MaterialHomeSection.QUICK_PICKS)) {
             quickPicks?.takeIf { it.isNotEmpty() }?.let { picks ->
                 item {
                     AppleSectionTitle("Made for You")
                     AppleLocalRow(picks.take(12), playerConnection)
+                }
+            }
+        }
+
+        if (isSectionVisible(MaterialHomeSection.FRESH_FINDS)) {
+            if (freshPicks.isNotEmpty()) {
+                item(key = "apple_fresh_finds") {
+                    AppleSectionTitle("Fresh Finds")
+                    AppleLocalRow(freshPicks, playerConnection)
+                }
+            }
+        }
+
+        if (isSectionVisible(MaterialHomeSection.JUMP_BACK_IN)) {
+            keepListening?.filterIsInstance<Song>()?.takeIf { it.isNotEmpty() }?.let { items ->
+                item(key = "apple_jump_back_in") {
+                    AppleSectionTitle("Recently Played")
+                    AppleLocalRow(items.take(12), playerConnection)
                 }
             }
         }
@@ -580,6 +660,45 @@ fun AppleHomeScreen(
                 item {
                     AppleSectionTitle("Forgotten Favorites")
                     AppleLocalRow(favorites.take(12), playerConnection)
+                }
+            }
+        }
+
+        if (isSectionVisible(MaterialHomeSection.SPOTLIGHT)) {
+            quickPicks?.firstOrNull()?.let { pick ->
+                val artist = pick.artists.firstOrNull()
+                if (artist != null) {
+                    item(key = "apple_spotlight") {
+                        UniversalArtistSpotlightCard(
+                            artistName = artist.name,
+                            artistId = artist.id,
+                            thumbnailUrl = artist.thumbnailUrl,
+                            fallbackThumbnail = pick.song.thumbnailUrl,
+                            onOpenArtist = {
+                                artist.id.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                            },
+                            onPlayRadio = {
+                                playerConnection.playQueue(YouTubeQueue.radio(pick.toMediaMetadata()))
+                            },
+                            style = HomeThemeStyle.APPLE,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (isSectionVisible(MaterialHomeSection.TOP_ARTISTS)) {
+            if (artistTriples.isNotEmpty()) {
+                item(key = "apple_top_artists") {
+                    AppleSectionTitle("Artists We Love")
+                    UniversalTopArtistsRow(
+                        artists = artistTriples,
+                        onArtistClick = { artistId ->
+                            artistId.takeIf { it.isNotBlank() }?.let { navController.navigate("artist/$it") }
+                        },
+                        style = HomeThemeStyle.APPLE
+                    )
                 }
             }
         }
