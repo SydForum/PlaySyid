@@ -859,8 +859,8 @@ fun NewClassicHomeScreen(
 
         com.darkxvenom.airbeats.ui.component.TopFadeBlur(
             hazeState = hazeState,
-            pageColor = screenBg,
-            scrimColor = screenBg,
+            pageColor = Color.Transparent,
+            scrimColor = Color.Transparent,
             alpha = blurAlpha,
             modifier = Modifier.align(Alignment.TopCenter)
         )

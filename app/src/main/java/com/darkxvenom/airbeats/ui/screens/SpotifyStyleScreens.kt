@@ -863,8 +863,8 @@ private fun SpotifyHeader(
             val headerContentHeight = if (title == "AirBeats") 118.dp else 64.dp
             com.darkxvenom.airbeats.ui.component.TopFadeBlur(
                 hazeState = hazeState,
-                pageColor = SpotifyBg,
-                scrimColor = SpotifyBg,
+                pageColor = Color.Transparent,
+                scrimColor = Color.Transparent,
                 height = statusBarPadding + headerContentHeight + com.darkxvenom.airbeats.ui.component.FADE_RUN,
                 alpha = blurAlpha,
                 modifier = Modifier.align(Alignment.TopCenter)

@@ -282,8 +282,8 @@ fun PlayfulHomeScreen(
                 ) {
                     com.darkxvenom.airbeats.ui.component.TopFadeBlur(
                         hazeState = hazeState,
-                        pageColor = Color(0xFFFFD54F),
-                        scrimColor = Color(0xFFFFD54F),
+                        pageColor = Color.Transparent,
+                        scrimColor = Color.Transparent,
                         height = padding.calculateTopPadding() + 76.dp + com.darkxvenom.airbeats.ui.component.FADE_RUN,
                         alpha = blurAlpha,
                         modifier = Modifier.align(Alignment.TopCenter)

@@ -169,8 +169,8 @@ fun AppleHeader(
         if (hazeState != null) {
             com.darkxvenom.airbeats.ui.component.TopFadeBlur(
                 hazeState = hazeState,
-                pageColor = AppleBg,
-                scrimColor = AppleBg,
+                pageColor = Color.Transparent,
+                scrimColor = Color.Transparent,
                 alpha = blurAlpha,
                 modifier = Modifier.align(Alignment.TopCenter)
             )

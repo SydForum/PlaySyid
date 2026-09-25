@@ -36,19 +36,30 @@ fun defaultTopFadeBlurHeight(): Dp =
 
 /**
  * Progressive top blur effect with smooth vertical fade.
- * Blends scrolling content smoothly into the top area without hard seams.
+ * Blends scrolling content smoothly into the top area without hard seams or milky white color cast.
  */
 @OptIn(ExperimentalHazeMaterialsApi::class, ExperimentalHazeApi::class)
 @Composable
 fun TopFadeBlur(
     hazeState: HazeState,
-    pageColor: Color,
     modifier: Modifier = Modifier,
-    scrimColor: Color = pageColor,
+    pageColor: Color = Color.Transparent,
+    scrimColor: Color = Color.Transparent,
     height: Dp = defaultTopFadeBlurHeight(),
     alpha: Float = 1f,
 ) {
     if (alpha <= 0.001f) return
+
+    val hazeStyle = if (pageColor == Color.Transparent || pageColor.alpha <= 0.001f) {
+        dev.chrisbanes.haze.HazeStyle(
+            backgroundColor = Color.Transparent,
+            tints = emptyList(),
+            blurRadius = 24.dp,
+            noiseFactor = 0f,
+        )
+    } else {
+        HazeMaterials.ultraThin(pageColor)
+    }
 
     Box(
         modifier = modifier
@@ -57,7 +68,7 @@ fun TopFadeBlur(
             .graphicsLayer { this.alpha = alpha }
             .hazeEffect(
                 state = hazeState,
-                style = HazeMaterials.ultraThin(pageColor),
+                style = hazeStyle,
             ) {
                 inputScale = HazeInputScale.Fixed(0.33f)
                 progressive = HazeProgressive.verticalGradient(
@@ -69,19 +80,21 @@ fun TopFadeBlur(
             },
     )
 
-    val scrim = remember(scrimColor) {
-        Brush.verticalGradient(
-            colorStops = Array(SCRIM_STOPS) { i ->
-                val t = i / (SCRIM_STOPS - 1f)
-                t to scrimColor.copy(alpha = SCRIM_PEAK * (1f - EaseOutCubic.transform(t)))
-            },
+    if (scrimColor != Color.Transparent && scrimColor.alpha > 0.001f) {
+        val scrim = remember(scrimColor) {
+            Brush.verticalGradient(
+                colorStops = Array(SCRIM_STOPS) { i ->
+                    val t = i / (SCRIM_STOPS - 1f)
+                    t to scrimColor.copy(alpha = SCRIM_PEAK * (1f - EaseOutCubic.transform(t)))
+                },
+            )
+        }
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(height)
+                .graphicsLayer { this.alpha = alpha }
+                .background(scrim),
         )
     }
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height)
-            .graphicsLayer { this.alpha = alpha }
-            .background(scrim),
-    )
 }
