@@ -1773,7 +1773,8 @@ class MainActivity : ComponentActivity() {
                                     val enableSwipeBackGesture by rememberPreference(com.darkxvenom.airbeats.constants.EnableSwipeBackGestureKey, defaultValue = true)
                                     val enableTabSwipeGesture by rememberPreference(com.darkxvenom.airbeats.constants.EnableTabSwipeGestureKey, defaultValue = true)
                                     val currentDestRoute = navBackStackEntry?.destination?.route
-                                    val isRootScreen = currentDestRoute in topLevelScreens
+                                    val rootTabRoutes = remember(navigationItems) { navigationItems.map { it.route }.toSet() }
+                                    val isRootScreen = currentDestRoute in rootTabRoutes
                                     val canSwipeBack = !isRootScreen && navController.previousBackStackEntry != null
 
                                     SwipeBackContainer(
@@ -1785,6 +1786,7 @@ class MainActivity : ComponentActivity() {
                                             .tabSwipeGesture(
                                                 enabled = enableTabSwipeGesture && isRootScreen,
                                                 currentRoute = currentDestRoute,
+                                                navigationItems = navigationItems,
                                                 onNavigateToRoute = { targetRoute: String ->
                                                     val screen = navigationItems.firstOrNull { it.route == targetRoute }
                                                     if (screen != null) {
@@ -1806,62 +1808,84 @@ class MainActivity : ComponentActivity() {
                                         enterTransition = {
                                             if (reduceAnimations) {
                                                 fadeIn(tween(0))
-                                            } else if (initialState.destination.route in topLevelScreens &&
-                                                targetState.destination.route in topLevelScreens
-                                            ) {
-                                                fadeIn(tween(250))
                                             } else {
-                                                fadeIn(tween(250)) + slideInHorizontally(
-                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                                    initialOffsetX = { it / 2 }
-                                                )
+                                                val fromIdx = navigationItems.indexOfFirst { it.route == initialState.destination.route }
+                                                val toIdx = navigationItems.indexOfFirst { it.route == targetState.destination.route }
+                                                if (fromIdx != -1 && toIdx != -1) {
+                                                    if (toIdx > fromIdx) {
+                                                        slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(150))
+                                                    } else {
+                                                        slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(150))
+                                                    }
+                                                } else {
+                                                    fadeIn(tween(250)) + slideInHorizontally(
+                                                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                        initialOffsetX = { it / 2 }
+                                                    )
+                                                }
                                             }
                                         },
 
                                         exitTransition = {
                                             if (reduceAnimations) {
                                                 fadeOut(tween(0))
-                                            } else if (initialState.destination.route in topLevelScreens &&
-                                                targetState.destination.route in topLevelScreens
-                                            ) {
-                                                fadeOut(tween(200))
                                             } else {
-                                                fadeOut(tween(200)) + slideOutHorizontally(
-                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                                    targetOffsetX = { -it / 2 }
-                                                )
+                                                val fromIdx = navigationItems.indexOfFirst { it.route == initialState.destination.route }
+                                                val toIdx = navigationItems.indexOfFirst { it.route == targetState.destination.route }
+                                                if (fromIdx != -1 && toIdx != -1) {
+                                                    if (toIdx > fromIdx) {
+                                                        slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(150))
+                                                    } else {
+                                                        slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(150))
+                                                    }
+                                                } else {
+                                                    fadeOut(tween(200)) + slideOutHorizontally(
+                                                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                        targetOffsetX = { -it / 2 }
+                                                    )
+                                                }
                                             }
                                         },
 
                                         popEnterTransition = {
                                             if (reduceAnimations) {
                                                 fadeIn(tween(0))
-                                            } else if ((initialState.destination.route in topLevelScreens ||
-                                                        initialState.destination.route?.startsWith("search/") == true) &&
-                                                targetState.destination.route in topLevelScreens
-                                            ) {
-                                                fadeIn(tween(250))
                                             } else {
-                                                fadeIn(tween(250)) + slideInHorizontally(
-                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                                    initialOffsetX = { -it / 2 }
-                                                )
+                                                val fromIdx = navigationItems.indexOfFirst { it.route == initialState.destination.route }
+                                                val toIdx = navigationItems.indexOfFirst { it.route == targetState.destination.route }
+                                                if (fromIdx != -1 && toIdx != -1) {
+                                                    if (toIdx > fromIdx) {
+                                                        slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(150))
+                                                    } else {
+                                                        slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(150))
+                                                    }
+                                                } else {
+                                                    fadeIn(tween(250)) + slideInHorizontally(
+                                                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                        initialOffsetX = { -it / 3 }
+                                                    )
+                                                }
                                             }
                                         },
 
                                         popExitTransition = {
                                             if (reduceAnimations) {
                                                 fadeOut(tween(0))
-                                            } else if ((initialState.destination.route in topLevelScreens ||
-                                                        initialState.destination.route?.startsWith("search/") == true) &&
-                                                targetState.destination.route in topLevelScreens
-                                            ) {
-                                                fadeOut(tween(200))
                                             } else {
-                                                fadeOut(tween(200)) + slideOutHorizontally(
-                                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                                    targetOffsetX = { it / 2 }
-                                                )
+                                                val fromIdx = navigationItems.indexOfFirst { it.route == initialState.destination.route }
+                                                val toIdx = navigationItems.indexOfFirst { it.route == targetState.destination.route }
+                                                if (fromIdx != -1 && toIdx != -1) {
+                                                    if (toIdx > fromIdx) {
+                                                        slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(150))
+                                                    } else {
+                                                        slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(150))
+                                                    }
+                                                } else {
+                                                    fadeOut(tween(200)) + slideOutHorizontally(
+                                                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                                        targetOffsetX = { it }
+                                                    )
+                                                }
                                             }
                                         },
 
