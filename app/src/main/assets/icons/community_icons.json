@@ -6,5 +6,21 @@
     "author": "@Dark",
     "inApp": true,
     "svgUrl": "https://raw.githubusercontent.com/d0x-dev/AirBeats/main/assets/icons/Airbeats_Winters.png"
+  },
+  {
+    "id": "melody_hearts",
+    "title": "Melody Hearts",
+    "subtitle": "Romantic anime youth duo glowing under warm crimson sunset melody",
+    "author": "@Dark",
+    "inApp": true,
+    "svgUrl": ""
+  },
+  {
+    "id": "gta_6",
+    "title": "Vice City VI",
+    "subtitle": "Neon synthwave Vice City sunset, palm waterfront & retro night drive",
+    "author": "@Dark",
+    "inApp": true,
+    "svgUrl": ""
   }
 ]

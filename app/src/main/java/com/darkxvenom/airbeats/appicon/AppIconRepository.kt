@@ -57,9 +57,37 @@ object AppIconRepository {
         svgUrl = "https://raw.githubusercontent.com/d0x-dev/AirBeats/main/assets/icons/Airbeats_Winters.png"
     )
 
+    val MELODY_HEARTS_ICON = AppIcon(
+        id = "melody_hearts",
+        title = "Melody Hearts",
+        subtitle = "Romantic anime youth duo glowing under warm crimson sunset melody",
+        author = "@Dark",
+        aliasName = "$PACKAGE_NAME.launcher.MelodyHearts",
+        bgColors = listOf(Color(0xFF3B0505), Color(0xFFC62828)),
+        fgTint = null,
+        isDefault = false,
+        isCommunity = false,
+        inApp = true
+    )
+
+    val GTA6_ICON = AppIcon(
+        id = "gta_6",
+        title = "Vice City VI",
+        subtitle = "Neon synthwave Vice City sunset, palm waterfront & retro night drive",
+        author = "@Dark",
+        aliasName = "$PACKAGE_NAME.launcher.Gta6",
+        bgColors = listOf(Color(0xFF1A032A), Color(0xFFFF007F)),
+        fgTint = null,
+        isDefault = false,
+        isCommunity = false,
+        inApp = true
+    )
+
     val BUILT_IN_ICONS: List<AppIcon> = listOf(
         DEFAULT_ICON,
-        WINTER_ICON
+        WINTER_ICON,
+        MELODY_HEARTS_ICON,
+        GTA6_ICON
     )
 
     /**
@@ -296,9 +324,15 @@ object AppIconRepository {
             }
         }
 
-        // 2. Fallback guarantee for bundled Airbeats Winters if not yet parsed
+        // 2. Fallback guarantee for bundled icons if not yet parsed
         if (list.none { it.id == "airbeats_winters" }) {
             list.add(WINTER_ICON)
+        }
+        if (list.none { it.id == "melody_hearts" }) {
+            list.add(MELODY_HEARTS_ICON)
+        }
+        if (list.none { it.id == "gta_6" }) {
+            list.add(GTA6_ICON)
         }
 
         // 3. Fetch latest remote icons from GitHub

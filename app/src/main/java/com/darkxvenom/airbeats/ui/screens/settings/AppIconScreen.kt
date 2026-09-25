@@ -481,6 +481,18 @@ private fun HomeScreenMockupCard(
                             contentDescription = icon.title,
                             modifier = Modifier.fillMaxSize()
                         )
+                    } else if (icon.id == "melody_hearts") {
+                        Image(
+                            painter = painterResource(R.mipmap.ic_launcher_melody_hearts_foreground),
+                            contentDescription = icon.title,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else if (icon.id == "gta_6") {
+                        Image(
+                            painter = painterResource(R.mipmap.ic_launcher_gta6_foreground),
+                            contentDescription = icon.title,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     } else if (!icon.svgUrl.isNullOrBlank()) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
@@ -614,6 +626,18 @@ private fun InAppIconCard(
                 } else if (icon.id == "airbeats_winters") {
                     Image(
                         painter = painterResource(R.mipmap.ic_launcher_winter_foreground),
+                        contentDescription = icon.title,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (icon.id == "melody_hearts") {
+                    Image(
+                        painter = painterResource(R.mipmap.ic_launcher_melody_hearts_foreground),
+                        contentDescription = icon.title,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (icon.id == "gta_6") {
+                    Image(
+                        painter = painterResource(R.mipmap.ic_launcher_gta6_foreground),
                         contentDescription = icon.title,
                         modifier = Modifier.fillMaxSize()
                     )

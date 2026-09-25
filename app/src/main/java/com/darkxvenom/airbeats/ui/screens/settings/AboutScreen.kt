@@ -715,7 +715,7 @@ fun AboutScreen(
                     ) {
                         UserCard(
                             imageUrl = "https://avatars.githubusercontent.com/u/218248866",
-                            name = "Darkboy",
+                            name = "⏤\u200C\u200C\uD835\uDC6Bꫝ\uD835\uDC93\uD835\uDC8C\uD835\uDC83\uD835\uDC90\uD835\uDC9A ꯭\uD81A\uDC0C\uD800\uDF99ꭙ\u200C\u200C⁷ ",
                             role = "Lead Developer",
                             commits = founderCommits["d0x-dev"],
                             githubUrl = "https://github.com/d0x-dev",
