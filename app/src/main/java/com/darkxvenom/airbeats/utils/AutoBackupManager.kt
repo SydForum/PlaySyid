@@ -303,6 +303,127 @@ object AutoBackupManager {
         return false
     }
 
+    const val STORAGE_FOLDER_NAME = "AirBeats"
+    const val STORAGE_BACKUP_FILENAME = "airbeats_backup.backup"
+    private const val KEY_AUTO_BACKUP_STORAGE = "auto_backup_to_storage"
+
+    fun getDocumentsBackupDir(): File {
+        val docs = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+        return File(docs, STORAGE_FOLDER_NAME)
+    }
+
+    fun getDocumentsBackupFile(): File = File(getDocumentsBackupDir(), STORAGE_BACKUP_FILENAME)
+
+    fun isAutoBackupToStorageEnabled(context: Context): Boolean {
+        return context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE)
+            .getBoolean(KEY_AUTO_BACKUP_STORAGE, true)
+    }
+
+    fun hasStoragePermission(context: Context): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            android.os.Environment.isExternalStorageManager()
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    fun setAutoBackupToStorageEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences("backup_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_AUTO_BACKUP_STORAGE, enabled)
+            .apply()
+    }
+
+    fun saveBackupToStorage(context: Context, database: MusicDatabase?): Boolean {
+        return try {
+            if (!hasBackableData(context, database)) {
+                Timber.d("AutoBackupManager: No backable data to save to storage")
+                return false
+            }
+
+            val docsDir = getDocumentsBackupDir()
+            if (!docsDir.exists()) docsDir.mkdirs()
+            val destFile = getDocumentsBackupFile()
+            val tmpFile = File(docsDir, "$STORAGE_BACKUP_FILENAME.tmp")
+
+            FileOutputStream(tmpFile).use { fos ->
+                createBackupZip(context, database, fos)
+            }
+
+            if (tmpFile.exists() && tmpFile.length() > 0) {
+                if (destFile.exists()) destFile.delete()
+                tmpFile.renameTo(destFile)
+
+                // Also copy to Downloads/AirBeats/airbeats_backup.backup for extra redundancy
+                runCatching {
+                    val dlDir = File(
+                        android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                        STORAGE_FOLDER_NAME
+                    )
+                    if (!dlDir.exists()) dlDir.mkdirs()
+                    destFile.copyTo(File(dlDir, STORAGE_BACKUP_FILENAME), overwrite = true)
+                }
+
+                Timber.i("AutoBackupManager: Successfully saved backup to Documents/AirBeats (${destFile.length()} bytes)")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "AutoBackupManager: Failed to save backup to Documents/AirBeats")
+            false
+        }
+    }
+
+    fun performAutoBackupToStorageIfEnabled(context: Context, database: MusicDatabase?) {
+        if (isAutoBackupToStorageEnabled(context)) {
+            saveBackupToStorage(context, database)
+        }
+    }
+
+    fun findStorageBackupFile(): File? {
+        val candidates = listOf(
+            getDocumentsBackupFile(),
+            File(getDocumentsBackupDir(), "airbeats_auto_backup.backup"),
+            File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                "$STORAGE_FOLDER_NAME/$STORAGE_BACKUP_FILENAME"
+            ),
+            File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                "$STORAGE_FOLDER_NAME/airbeats_auto_backup.backup"
+            )
+        )
+        for (f in candidates) {
+            if (f.exists() && f.length() > 0L) return f
+        }
+
+        // Search Documents/AirBeats for any .backup file
+        val docsDir = getDocumentsBackupDir()
+        if (docsDir.exists() && docsDir.isDirectory) {
+            val file = docsDir.listFiles { f -> f.isFile && f.name.endsWith(".backup") && f.length() > 0L }
+                ?.maxByOrNull { it.lastModified() }
+            if (file != null) return file
+        }
+
+        return null
+    }
+
+    fun restoreFromStorageBackup(context: Context, shouldRestart: Boolean = true): Boolean {
+        val file = findStorageBackupFile() ?: return false
+        Timber.i("AutoBackupManager: Restoring from storage backup file at ${file.absolutePath} (${file.length()} bytes)")
+        val targetFile = getAutoBackupFile(context)
+        runCatching { file.copyTo(targetFile, overwrite = true) }
+        return runCatching {
+            FileInputStream(file).use { stream ->
+                restoreFromInputStream(context, stream, shouldRestart)
+            }
+        }.getOrDefault(false)
+    }
+
     fun savePersistentExternalBackup(context: Context, sourceFile: File) {
         if (!sourceFile.exists() || sourceFile.length() == 0L) return
 
@@ -320,7 +441,7 @@ object AutoBackupManager {
             Timber.d("AutoBackupManager: Could not save persistent backup to Downloads: ${e.message}")
         }
 
-        // 2. Try public Documents/AirBeats/airbeats_auto_backup.backup (survives app uninstall)
+        // 2. Try public Documents/AirBeats/airbeats_auto_backup.backup and airbeats_backup.backup (survives app uninstall)
         runCatching {
             val documentsDir = File(
                 android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
@@ -329,6 +450,7 @@ object AutoBackupManager {
             if (!documentsDir.exists()) documentsDir.mkdirs()
             val destInDocs = File(documentsDir, "airbeats_auto_backup.backup")
             sourceFile.copyTo(destInDocs, overwrite = true)
+            sourceFile.copyTo(File(documentsDir, STORAGE_BACKUP_FILENAME), overwrite = true)
             Timber.i("AutoBackupManager: Persistent external backup saved to Documents (${destInDocs.length()} bytes)")
         }.onFailure { e ->
             Timber.d("AutoBackupManager: Could not save persistent backup to Documents: ${e.message}")

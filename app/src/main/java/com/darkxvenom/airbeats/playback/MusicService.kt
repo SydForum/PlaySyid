@@ -53,6 +53,8 @@ import androidx.media3.exoplayer.analytics.PlaybackStats
 import androidx.media3.exoplayer.analytics.PlaybackStatsListener
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.mkv.MatroskaExtractor
@@ -78,7 +80,6 @@ import com.darkxvenom.airbeats.constants.AudioNormalizationKey
 import com.darkxvenom.airbeats.constants.AudioQualityKey
 import com.darkxvenom.airbeats.constants.AutoLoadMoreKey
 import com.darkxvenom.airbeats.constants.EnableJioSaavnKey
-import com.darkxvenom.airbeats.constants.AutoSkipNextOnErrorKey
 import com.darkxvenom.airbeats.constants.CrossfadeKey
 import com.darkxvenom.airbeats.constants.DisableLoadMoreWhenRepeatAllKey
 import com.darkxvenom.airbeats.constants.DiscordTokenKey
@@ -224,6 +225,9 @@ class MusicService :
     @Inject
     lateinit var mediaLibrarySessionCallback: MediaLibrarySessionCallback
 
+    @Inject
+    lateinit var scrobbleRepository: com.darkxvenom.airbeats.data.repository.ScrobbleRepository
+
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: Any? = null
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
@@ -238,6 +242,10 @@ class MusicService :
     private val mediaOkHttpClient: okhttp3.OkHttpClient by lazy {
         val baseBuilder = okhttp3.OkHttpClient
             .Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
 
@@ -1202,34 +1210,25 @@ class MusicService :
         waitingForNetworkConnection.value = true
     }
 
-    private fun skipOnError() {
-        /**
-         * Auto skip to the next media item on error.
-         *
-         * To prevent a "runaway diesel engine" scenario, force the user to take action after
-         * too many errors come up too quickly. Pause to show player "stopped" state
-         */
-        consecutivePlaybackErr += 1
-        val nextWindowIndex = player.nextMediaItemIndex
+    private var songLoadingRetryJob: Job? = null
 
-        if (consecutivePlaybackErr <= MAX_CONSECUTIVE_ERR && nextWindowIndex != C.INDEX_UNSET) {
-            player.seekTo(nextWindowIndex, C.TIME_UNSET)
-            player.prepare()
-            player.play()
-            return
-        } else if (consecutivePlaybackErr <= MAX_CONSECUTIVE_ERR && player.repeatMode == REPEAT_MODE_ALL && player.mediaItemCount > 0) {
-            player.seekToDefaultPosition(0)
-            player.prepare()
-            player.play()
-            return
+    private fun keepLoadingCurrentSongOnError() {
+        val currentMediaId = player.currentMediaItem?.mediaId
+        if (!currentMediaId.isNullOrBlank()) {
+            songUrlCache.remove(currentMediaId)
+            YTPlayerUtils.invalidateCachedStreamUrls(currentMediaId)
         }
-
-        player.pause()
-        consecutivePlaybackErr = 0
-    }
-
-    private fun stopOnError() {
-        player.pause()
+        songLoadingRetryJob?.cancel()
+        songLoadingRetryJob = scope.launch(Dispatchers.Main) {
+            // Under no circumstances should the player skip to the next song when loading takes time.
+            // Keep loading the current track by waiting briefly and re-preparing.
+            delay(1500)
+            if (player.currentMediaItem != null && (player.playbackState == STATE_IDLE || !player.isPlaying)) {
+                Log.d(TAG, "Keep loading: retrying current media item ${player.currentMediaItem?.mediaId}")
+                player.prepare()
+                player.play()
+            }
+        }
     }
 
     private fun updateNotification() {
@@ -1749,7 +1748,19 @@ class MusicService :
     fun toggleLike() {
         database.query {
             currentSong.value?.let {
-                update(it.song.toggleLike())
+                val updated = it.song.toggleLike()
+                update(updated)
+                val artistName = it.artists.joinToString { a -> a.name }.ifBlank { null }
+                val trackTitle = it.song.title
+                if (!artistName.isNullOrBlank() && trackTitle.isNotBlank()) {
+                    scope.launch(Dispatchers.IO) {
+                        if (updated.liked) {
+                            scrobbleRepository.love(artistName, trackTitle)
+                        } else {
+                            scrobbleRepository.unlove(artistName, trackTitle)
+                        }
+                    }
+                }
             }
         }
     }
@@ -2513,12 +2524,20 @@ class MusicService :
             }
         }
 
-        // Actualización de Discord RPC
+        // Actualización de Discord RPC y Last.fm Now Playing
         if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED)) {
             if (player.isPlaying) {
                 currentSong.value?.let { song ->
                     scope.launch {
                         discordRpc?.updateSong(song, player.currentPosition, player.playbackParameters.speed, dataStore.get(DiscordUseDetailsKey, false))
+                    }
+                    val artistName = song.artists.joinToString { a -> a.name }.ifBlank { "Unknown Artist" }
+                    val trackTitle = song.song.title
+                    val albumTitle = song.song.albumName
+                    if (!artistName.isNullOrBlank() && trackTitle.isNotBlank()) {
+                        scope.launch(Dispatchers.IO) {
+                            scrobbleRepository.submitNowPlaying(artistName, trackTitle, albumTitle, packageName)
+                        }
                     }
                 }
             } else {
@@ -2527,6 +2546,7 @@ class MusicService :
                     scope.launch {
                         discordRpc?.stopActivity()
                     }
+                    scrobbleRepository.clearNowPlaying()
                 }
             }
         }
@@ -2618,23 +2638,14 @@ class MusicService :
             songUrlCache.remove(mediaId)
         }
 
-        val isConnectionError = (error.cause?.cause is PlaybackException) &&
-                (error.cause?.cause as PlaybackException).errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
-
-        if (!isNetworkConnected.value || isConnectionError) {
-            if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
-                skipOnError()
-            } else {
-                waitOnNetworkError()
-            }
+        // Under no circumstances should the player skip to the next song when loading takes time or errors occur.
+        // It must keep loading the current track.
+        if (!isNetworkConnected.value) {
+            waitOnNetworkError()
             return
         }
 
-        if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
-            skipOnError()
-        } else {
-            stopOnError()
-        }
+        keepLoadingCurrentSongOnError()
     }
 
     private fun createCacheDataSource(): CacheDataSource.Factory =
@@ -3113,6 +3124,12 @@ class MusicService :
             )
         }
         return DefaultMediaSourceFactory(createDataSourceFactory(), extractorsFactory)
+            .setLoadErrorHandlingPolicy(object : DefaultLoadErrorHandlingPolicy() {
+                override fun getMinimumLoadableRetryCount(dataType: Int): Int = 10
+                override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                    return 1500L
+                }
+            })
     }
 
     private fun createRenderersFactory(
@@ -3172,6 +3189,26 @@ class MusicService :
                     )
                 } catch (e: Exception) {
                     reportException(e)
+                }
+            }
+
+            val song = currentSong.value
+            val artistName = mediaItem.mediaMetadata.artist?.toString()?.ifBlank { null }
+                ?: song?.artists?.joinToString { a -> a.name }?.ifBlank { null }
+            val trackTitle = mediaItem.mediaMetadata.title?.toString()?.ifBlank { null }
+                ?: song?.song?.title
+            val albumTitle = mediaItem.mediaMetadata.albumTitle?.toString()?.ifBlank { null }
+                ?: song?.song?.albumName
+            if (!artistName.isNullOrBlank() && !trackTitle.isNullOrBlank()) {
+                scope.launch(Dispatchers.IO) {
+                    scrobbleRepository.scrobble(
+                        artist = artistName,
+                        track = trackTitle,
+                        album = albumTitle,
+                        timestampSec = System.currentTimeMillis() / 1000L,
+                        durationMs = songDurationMs,
+                        playTimeMs = playbackStats.totalPlayTimeMs
+                    )
                 }
             }
             val PauseRemoteListenHistoryKey = booleanPreferencesKey("pauseRemoteListenHistory")

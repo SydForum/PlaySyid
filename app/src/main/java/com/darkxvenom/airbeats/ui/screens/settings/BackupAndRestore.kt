@@ -96,6 +96,7 @@ import com.darkxvenom.airbeats.ui.menu.OnlinePlaylistAdder
 import com.darkxvenom.airbeats.ui.utils.backToMain
 import com.darkxvenom.airbeats.ui.utils.formatFileSize
 import com.darkxvenom.airbeats.viewmodels.BackupRestoreViewModel
+import com.darkxvenom.airbeats.utils.AutoBackupManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -141,9 +142,11 @@ fun BackupAndRestore(
     val isBackingUp by viewModel.isBackingUp.collectAsState()
     val isRestoring by viewModel.isRestoring.collectAsState()
     val backupSizeString by viewModel.backupSizeString.collectAsState()
+    val isAutoBackupToStorage by viewModel.isAutoBackupToStorage.collectAsState()
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+    var showStorageRestoreConfirmDialog by remember { mutableStateOf(false) }
 
     val formattedLastBackup = remember(lastOsBackupTime) {
         if (lastOsBackupTime <= 0L) {
@@ -234,6 +237,13 @@ fun BackupAndRestore(
             }
         }
 
+    val storagePermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            if (results.values.any { it }) {
+                Toast.makeText(context, "Storage permission granted", Toast.LENGTH_SHORT).show()
+            }
+        }
+
     SettingsPage(
         title = stringResource(R.string.backup_restore),
         navController = navController,
@@ -250,6 +260,93 @@ fun BackupAndRestore(
             onRestore = { showRestoreConfirmDialog = true },
             onDelete = { showDeleteConfirmDialog = true },
             onOpenSettings = { viewModel.openDeviceBackupSettings(context) }
+        )
+
+        SettingsGeneralCategory(
+            title = "Device Storage Backup (Documents/AirBeats)",
+            items = listOf(
+                {
+                    SwitchPreference(
+                        title = { Text("Auto-backup to Storage") },
+                        description = "Automatically save a complete backup to Documents/AirBeats on every app open",
+                        icon = { Icon(painterResource(R.drawable.save_to_storage), null) },
+                        checked = isAutoBackupToStorage,
+                        onCheckedChange = { enabled ->
+                            viewModel.setAutoBackupToStorage(context, enabled)
+                        }
+                    )
+                },
+                {
+                    PreferenceEntry(
+                        title = { Text("Backup to Documents/AirBeats now") },
+                        icon = { Icon(painterResource(R.drawable.backup), null) },
+                        description = "Save an immediate backup file to Documents/AirBeats/airbeats_backup.backup",
+                        onClick = {
+                            if (!AutoBackupManager.hasStoragePermission(context)) {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                    try {
+                                        val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                            data = android.net.Uri.parse("package:${context.packageName}")
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                    }
+                                } else {
+                                    storagePermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                                            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                        )
+                                    )
+                                }
+                            }
+                            viewModel.backupToStorageNow(context) { success ->
+                                Toast.makeText(
+                                    context,
+                                    if (success) "Backup saved to Documents/AirBeats" else "Could not save backup to storage",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
+                },
+                {
+                    PreferenceEntry(
+                        title = { Text("Restore from Documents/AirBeats") },
+                        icon = { Icon(painterResource(R.drawable.restore), null) },
+                        description = "Restore full profile, playlists, and settings from Documents/AirBeats",
+                        onClick = {
+                            if (!AutoBackupManager.hasStoragePermission(context)) {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                    try {
+                                        val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                            data = android.net.Uri.parse("package:${context.packageName}")
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                    }
+                                } else {
+                                    storagePermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                                            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                        )
+                                    )
+                                }
+                                return@PreferenceEntry
+                            }
+                            val backupFile = AutoBackupManager.findStorageBackupFile()
+                            if (backupFile != null && backupFile.exists() && backupFile.length() > 0L) {
+                                showStorageRestoreConfirmDialog = true
+                            } else {
+                                Toast.makeText(context, "No backup file found in Documents/AirBeats", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            )
         )
 
         SettingsGeneralCategory(
@@ -394,6 +491,24 @@ fun BackupAndRestore(
                 viewModel.restoreFromLatestBackup(context)
             },
             onDismiss = { showRestoreConfirmDialog = false }
+        )
+    }
+
+    if (showStorageRestoreConfirmDialog) {
+        MinimalConfirmDialog(
+            icon = painterResource(R.drawable.restore),
+            title = "Restore from Documents/AirBeats?",
+            message = "This will restore your complete database, accounts, playlists, and preferences from Documents/AirBeats and reboot the app.",
+            confirmText = stringResource(R.string.backup_restore_action),
+            onConfirm = {
+                showStorageRestoreConfirmDialog = false
+                viewModel.restoreFromStorageNow(context) { success ->
+                    if (!success) {
+                        Toast.makeText(context, "Failed to restore from storage", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDismiss = { showStorageRestoreConfirmDialog = false }
         )
     }
 

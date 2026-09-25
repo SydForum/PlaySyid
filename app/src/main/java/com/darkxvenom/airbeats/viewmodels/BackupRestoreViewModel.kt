@@ -67,9 +67,36 @@ class BackupRestoreViewModel @Inject constructor(
     private val _backupSizeString = MutableStateFlow("~0 KB")
     val backupSizeString: StateFlow<String> = _backupSizeString.asStateFlow()
 
+    private val _isAutoBackupToStorage = MutableStateFlow(true)
+    val isAutoBackupToStorage: StateFlow<Boolean> = _isAutoBackupToStorage.asStateFlow()
+
     fun loadOsBackupState(context: Context) {
         _lastOsBackupTime.value = AutoBackupManager.getLastBackupTime(context)
+        _isAutoBackupToStorage.value = AutoBackupManager.isAutoBackupToStorageEnabled(context)
         updateBackupSize(context)
+    }
+
+    fun setAutoBackupToStorage(context: Context, enabled: Boolean) {
+        AutoBackupManager.setAutoBackupToStorageEnabled(context, enabled)
+        _isAutoBackupToStorage.value = enabled
+    }
+
+    fun backupToStorageNow(context: Context, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val success = AutoBackupManager.saveBackupToStorage(context, database)
+            withContext(Dispatchers.Main) {
+                onResult(success)
+            }
+        }
+    }
+
+    fun restoreFromStorageNow(context: Context, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val success = AutoBackupManager.restoreFromStorageBackup(context, shouldRestart = true)
+            withContext(Dispatchers.Main) {
+                onResult(success)
+            }
+        }
     }
 
     fun updateBackupSize(context: Context) {

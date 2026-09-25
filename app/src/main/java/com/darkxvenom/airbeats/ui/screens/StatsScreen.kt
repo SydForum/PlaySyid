@@ -1541,7 +1541,7 @@ fun ScrobblerStatsHubCard(
                 }
             }
 
-            // LIVE NOW PLAYING CARD (styled matching Lastwave in Screenshot 1)
+            // LIVE NOW PLAYING CARD
             if (nowPlaying != null) {
                 Card(
                     modifier = Modifier

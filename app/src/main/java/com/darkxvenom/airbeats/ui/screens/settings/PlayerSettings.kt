@@ -79,7 +79,6 @@ import com.darkxvenom.airbeats.constants.QualityTiers
 import com.darkxvenom.airbeats.playback.DeviceCodecs
 import com.darkxvenom.airbeats.ui.component.PreferenceEntry
 import com.darkxvenom.airbeats.constants.DownloadQualityKey
-import com.darkxvenom.airbeats.constants.AutoSkipNextOnErrorKey
 import com.darkxvenom.airbeats.constants.CrossfadeKey
 import com.darkxvenom.airbeats.constants.PermanentShuffleKey
 import com.darkxvenom.airbeats.constants.PersistentQueueKey
@@ -165,10 +164,7 @@ fun PlayerSettings(
         key = SimilarContent,
         defaultValue = true
     )
-    val (autoSkipNextOnError, onAutoSkipNextOnErrorChange) = rememberPreference(
-        AutoSkipNextOnErrorKey,
-        defaultValue = false
-    )
+
     val (skipUncachedPart, onSkipUncachedPartChange) = rememberPreference(
         SkipUncachedPartKey,
         defaultValue = false
@@ -686,13 +682,7 @@ fun PlayerSettings(
                     onCheckedChange = similarContentEnabledChange,
                 )},
 
-                {SwitchPreference(
-                    title = { Text(stringResource(R.string.auto_skip_next_on_error)) },
-                    description = stringResource(R.string.auto_skip_next_on_error_desc),
-                    icon = { Icon(painterResource(R.drawable.skip_next), null) },
-                    checked = autoSkipNextOnError,
-                    onCheckedChange = onAutoSkipNextOnErrorChange
-                )},
+
 
                 {SwitchPreference(
                     title = { Text(stringResource(R.string.skip_uncached_part)) },

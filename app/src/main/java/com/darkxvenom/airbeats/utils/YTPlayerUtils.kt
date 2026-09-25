@@ -182,8 +182,8 @@ object YTPlayerUtils {
             // Retry once per quality: a burst of requests (e.g. downloading a whole album)
             // can transiently exhaust the client fallback chain, which is otherwise
             // indistinguishable from a real failure.
-            repeat(2) { retry ->
-                if (retry > 0) delay(750L)
+            repeat(3) { retry ->
+                if (retry > 0) delay(1200L)
                 val attemptResult =
                     runCatching {
                         playerResponseForPlaybackOnce(

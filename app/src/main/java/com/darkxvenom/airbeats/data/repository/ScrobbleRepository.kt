@@ -1,5 +1,10 @@
 package com.darkxvenom.airbeats.data.repository
 
+import android.os.SystemClock
+import com.darkxvenom.airbeats.data.local.LastFmSessionPreferences
+import com.darkxvenom.airbeats.data.network.LastFmApiClient
+import com.darkxvenom.airbeats.data.network.LastFmRateGuard
+import com.darkxvenom.airbeats.data.network.LastFmSigner
 import com.darkxvenom.airbeats.db.MusicDatabase
 import com.darkxvenom.airbeats.db.entities.AlbumEntity
 import com.darkxvenom.airbeats.db.entities.ArtistEntity
@@ -7,16 +12,27 @@ import com.darkxvenom.airbeats.db.entities.Event
 import com.darkxvenom.airbeats.db.entities.SongAlbumMap
 import com.darkxvenom.airbeats.db.entities.SongArtistMap
 import com.darkxvenom.airbeats.db.entities.SongEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import timber.log.Timber
+import java.io.IOException
 import java.time.LocalDateTime
+import java.util.concurrent.ConcurrentLinkedQueue
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,14 +50,30 @@ data class NowPlayingTrack(
 @Singleton
 class ScrobbleRepository @Inject constructor(
     private val database: MusicDatabase,
+    private val lastFmApi: LastFmApiClient,
+    private val lastFmSessionPreferences: LastFmSessionPreferences,
+    private val rateGuard: LastFmRateGuard,
 ) {
+    private val json = Json { ignoreUnknownKeys = true }
+    private val callMutex = Mutex()
+    private var lastWriteAtElapsed = 0L
+
     @Volatile private var lastNowPlayingKey: String? = null
+    @Volatile private var lastRemoteNowPlayingKey: String? = null
 
     private val _nowPlaying = MutableStateFlow<NowPlayingTrack?>(null)
     val nowPlaying: StateFlow<NowPlayingTrack?> = _nowPlaying.asStateFlow()
 
     private val _scrobbleEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val scrobbleEvents: SharedFlow<Unit> = _scrobbleEvents.asSharedFlow()
+
+    private data class PendingScrobble(
+        val artist: String,
+        val track: String,
+        val album: String?,
+        val timestampSec: Long,
+    )
+    private val offlineQueue = ConcurrentLinkedQueue<PendingScrobble>()
 
     sealed interface Result {
         data object Success : Result
@@ -96,14 +128,37 @@ class ScrobbleRepository @Inject constructor(
             isPlaying = true,
         )
 
-        if (key != lastNowPlayingKey) {
-            lastNowPlayingKey = key
+        lastNowPlayingKey = key
+
+        // Send now playing to Last.fm if authenticated with session key
+        val session = lastFmSessionPreferences.currentSession
+        if (session.hasSessionKey && key != lastRemoteNowPlayingKey) {
+            val remoteRes = signedCall(
+                method = "track.updateNowPlaying",
+                extra = buildMap {
+                    put("artist", displayArtist)
+                    put("track", displayTitle)
+                    if (!displayAlbum.isNullOrBlank()) put("album", displayAlbum)
+                },
+            )
+            if (remoteRes is Result.Success) {
+                lastRemoteNowPlayingKey = key
+            }
         }
+
         return Result.Success
     }
 
+    suspend fun submitNowPlaying(
+        artist: String,
+        track: String,
+        album: String?,
+        packageName: String? = null,
+    ): Result = updateNowPlaying(artist, track, album, packageName)
+
     fun clearNowPlaying() {
         lastNowPlayingKey = null
+        lastRemoteNowPlayingKey = null
         _nowPlaying.value = null
     }
 
@@ -133,7 +188,6 @@ class ScrobbleRepository @Inject constructor(
                     // Not in database: generate deterministic IDs
                     finalSongId = "scrobble_" + java.lang.Integer.toHexString("$safeArtist|$safeTrack".hashCode())
 
-                    // Check if artist exists in AirBeats
                     val existingArtist = database.artistByName(safeArtist)
                     val finalArtistId = existingArtist?.id
                         ?: ("artist_" + java.lang.Integer.toHexString(safeArtist.lowercase().hashCode()))
@@ -208,11 +262,135 @@ class ScrobbleRepository @Inject constructor(
                 }
             }
 
+            // Flush offline scrobbles to Last.fm
+            flushPendingScrobbles()
+
+            // Scrobble to Last.fm if session key is active
+            val session = lastFmSessionPreferences.currentSession
+            if (session.hasSessionKey) {
+                val remoteRes = signedCall(
+                    method = "track.scrobble",
+                    extra = buildMap {
+                        put("artist", safeArtist)
+                        put("track", safeTrack)
+                        put("timestamp", timestampSec.toString())
+                        if (!album.isNullOrBlank()) put("album", album)
+                    }
+                )
+                if (remoteRes is Result.Failed && remoteRes.retryable) {
+                    offlineQueue.add(PendingScrobble(safeArtist, safeTrack, album, timestampSec))
+                    while (offlineQueue.size > MAX_OFFLINE_QUEUE) offlineQueue.poll()
+                }
+            }
+
             _scrobbleEvents.tryEmit(Unit)
             Result.Success
         }.getOrElse { error ->
             Timber.e(error, "Failed to scrobble track $track")
             Result.Failed(error.message ?: "Failed to save scrobble")
         }
+    }
+
+    /** Mirrors player heart/favorite to the authenticated Last.fm library */
+    suspend fun setTrackLoved(artist: String, track: String, loved: Boolean): Result {
+        val session = lastFmSessionPreferences.currentSession
+        if (!session.hasSessionKey) return Result.NoSessionKey
+        return signedCall(
+            method = if (loved) "track.love" else "track.unlove",
+            extra = mapOf(
+                "artist" to cleanArtist(artist),
+                "track" to track.trim(),
+            ),
+        )
+    }
+
+    suspend fun love(artist: String, track: String): Result = setTrackLoved(artist, track, true)
+    suspend fun unlove(artist: String, track: String): Result = setTrackLoved(artist, track, false)
+
+    private suspend fun flushPendingScrobbles() {
+        if (offlineQueue.isEmpty()) return
+        if (rateGuard.cooldownRemainingMs > 0L) return
+
+        while (offlineQueue.isNotEmpty()) {
+            val pending = offlineQueue.peek() ?: break
+            val res = signedCall(
+                method = "track.scrobble",
+                extra = buildMap {
+                    put("artist", pending.artist)
+                    put("track", pending.track)
+                    put("timestamp", pending.timestampSec.toString())
+                    if (!pending.album.isNullOrBlank()) put("album", pending.album)
+                },
+            )
+            if (res is Result.Success) {
+                offlineQueue.poll()
+                _scrobbleEvents.tryEmit(Unit)
+            } else {
+                break
+            }
+        }
+    }
+
+    private suspend fun signedCall(method: String, extra: Map<String, String>): Result = callMutex.withLock {
+        val session = lastFmSessionPreferences.session.first()
+        if (session.apiKey.isBlank() || session.apiSecret.isBlank()) {
+            return Result.Failed("Last.fm credentials missing")
+        }
+        if (session.sessionKey.isBlank()) {
+            return Result.NoSessionKey
+        }
+
+        if (!rateGuard.suspendAwaitClearance(WRITE_COOLDOWN_WAIT_MS)) {
+            return Result.Failed("Rate limit cooldown active", retryable = true)
+        }
+
+        val sinceLastWrite = SystemClock.elapsedRealtime() - lastWriteAtElapsed
+        if (sinceLastWrite in 1 until WRITE_SPACING_MS) {
+            delay(WRITE_SPACING_MS - sinceLastWrite)
+        }
+
+        return try {
+            val signParams = extra + mapOf(
+                "method" to method,
+                "sk" to session.sessionKey,
+                "api_key" to session.apiKey,
+            )
+            val sig = LastFmSigner.sign(signParams, session.apiSecret)
+            val bodyParams = signParams + mapOf("api_sig" to sig, "format" to "json")
+            val (code, responseText) = lastFmApi.post(bodyParams)
+            lastWriteAtElapsed = SystemClock.elapsedRealtime()
+
+            if (code == 429) {
+                rateGuard.onRequestLimited()
+                return Result.Failed("Last.fm rate limited (429)", retryable = true)
+            }
+
+            if (responseText.isBlank()) return Result.Failed("Empty response from Last.fm")
+
+            val parsed = json.parseToJsonElement(responseText).jsonObject
+            val errorCode = (parsed["error"] as? kotlinx.serialization.json.JsonPrimitive)?.intOrNull
+            if (errorCode != null) {
+                if (errorCode == 29) {
+                    rateGuard.onRequestLimited()
+                    return Result.Failed("Last.fm rate limited (error 29)", retryable = true)
+                }
+                Result.Failed("Last.fm error $errorCode")
+            } else {
+                rateGuard.onRequestSucceeded()
+                Result.Success
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (e: IOException) {
+            Result.Failed(e.message ?: "Could not reach Last.fm", retryable = true)
+        } catch (e: Exception) {
+            Result.Failed(e.message ?: "Could not reach Last.fm")
+        }
+    }
+
+    private companion object {
+        const val WRITE_COOLDOWN_WAIT_MS = 15_000L
+        const val WRITE_SPACING_MS = 600L
+        const val MAX_OFFLINE_QUEUE = 150
     }
 }

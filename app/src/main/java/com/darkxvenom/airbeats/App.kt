@@ -100,6 +100,13 @@ class App : LocaleAwareApplication(), ImageLoaderFactory {
                     // App opened or brought to foreground: fetch fresh URLs and developer news from Firebase immediately
                     com.darkxvenom.airbeats.utils.RemoteConfigManager.refresh()
                     com.darkxvenom.airbeats.utils.DeveloperNewsManager.refresh()
+
+                    // Auto backup on every app open to Documents/AirBeats if enabled
+                    GlobalScope.launch(Dispatchers.IO) {
+                        tryOrNull {
+                            AutoBackupManager.performAutoBackupToStorageIfEnabled(this@App, database)
+                        }
+                    }
                 }
                 startedActivities++
             }
