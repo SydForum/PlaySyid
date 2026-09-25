@@ -570,14 +570,14 @@ fun AppearanceSettings(
                                 }
                             },
                         )},
-                        {
+                        *(if (homeScreenStyle == HomeScreenStyle.MATERIAL) arrayOf<@Composable () -> Unit>({
                             PreferenceEntry(
                                 title = { Text("Home Sections") },
-                                description = "Customize visible sections on your Home screen",
+                                description = "Customize visible sections on the Material Home screen",
                                 icon = { Icon(Icons.Filled.Dashboard, null) },
                                 onClick = { navController.navigate("settings/home_sections") }
                             )
-                        },
+                        }) else emptyArray()),
                         {EnumListPreference(
                             title = { Text(stringResource(R.string.navigation_bar_style)) },
                             icon = { Icon(painterResource(R.drawable.nav_bar), null) },
